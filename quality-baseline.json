@@ -71,7 +71,7 @@
                 "functions": 22.22
             },
             "src/game-render.ts": {
-                "lines": 33.33,
+                "lines": 25.16,
                 "branches": 100,
                 "functions": 0
             },
@@ -101,9 +101,9 @@
                 "functions": 71.43
             },
             "src/main.ts": {
-                "lines": 47.82,
+                "lines": 49.3,
                 "branches": 58.24,
-                "functions": 25.45
+                "functions": 26.42
             },
             "src/pool.ts": {
                 "lines": 100,
