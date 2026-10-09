@@ -273,6 +273,25 @@ agent did not do theirs.
 once, refuse otherwise, verify the result after writing, and be followed by the
 full gate before anything else. Work one file at a time.
 
+**The safe path.** `AGENTS.md` rule 6 is a prohibition, and a prohibition with no
+alternative is a rule that gets worked around. So the alternative exists:
+
+- `scripts/edit.mjs` — a CLI that anchors, counts, replaces and reads back.
+- `scripts/lib/source-edit.mjs` — the same as a library, split into `planEdit`
+  (pure, testable without a filesystem) and `applyEdit` (which verifies its own
+  write).
+
+It refuses an anchor matching zero times or the wrong number of times, and after
+writing it reads the file back and compares against the plan. It deliberately
+does **not** parse the language or judge the change — that belongs to `typecheck`
+and the suite.
+
+_Building it found a bug in itself:_ an early version also asserted the anchor
+was gone from the result, which refuses a good edit whose **replacement contains
+the anchor** — appending to the line it matched. A tool that refuses correct work
+is a tool people stop using, which is the failure this whole mechanism exists to
+prevent. The check was removed and the case pinned by a test.
+
 **What is enforced, and what is not.** `check:destructive` refuses these patterns
 in committed scripts and hooks. It **cannot** see a shell command that was never
 committed — which is precisely where failure 2 happened. That half is

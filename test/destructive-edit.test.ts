@@ -112,3 +112,18 @@ test('destructive-edit: the rule-defining files are exempt, and only them', () =
         1
     );
 });
+
+test('destructive-edit: a direct write to a source file is refused', () => {
+    // scripts/edit.mjs and scripts/lib/source-edit.mjs exist so a scripted edit
+    // anchors, counts and verifies. A direct write does none of those.
+    assert.equal(scan("writeFileSync('src/main.ts', text)").length, 1);
+});
+
+test('destructive-edit: a shell redirection into a source file is refused', () => {
+    assert.equal(scan('echo "x" > src/main.ts').length, 1);
+    assert.equal(scan('cat a.txt >> test/main.test.ts').length, 1);
+});
+
+test('destructive-edit: writing build output directly is still fine', () => {
+    assert.deepEqual(scan("writeFileSync('dist/main.js', text)"), []);
+});

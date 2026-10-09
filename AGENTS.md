@@ -72,10 +72,25 @@ Both were caught by `typecheck` within seconds. That is the gate doing its job
 and the agent not doing theirs.
 
 **The rule for a bulk change is: do it per-position, in a script that checks its
-own work, one file at a time, with the full gate between files.** `npm run
-check:destructive` refuses the patterns in committed tooling — but it cannot see
-a shell command that was never committed, which is exactly where the second
-failure happened. That half is on you.
+own work, one file at a time, with the full gate between files.**
+
+**Use the helper. It is what makes this rule possible to follow.**
+
+```bash
+node scripts/edit.mjs src/foo.ts --anchor 'exact old text' --replace 'new text'
+node scripts/edit.mjs src/foo.ts --anchor-file a.txt --replace-file b.txt  # multi-line
+node scripts/edit.mjs src/foo.ts --anchor 'x' --replace 'y' --dry-run
+```
+
+It refuses an anchor that matches zero times or the wrong number of times, and
+**after writing it reads the file back** to confirm the change is really there.
+`scripts/lib/source-edit.mjs` is the same thing as a library for scripts, with
+`planEdit` (pure, no writes) and `applyEdit`.
+
+`npm run check:destructive` refuses `sed -i`/`perl -i`, shell redirection into a
+source file, and direct `writeFileSync('src/...')` in committed tooling — but it
+**cannot see a shell command that was never committed**, which is exactly where
+the second failure happened. That half is on you.
 
 ### 7. Apple is the benchmark
 
