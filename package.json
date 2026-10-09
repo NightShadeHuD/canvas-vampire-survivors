@@ -34,7 +34,8 @@
         "typecheck": "tsc -p tsconfig.json",
         "check:suite": "node scripts/check-suite.mjs",
         "check:assertions": "node scripts/check-assertions.mjs",
-        "check:register": "node scripts/check-register.mjs"
+        "check:register": "node scripts/check-register.mjs",
+        "check:docs": "node scripts/check-docs.mjs"
     },
     "keywords": [
         "game",
