@@ -427,7 +427,7 @@ async function main() {
     await page.waitForTimeout(800);
     // Swap the locale via the live i18n hook + tell UI to refresh.
     const flipped = await page.evaluate(async () => {
-        const mod = await import('./src/i18n.js');
+        const mod = await import('./src/i18n.ts');
         mod.setLocale('zh');
         // Mirror the path the Settings dialog uses.
         window.__vsGame?.ui?.onLocaleChanged?.();
@@ -437,7 +437,7 @@ async function main() {
     observations.notes.push(`[locale-flip] startTitle after zh flip: ${flipped}`);
     // Flip back to en and assert the labels return to English.
     const restored = await page.evaluate(async () => {
-        const mod = await import('./src/i18n.js');
+        const mod = await import('./src/i18n.ts');
         mod.setLocale('en');
         window.__vsGame?.ui?.onLocaleChanged?.();
         return document.querySelector('#startTitle')?.textContent || '';

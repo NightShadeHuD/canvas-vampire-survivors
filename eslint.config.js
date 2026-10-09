@@ -277,7 +277,15 @@ module.exports = [
         plugins: { '@typescript-eslint': tseslint.plugin },
         rules: {
             'no-unused-vars': 'off',
-            '@typescript-eslint/no-unused-vars': UNUSED_VARS
+            '@typescript-eslint/no-unused-vars': UNUSED_VARS,
+            // `no-undef` cannot see types, so it reports DOM *type* names such
+            // as GainNode and OscillatorType as undefined values. Declaring
+            // those as globals would be worse than switching the rule off: it
+            // would also excuse a real runtime reference to `GainNode`, which
+            // is genuinely undefined. The check moves to the compiler, which
+            // understands types and scopes and reports TS2304 for an unknown
+            // name — strictly more capable than this rule, not a relaxation.
+            'no-undef': 'off'
         }
     }
 ];

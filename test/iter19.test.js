@@ -24,7 +24,7 @@ import {
     sanitiseKeymap,
     saveKeymap,
     _resetKeymapForTests
-} from '../src/keymap.js';
+} from '../src/keymap.ts';
 
 // ---------------------------------------------------------------------------
 // Haptics — vibrate mock, toggle gating, missing API silence.

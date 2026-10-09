@@ -15,7 +15,7 @@ import {
     getStageModifiers,
     listStages
 } from '../src/stages.js';
-import { dailyChallenge, dailySeed } from '../src/daily.js';
+import { dailyChallenge, dailySeed } from '../src/daily.ts';
 import { GAMEPAD_BUTTON, InputManager, applyGamepadDeadzone } from '../src/input.js';
 import { _resetStorageForTests, getTouchButtonScale, loadSave, resetSave } from '../src/storage.js';
 import { BOSSES, PASSIVES, WEAPONS } from '../src/data.js';

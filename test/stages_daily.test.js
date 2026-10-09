@@ -1,4 +1,4 @@
-// Unit tests for src/stages.js + src/daily.js (iter-12). Runs in Node, no DOM.
+// Unit tests for src/stages.js + src/daily.ts (iter-12). Runs in Node, no DOM.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,7 +21,7 @@ import {
     loadDailyHistory,
     saveDailyResult,
     todayKey
-} from '../src/daily.js';
+} from '../src/daily.ts';
 import { BOSSES } from '../src/data.js';
 import {
     _resetStorageForTests,
@@ -131,7 +131,7 @@ test('stages: listStages returns at least the two shipped maps in order', () => 
 });
 
 // ---------------------------------------------------------------------------
-// daily.js
+// daily.ts
 // ---------------------------------------------------------------------------
 test('daily: cyrb53 is deterministic and != for distinct inputs', () => {
     assert.equal(cyrb53('2026-04-25'), cyrb53('2026-04-25'));

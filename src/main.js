@@ -26,15 +26,15 @@ import {
     registerWeaponClass
 } from './entities.js';
 import { Weapon } from './weapons.js';
-import { AudioEngine } from './audio.js';
+import { AudioEngine } from './audio.ts';
 import { InputManager } from './input.js';
 import { HapticEngine } from './haptics.ts';
-import { loadKeymap, saveKeymap } from './keymap.js';
+import { loadKeymap, saveKeymap } from './keymap.ts';
 import { UI } from './ui.js';
 import { FpsMeter, ShakeCamera } from './systems.ts';
 import { SpatialHash } from './spatial-hash.ts';
 import { Pool, resetFloatingText, resetParticle } from './pool.ts';
-import { EffectLayer } from './effects.js';
+import { EffectLayer } from './effects.ts';
 import { AchievementTracker } from './achievements.ts';
 import {
     SeededRng,
@@ -47,7 +47,7 @@ import {
     resetSave,
     saveSave
 } from './storage.js';
-import { setLocale, t as _t } from './i18n.js';
+import { setLocale, t as _t } from './i18n.ts';
 import {
     DEFAULT_STAGE_ID,
     getBackgroundFor,
@@ -56,8 +56,8 @@ import {
     getWavesFor,
     pickWeighted
 } from './stages.js';
-import { dailyChallenge, saveDailyResult } from './daily.js';
-import { TutorialState } from './tutorial.js';
+import { dailyChallenge, saveDailyResult } from './daily.ts';
+import { TutorialState } from './tutorial.ts';
 import { ReplayPlayer, ReplayRecorder, loadReplay, saveReplay } from './replay.js';
 import { KonamiDetector } from './konami.ts';
 

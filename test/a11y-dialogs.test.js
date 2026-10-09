@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UI } from '../src/ui.js';
-import { t, setLocale } from '../src/i18n.js';
+import { t, setLocale } from '../src/i18n.ts';
 
 /** The dialogs ui.js populates dynamically, and the i18n key of the heading
  *  each one renders. The accessible name must match that heading. */

@@ -63,6 +63,15 @@ export function dailySeed(dateStr) {
  * daily based on the seed so players can't cheese a single map every day.
  * @param {string} [dateStr] defaults to UTC today
  */
+/** One recorded daily attempt, keyed by ISO date in storage. */
+export interface DailyEntry {
+    date: string;
+    stage: string;
+    timeSurvived: number;
+    kills?: number;
+    won?: boolean;
+}
+
 export function dailyChallenge(dateStr) {
     const date = dateStr || todayKey();
     const seed = dailySeed(date);
@@ -179,7 +188,7 @@ export function dailyStreakSummary(history, now = new Date()) {
     // when multiple stages share a date) so the streak is "did the player
     // play that day at all?" rather than per-stage.
     const byDate = new Map();
-    for (const e of Object.values(all)) {
+    for (const e of Object.values(all as Record<string, DailyEntry>)) {
         if (!e || !e.date) continue;
         const prev = byDate.get(e.date);
         if (!prev || (e.timeSurvived || 0) > (prev.timeSurvived || 0)) {
@@ -255,7 +264,9 @@ function tileFor(value, median) {
  */
 export function buildShareText(entry, history) {
     const all = history || loadDailyHistory();
-    const sameStage = Object.values(all).filter((e) => e.stage === entry.stage);
+    const sameStage = Object.values(all as Record<string, DailyEntry>).filter(
+        (e) => e.stage === entry.stage
+    );
     const times = sameStage
         .map((e) => e.timeSurvived || 0)
         .filter((t) => t > 0)

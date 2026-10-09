@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 71.69,
-            "branches": 80.95,
-            "functions": 66.47
+            "lines": 71.97,
+            "branches": 81.06,
+            "functions": 66.92
         },
         "files": {
             "scripts/lib/suppression-scanner.mjs": {
@@ -35,9 +35,9 @@
                 "branches": 100,
                 "functions": 100
             },
-            "src/audio.js": {
+            "src/audio.ts": {
                 "lines": 100,
-                "branches": 98.61,
+                "branches": 98.63,
                 "functions": 100
             },
             "src/config.ts": {
@@ -45,8 +45,8 @@
                 "branches": 100,
                 "functions": 100
             },
-            "src/daily.js": {
-                "lines": 93.54,
+            "src/daily.ts": {
+                "lines": 93.77,
                 "branches": 66.67,
                 "functions": 63.16
             },
@@ -55,10 +55,10 @@
                 "branches": 100,
                 "functions": 100
             },
-            "src/effects.js": {
-                "lines": 75.29,
-                "branches": 85.37,
-                "functions": 57.14
+            "src/effects.ts": {
+                "lines": 78.74,
+                "branches": 86.96,
+                "functions": 63.64
             },
             "src/entities.js": {
                 "lines": 45.84,
@@ -70,7 +70,7 @@
                 "branches": 87.5,
                 "functions": 100
             },
-            "src/i18n.js": {
+            "src/i18n.ts": {
                 "lines": 100,
                 "branches": 90,
                 "functions": 100
@@ -80,7 +80,7 @@
                 "branches": 70.91,
                 "functions": 37.84
             },
-            "src/keymap.js": {
+            "src/keymap.ts": {
                 "lines": 92.18,
                 "branches": 69.33,
                 "functions": 100
@@ -125,9 +125,9 @@
                 "branches": 100,
                 "functions": 100
             },
-            "src/tutorial.js": {
+            "src/tutorial.ts": {
                 "lines": 100,
-                "branches": 77.78,
+                "branches": 78.26,
                 "functions": 100
             },
             "src/ui.js": {

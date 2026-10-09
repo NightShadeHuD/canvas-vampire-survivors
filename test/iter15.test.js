@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { TUTORIAL_STEPS, TutorialState } from '../src/tutorial.js';
+import { TUTORIAL_STEPS, TutorialState } from '../src/tutorial.ts';
 import {
     REPLAY_VERSION,
     ReplayPlayer,

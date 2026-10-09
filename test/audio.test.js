@@ -1,4 +1,4 @@
-// Unit tests for src/audio.js — the Web Audio synthesiser.
+// Unit tests for src/audio.ts — the Web Audio synthesiser.
 //
 // This module had 0% coverage. It is the "degrades silently when unavailable"
 // module, which is exactly the kind of code that rots unnoticed: every guard
@@ -13,7 +13,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AudioEngine } from '../src/audio.js';
+import { AudioEngine } from '../src/audio.ts';
 
 // ---------------------------------------------------------------------------
 // Fakes
