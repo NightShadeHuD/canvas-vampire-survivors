@@ -18,6 +18,7 @@ import {
     findEnemyDef,
     registerWeaponClass
 } from '../src/entities.ts';
+import { renderFloatingText, renderParticle } from '../src/entity-render.ts';
 import { CONFIG } from '../src/config.ts';
 import { ENEMIES } from '../src/data.ts';
 
@@ -353,7 +354,8 @@ test('particle/render: draws nothing once expired', () => {
         arc: () => {},
         fill: () => {}
     };
-    p.render(ctx);
+    // The stub implements only what renderParticle touches.
+    renderParticle(ctx as unknown as CanvasRenderingContext2D, p);
     assert.equal(calls, 0, 'an expired particle must not issue draw calls');
 });
 
@@ -388,7 +390,7 @@ test('floatingText: defaults float upward and fade', () => {
 test('floatingText/render: draws nothing once expired', () => {
     const t = new FloatingText('x', 0, 0, '#fff', { life: 0 });
     let drawn = 0;
-    t.render({ fillText: () => drawn++ });
+    renderFloatingText({ fillText: () => drawn++ } as any, t);
     assert.equal(drawn, 0);
 });
 

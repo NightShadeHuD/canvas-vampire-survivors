@@ -25,6 +25,14 @@ import {
     findEnemyDef,
     registerWeaponClass
 } from './entities.ts';
+import {
+    renderEnemyProjectile,
+    renderExpOrb,
+    renderFloatingText,
+    renderMine,
+    renderParticle,
+    renderProjectile
+} from './entity-render.ts';
 import { Weapon } from './weapons.ts';
 import { AudioEngine } from './audio.ts';
 import { InputManager } from './input.ts';
@@ -1746,18 +1754,18 @@ export class Game {
 
         this._drawGrid();
 
-        for (const o of this.expOrbs) o.render(ctx);
-        for (const m of this.mines) m.render(ctx);
+        for (const o of this.expOrbs) renderExpOrb(ctx, o);
+        for (const m of this.mines) renderMine(ctx, m);
         this._renderEnemies(ctx);
         if (this.player) {
             this.player.render(ctx);
             // Orbit shards live on the weapon, so render per-weapon extras here.
             for (const w of this.player.weapons) w.renderExtras?.(ctx);
         }
-        for (const p of this.projectiles) p.render(ctx);
-        for (const ep of this.enemyProjectiles) ep.render(ctx);
-        for (const p of this.particles) p.render(ctx);
-        for (const t of this.floatingTexts) t.render(ctx);
+        for (const p of this.projectiles) renderProjectile(ctx, p);
+        for (const ep of this.enemyProjectiles) renderEnemyProjectile(ctx, ep);
+        for (const p of this.particles) renderParticle(ctx, p);
+        for (const t of this.floatingTexts) renderFloatingText(ctx, t);
 
         ctx.restore();
 
