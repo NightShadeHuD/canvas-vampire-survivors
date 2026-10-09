@@ -36,7 +36,8 @@
         "check:assertions": "node scripts/check-assertions.mjs",
         "check:register": "node scripts/check-register.mjs",
         "check:docs": "node scripts/check-docs.mjs",
-        "check:strict": "node scripts/check-strict.mjs"
+        "check:strict": "node scripts/check-strict.mjs",
+        "check:destructive": "node scripts/check-destructive.mjs"
     },
     "keywords": [
         "game",

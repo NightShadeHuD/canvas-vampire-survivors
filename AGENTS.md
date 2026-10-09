@@ -8,7 +8,7 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The six non-negotiables
+## The seven non-negotiables
 
 ### 1. A red baseline stops everything
 
@@ -46,7 +46,38 @@ defect. "Done except X, which is untested" is useful; "done" is not.
 Read the diff as if someone else wrote it. Check style, production readiness,
 and that tests exist and pass. Then commit.
 
-### 6. Apple is the benchmark
+### 6. Never edit source text with a blunt instrument
+
+**Do not run `sed -i`, `perl -pi`, or any global substitution across a source
+file. Do not rewrite a file with a one-line script.** Every scripted edit to
+source must:
+
+1. **anchor on text that matches exactly once**, and refuse if it matches zero
+   or more than one;
+2. **verify the result after writing** — read the file back and assert the
+   intended text is present;
+3. **be followed by `npm run verify`** before anything else happens.
+
+Two failures in one session, both self-inflicted, both from ignoring this:
+
+- An annotator inserted a type at a parameter's identifier and produced
+  `update(dt: number, height: number?)` — invalid syntax — because it assumed the
+  identifier was never already followed by `?`.
+- A global substitution stripping backticks, run across `src/effects.ts` to
+  clean up after the first mistake, **removed every backtick in the file** —
+  including the template literals it builds its colours from:
+  ``ctx.strokeStyle = `rgba(160,255,160,${...})`;``
+
+Both were caught by `typecheck` within seconds. That is the gate doing its job
+and the agent not doing theirs.
+
+**The rule for a bulk change is: do it per-position, in a script that checks its
+own work, one file at a time, with the full gate between files.** `npm run
+check:destructive` refuses the patterns in committed tooling — but it cannot see
+a shell command that was never committed, which is exactly where the second
+failure happened. That half is on you.
+
+### 7. Apple is the benchmark
 
 How it looks, how smoothly it runs, how optimised the code is, how smooth the
 interface is, how easy it is to use — we settle for nothing less. Perceived
@@ -85,6 +116,7 @@ npm run setup                     # installs the git hooks
 | No test depends on today's date                         | `scripts/check-clocks.mjs`                       |
 | The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
 | Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |
+| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                  |
 | All of the above, in order, locally                     | `.githooks/pre-push` → `npm run verify`          |
 | All of the above, unbypassably                          | CI job **Verify**, required by branch protection |
 
