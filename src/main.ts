@@ -26,7 +26,9 @@ import {
     registerWeaponClass
 } from './entities.ts';
 import {
+    renderEnemy,
     renderEnemyProjectile,
+    renderPlayer,
     renderExpOrb,
     renderFloatingText,
     renderMine,
@@ -1758,7 +1760,7 @@ export class Game {
         for (const m of this.mines) renderMine(ctx, m);
         this._renderEnemies(ctx);
         if (this.player) {
-            this.player.render(ctx);
+            renderPlayer(ctx, this.player);
             // Orbit shards live on the weapon, so render per-weapon extras here.
             for (const w of this.player.weapons) w.renderExtras?.(ctx);
         }
@@ -1784,7 +1786,7 @@ export class Game {
     _renderEnemies(ctx) {
         for (const e of this.enemies) {
             if (e.boss || e.flashTimer > 0 || e.shielded) {
-                e.render(ctx);
+                renderEnemy(ctx, e);
                 continue;
             }
             const sprite = getEnemySprite(e.type, e.size);
@@ -1800,7 +1802,7 @@ export class Game {
                     ctx.fillRect(e.x - w / 2, e.y - e.size - 10, w * pct, 3);
                 }
             } else {
-                e.render(ctx);
+                renderEnemy(ctx, e);
             }
         }
     }
