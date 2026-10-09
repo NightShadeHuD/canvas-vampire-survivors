@@ -20,6 +20,7 @@
         "check:suppressions": "node scripts/check-suppressions.mjs",
         "check:hygiene": "node scripts/check-hygiene.mjs",
         "check:coverage": "node scripts/check-coverage.mjs",
+        "check:coverage-floor": "node scripts/check-coverage-floor.mjs",
         "verify": "node scripts/verify.mjs",
         "check": "npm run verify",
         "a11y": "node scripts/a11y-audit.mjs",

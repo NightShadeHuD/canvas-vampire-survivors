@@ -81,6 +81,7 @@ npm run setup                     # installs the git hooks
 | Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                 |
 | No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                      |
 | Every source file is really linted                      | `scripts/check-coverage.mjs`                     |
+| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`               |
 | No test depends on today's date                         | `scripts/check-clocks.mjs`                       |
 | The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
 | Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |

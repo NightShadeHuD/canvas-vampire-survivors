@@ -91,16 +91,17 @@ npm run verify
 
 It runs, in order, and stops at the first failure:
 
-| Step             | Command                      | Proves                                                      |
-| ---------------- | ---------------------------- | ----------------------------------------------------------- |
-| Lint             | `npm run lint`               | No undefined globals, no dead identifiers, style rules hold |
-| Coverage         | `npm run check:coverage`     | Lint, format and test discovery actually reach every file   |
-| Format           | `npm run format:check`       | Code matches the project's Prettier contract                |
-| Unit tests       | `npm test`                   | Behaviour is as specified                                   |
-| Date-hermeticity | `npm run test:clock`         | No test depends on today's date                             |
-| Baseline         | `npm run check:baseline`     | No new failures, no stale baseline entries                  |
-| Suppressions     | `npm run check:suppressions` | Every suppression is within its declared ceiling            |
-| Hygiene          | `npm run check:hygiene`      | No debuggers, no `.only`, no conflict markers, no secrets   |
+| Step             | Command                        | Proves                                                      |
+| ---------------- | ------------------------------ | ----------------------------------------------------------- |
+| Lint             | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold |
+| Coverage         | `npm run check:coverage`       | Lint, format and test discovery actually reach every file   |
+| Format           | `npm run format:check`         | Code matches the project's Prettier contract                |
+| Unit tests       | `npm test`                     | Behaviour is as specified                                   |
+| Date-hermeticity | `npm run test:clock`           | No test depends on today's date                             |
+| Baseline         | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
+| Coverage floors  | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
+| Suppressions     | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
+| Hygiene          | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
 in `scripts/verify.mjs` must appear here, and every command listed here must
@@ -186,16 +187,17 @@ Rules for gaps:
 
 ## 6. Enforcement map
 
-| Rule                        | Mechanism                        | Runs           |
-| --------------------------- | -------------------------------- | -------------- |
-| Tests pass, no new failures | `scripts/check-baseline.mjs`     | pre-push, CI   |
-| Suppressions bounded        | `scripts/check-suppressions.mjs` | pre-commit, CI |
-| Style + format              | eslint, prettier                 | pre-commit, CI |
-| Coverage is real            | `scripts/check-coverage.mjs`     | pre-push, CI   |
-| Hermetic tests              | `scripts/check-clocks.mjs`       | pre-push, CI   |
-| No debug leftovers          | `scripts/check-hygiene.mjs`      | pre-commit, CI |
-| Reviewed before merge       | PR template + branch protection  | GitHub         |
-| Everything at once          | `npm run verify`                 | pre-push, CI   |
+| Rule                        | Mechanism                          | Runs           |
+| --------------------------- | ---------------------------------- | -------------- |
+| Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
+| Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
+| Style + format              | eslint, prettier                   | pre-commit, CI |
+| Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
+| Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
+| Hermetic tests              | `scripts/check-clocks.mjs`         | pre-push, CI   |
+| No debug leftovers          | `scripts/check-hygiene.mjs`        | pre-commit, CI |
+| Reviewed before merge       | PR template + branch protection    | GitHub         |
+| Everything at once          | `npm run verify`                   | pre-push, CI   |
 
 ### Why "lint coverage is real" is its own rule
 
@@ -219,6 +221,27 @@ investigates it.
 
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
+
+### Coverage floors
+
+The same reasoning applies to _how much_ of the code the tests actually run. The
+floors in `quality-baseline.json` under `coverageFloors` are not targets — every
+one is a number this repository measured, and they may only rise.
+
+They exist because a gate can be satisfied while being hollowed out: add tests
+in one module, delete them in another, and an overall average holds while a
+whole file rots. So floors are recorded **per file as well as overall**, and a
+module no test ever loads counts as 0%, never as absent.
+
+Two calibrations keep the numbers honest rather than decorative:
+
+- Compared with a 0.05-point tolerance. Measurement here is bit-for-bit
+  deterministic — three consecutive runs produced an identical report — but CI
+  runs a different OS, and a tolerance absorbs platform wobble without opening a
+  door. A real regression moves whole percentage points.
+- Ratcheting is requested only on a gain of **1.0 point or more**. Prompting on
+  every hundredth would turn the message into wallpaper, and a warning nobody
+  reads is worse than no warning.
 
 ### Git hooks
 
