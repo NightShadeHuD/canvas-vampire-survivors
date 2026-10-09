@@ -114,7 +114,10 @@ const PLAYWRIGHT_DRIVERS = [
 const PLAYWRIGHT_BROWSER = {
     window: 'readonly',
     document: 'readonly',
-    localStorage: 'readonly'
+    localStorage: 'readonly',
+    // Used inside page.evaluate() to assert an overlay actually became visible.
+    // This only surfaced once scripts/ was linted at all.
+    getComputedStyle: 'readonly'
 };
 
 /** A service worker runs in the WorkerGlobalScope: not Node, not a module. */
