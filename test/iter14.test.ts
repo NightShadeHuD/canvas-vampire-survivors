@@ -105,12 +105,15 @@ test('iter14 daily: rotation includes tundra across a few seeds', () => {
 // ---------------------------------------------------------------------------
 // Gamepad input layer (mocked — never touches the real navigator API)
 // ---------------------------------------------------------------------------
+// A deliberately partial Gamepad: enough for `pollGamepad`, which reads only
+// axes and buttons. The cast is at the boundary, not spread through call sites.
 function makePad({ axes = [0, 0, 0, 0], buttons = [] } = {}) {
     const pad = {
         axes,
         buttons: buttons.map((b) => ({ pressed: !!b }))
     };
-    return [pad, null, null, null];
+    // A 4-slot pad list with the empty slots the API expects.
+    return [pad, null, null, null] as unknown as Gamepad[];
 }
 
 test('iter14 gamepad: applyGamepadDeadzone clips small magnitudes to 0', () => {

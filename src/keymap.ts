@@ -62,7 +62,8 @@ export const KEYMAP_ACTIONS = Object.freeze([
  * for help; M for mute. Frozen to prevent accidental mutation; the load
  * path always returns a deep clone.
  */
-export const DEFAULT_KEYMAP = Object.freeze({
+/** Action name -> accepted key names. Addressed dynamically, hence the index type. */
+export const DEFAULT_KEYMAP: Readonly<Record<string, readonly string[]>> = Object.freeze({
     up: Object.freeze(['w', 'arrowup']),
     down: Object.freeze(['s', 'arrowdown']),
     left: Object.freeze(['a', 'arrowleft']),
@@ -89,7 +90,7 @@ export function normaliseKey(rawKey) {
  * subsequent edits don't mutate the frozen default) and before persistence
  * (so the saved blob is a stable JSON snapshot).
  */
-export function cloneKeymap(map) {
+export function cloneKeymap(map): Record<string, string[]> {
     const out = {};
     for (const action of KEYMAP_ACTIONS) {
         const list = Array.isArray(map?.[action]) ? map[action] : [];
@@ -105,7 +106,7 @@ export function cloneKeymap(map) {
  * player can never get into an unrecoverable "no keys bound" state by
  * editing localStorage by hand. Returns a fresh object.
  */
-export function sanitiseKeymap(raw) {
+export function sanitiseKeymap(raw): Record<string, string[]> {
     const out = {};
     for (const action of KEYMAP_ACTIONS) {
         const incoming = Array.isArray(raw?.[action]) ? raw[action] : null;
@@ -137,7 +138,12 @@ export function sanitiseKeymap(raw) {
  *   - replace=false: the new key is appended (deduplicated). Useful for
  *     adding a second binding to an already-bound action.
  */
-export function bindKey(map, action, rawKey, { replace = true } = {}) {
+export function bindKey(
+    map,
+    action,
+    rawKey,
+    { replace = true }: Record<string, any> = {}
+): Record<string, string[]> {
     const next = cloneKeymap(map);
     const key = normaliseKey(rawKey);
     if (!KEYMAP_ACTIONS.includes(action) || !key) return next;
@@ -249,7 +255,7 @@ function hasLS() {
     }
 }
 
-export function loadKeymap() {
+export function loadKeymap(): Record<string, string[]> {
     try {
         const raw = hasLS() ? window.localStorage.getItem(KEYMAP_STORAGE_KEY) : _memory;
         if (!raw) return cloneKeymap(DEFAULT_KEYMAP);

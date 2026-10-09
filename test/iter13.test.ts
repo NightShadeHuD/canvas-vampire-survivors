@@ -204,7 +204,8 @@ function makeStubDoc() {
             querySelector(sel) {
                 if (sel.startsWith('#')) {
                     const found = make(sel.slice(1));
-                    found.click = () => (found._listeners.click || []).forEach((fn) => fn());
+                    (found as any).click = () =>
+                        ((found as any)._listeners.click || []).forEach((fn) => fn());
                     return found;
                 }
                 return null;
@@ -270,7 +271,7 @@ function makeStubDoc() {
 
 test('ui.updateStageChip: writes icon + name into the chip element', async () => {
     // Stub the global document so UI._cache works.
-    globalThis.document = makeStubDoc();
+    (globalThis as any).document = makeStubDoc();
     const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.updateStageChip('crypt');
@@ -284,8 +285,8 @@ test('ui.updateStageChip: writes icon + name into the chip element', async () =>
 });
 
 test('ui.showStreak: renders 14 calendar cells and current/best stats', async () => {
-    globalThis.document = makeStubDoc();
-    globalThis.window = { localStorage: undefined };
+    (globalThis as any).document = makeStubDoc();
+    (globalThis as any).window = { localStorage: undefined };
     _resetDailyForTests();
     saveDailyResult({
         date: todayKey(),
@@ -313,7 +314,7 @@ test('ui.showStreak: renders 14 calendar cells and current/best stats', async ()
 });
 
 test('ui.showHelp: lists at least 6 keyboard shortcut rows and a close button', async () => {
-    globalThis.document = makeStubDoc();
+    (globalThis as any).document = makeStubDoc();
     const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.showHelp();
@@ -326,7 +327,7 @@ test('ui.showHelp: lists at least 6 keyboard shortcut rows and a close button', 
 });
 
 test('ui.showHowToPlay: renders the four onboarding paragraphs', async () => {
-    globalThis.document = makeStubDoc();
+    (globalThis as any).document = makeStubDoc();
     const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.showHowToPlay();

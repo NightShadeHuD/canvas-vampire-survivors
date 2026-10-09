@@ -204,7 +204,7 @@ export class UI {
      * Read-only (no callbacks beyond close); the daily run itself starts via
      * the regular Daily Challenge button.
      */
-    showStreak(onClose) {
+    showStreak(onClose?) {
         const m = this.els.streakScreen;
         if (!m) return;
         const summary = dailyStreakSummary(loadDailyHistory());
@@ -258,7 +258,7 @@ export class UI {
     }
 
     /** Keyboard-shortcuts help overlay. Mirrors the H hotkey. */
-    showHelp(onClose) {
+    showHelp(onClose?) {
         const m = this.els.helpScreen;
         if (!m) return;
         const rows = [
@@ -298,7 +298,7 @@ export class UI {
     }
 
     /** First-launch / on-demand "How to play" overlay. */
-    showHowToPlay(onClose) {
+    showHowToPlay(onClose?) {
         const m = this.els.howToPlayScreen;
         if (!m) return;
         m.innerHTML = `

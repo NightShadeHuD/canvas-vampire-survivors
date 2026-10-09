@@ -175,7 +175,7 @@ test('iter19 keymap: bindKey preserves existing default for an emptied action', 
 test('iter19 keymap: save → load roundtrips through localStorage shim', () => {
     // Install a tiny localStorage shim before the keymap module touches it.
     const store = new Map();
-    globalThis.window = {
+    (globalThis as any).window = {
         localStorage: {
             getItem: (k) => (store.has(k) ? store.get(k) : null),
             setItem: (k, v) => store.set(k, v),
