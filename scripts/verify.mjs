@@ -38,6 +38,10 @@ const STEPS = [
         script: 'check:assertions',
         proves: 'no assertion was weakened since the base revision'
     },
+    {
+        script: 'check:register',
+        proves: 'every declared shortcut is bounded, tracked and correctly cited'
+    },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
     {
