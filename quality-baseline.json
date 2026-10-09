@@ -16,5 +16,130 @@
         "blockingViolations": 0,
         "nodes": 0
     },
-    "declaredGaps": []
+    "declaredGaps": [],
+    "coverageFloors": {
+        "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
+        "overall": {
+            "lines": 69.76,
+            "branches": 79.29,
+            "functions": 63.29
+        },
+        "files": {
+            "scripts/lib/suppression-scanner.mjs": {
+                "lines": 100,
+                "branches": 97.67,
+                "functions": 100
+            },
+            "src/achievements.js": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
+            },
+            "src/audio.js": {
+                "lines": 0,
+                "branches": 0,
+                "functions": 0
+            },
+            "src/config.js": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
+            },
+            "src/daily.js": {
+                "lines": 93.54,
+                "branches": 71.67,
+                "functions": 63.16
+            },
+            "src/data.js": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
+            },
+            "src/effects.js": {
+                "lines": 75.29,
+                "branches": 85,
+                "functions": 57.14
+            },
+            "src/entities.js": {
+                "lines": 25.18,
+                "branches": 67.65,
+                "functions": 18.75
+            },
+            "src/haptics.js": {
+                "lines": 100,
+                "branches": 86.36,
+                "functions": 100
+            },
+            "src/i18n.js": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
+            },
+            "src/input.js": {
+                "lines": 56.92,
+                "branches": 70.83,
+                "functions": 33.33
+            },
+            "src/keymap.js": {
+                "lines": 92.18,
+                "branches": 67.57,
+                "functions": 100
+            },
+            "src/konami.js": {
+                "lines": 97.83,
+                "branches": 88.24,
+                "functions": 66.67
+            },
+            "src/main.js": {
+                "lines": 0,
+                "branches": 0,
+                "functions": 0
+            },
+            "src/pool.js": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
+            },
+            "src/replay.js": {
+                "lines": 88.56,
+                "branches": 75,
+                "functions": 86.36
+            },
+            "src/spatial-hash.js": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
+            },
+            "src/stages.js": {
+                "lines": 99.66,
+                "branches": 84.62,
+                "functions": 100
+            },
+            "src/storage.js": {
+                "lines": 96.23,
+                "branches": 74.07,
+                "functions": 100
+            },
+            "src/systems.js": {
+                "lines": 0,
+                "branches": 0,
+                "functions": 0
+            },
+            "src/tutorial.js": {
+                "lines": 100,
+                "branches": 77.78,
+                "functions": 100
+            },
+            "src/ui.js": {
+                "lines": 32.54,
+                "branches": 66.67,
+                "functions": 23.4
+            },
+            "src/weapons.js": {
+                "lines": 43.84,
+                "branches": 68.18,
+                "functions": 54.55
+            }
+        }
+    }
 }

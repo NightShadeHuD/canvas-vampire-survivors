@@ -31,6 +31,10 @@ const STEPS = [
     { script: 'test', proves: 'behaviour matches the unit tests' },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
+    {
+        script: 'check:coverage-floor',
+        proves: 'measured code coverage has not fallen below its recorded floors'
+    },
     { script: 'check:suppressions', proves: 'every suppression is within its declared ceiling' },
     { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' }
 ];
