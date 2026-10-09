@@ -11,11 +11,11 @@
  * Exports:
  *   - class Game
  *   - boot()              constructor + window-handle install
- *   - re-exports ACHIEVEMENTS, WAVES from data.js
+ *   - re-exports ACHIEVEMENTS, WAVES from data.ts
  */
 
 import { CONFIG, Difficulty, GameState } from './config.ts';
-import { ACHIEVEMENTS, BOSSES, ENEMIES, WAVES, WEAPONS } from './data.js';
+import { ACHIEVEMENTS, BOSSES, ENEMIES, WAVES, WEAPONS } from './data.ts';
 import {
     Enemy,
     ExpOrb,
@@ -25,9 +25,9 @@ import {
     findEnemyDef,
     registerWeaponClass
 } from './entities.js';
-import { Weapon } from './weapons.js';
+import { Weapon } from './weapons.ts';
 import { AudioEngine } from './audio.ts';
-import { InputManager } from './input.js';
+import { InputManager } from './input.ts';
 import { HapticEngine } from './haptics.ts';
 import { loadKeymap, saveKeymap } from './keymap.ts';
 import { UI } from './ui.js';
@@ -46,7 +46,7 @@ import {
     recordSpeedrunScore,
     resetSave,
     saveSave
-} from './storage.js';
+} from './storage.ts';
 import { setLocale, t as _t } from './i18n.ts';
 import {
     DEFAULT_STAGE_ID,
@@ -55,10 +55,10 @@ import {
     getStageModifiers,
     getWavesFor,
     pickWeighted
-} from './stages.js';
+} from './stages.ts';
 import { dailyChallenge, saveDailyResult } from './daily.ts';
 import { TutorialState } from './tutorial.ts';
-import { ReplayPlayer, ReplayRecorder, loadReplay, saveReplay } from './replay.js';
+import { ReplayPlayer, ReplayRecorder, loadReplay, saveReplay } from './replay.ts';
 import { KonamiDetector } from './konami.ts';
 
 registerWeaponClass(Weapon);
@@ -278,7 +278,7 @@ export class Game {
                 if (tag === 'INPUT' || tag === 'TEXTAREA') {
                     // Stop the input-manager's default handler from firing
                     // for typed text. We do this rather than gating inside
-                    // input.js so keymap remapping stays tiny.
+                    // input.ts so keymap remapping stays tiny.
                     e.stopPropagation();
                 }
             },
@@ -646,7 +646,7 @@ export class Game {
 
     /**
      * Speedrun mode: deterministic seed, fixed boss timeline (the `spawnAt`
-     * fields in data.js are already fixed), real-time millisecond clock,
+     * fields in data.ts are already fixed), real-time millisecond clock,
      * separate leaderboard. We toggle `speedrunMode` before delegating to
      * `start()` so the spawn path can branch on the seeded RNG.
      */
@@ -1196,7 +1196,7 @@ export class Game {
         const timeDiff = 1 + Math.floor(this.gameTime / 60) * 0.3;
         // Stage modifier folds into hpMult at the source so every spawn path
         // (waves, splitter children, bosses) inherits the +20% on tundra
-        // without each call site reaching back into stages.js.
+        // without each call site reaching back into stages.ts.
         const stageHpMult = this.stageMods?.enemyHpMult ?? 1;
         return {
             diff,

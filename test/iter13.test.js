@@ -11,7 +11,7 @@ import {
     saveDailyResult,
     todayKey
 } from '../src/daily.ts';
-import { _resetStorageForTests, loadSave, resetSave } from '../src/storage.js';
+import { _resetStorageForTests, loadSave, resetSave } from '../src/storage.ts';
 
 // A fixed instant used as "now" wherever a test both writes and reads daily
 // history. `saveDailyResult` prunes anything older than 14 days relative to

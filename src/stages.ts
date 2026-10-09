@@ -7,7 +7,7 @@
  * v2.5 balance; `crypt` is the second map introduced in iter-12 — darker,
  * ranged-heavy, and the Reaper shows up at 4:00 instead of 5:00.
  *
- * Dependencies: `./data.js` (WAVES, BOSSES) for the defaults the modifiers
+ * Dependencies: `./data.ts` (WAVES, BOSSES) for the defaults the modifiers
  * sit on top of. We deliberately don't touch the originals — `getWavesFor`
  * returns a frozen copy. This makes stages cheap to swap mid-session and
  * keeps the catalogue diff-friendly.
@@ -34,7 +34,7 @@
  * 10-minute fight (see `bossOverrides`).
  */
 
-import { BOSSES, WAVES } from './data.js';
+import { BOSSES, WAVES } from './data.ts';
 
 /**
  * @typedef {Object} StageDef
@@ -55,7 +55,24 @@ import { BOSSES, WAVES } from './data.js';
  */
 
 /** @type {Record<string, StageDef>} */
-export const STAGES = Object.freeze({
+/** A stage definition. Only some stages retheme a boss or alter balance. */
+export interface StageDef {
+    id: string;
+    name: string;
+    icon: string;
+    description: string;
+    background: { fill: string; gridAlpha: number };
+    musicStyle: string;
+    poolOverrides: Record<string, any>;
+    extraEnemies: string[];
+    bossOffsets: Record<string, any>;
+    /** Boss id -> replacement boss id. Absent on most stages. */
+    bossOverrides?: Record<string, string>;
+    /** Global balance tweaks, merged over DEFAULT_MODIFIERS. */
+    modifiers?: Record<string, any>;
+}
+
+export const STAGES: Readonly<Record<string, StageDef>> = Object.freeze({
     FOREST: Object.freeze({
         id: 'forest',
         name: 'Whisperwood',
@@ -111,7 +128,7 @@ export const STAGES = Object.freeze({
     //
     // Visual: cold blue palette (#2a3a4f) with a slightly more visible grid
     // so the snow lines read on the canvas. The 10-minute boss is replaced
-    // with IceQueen (see data.js BOSSES.ICE_QUEEN) via `bossOverrides`.
+    // with IceQueen (see data.ts BOSSES.ICE_QUEEN) via `bossOverrides`.
     // ----------------------------------------------------------------------
     TUNDRA: Object.freeze({
         id: 'tundra',

@@ -5,7 +5,7 @@
 // stacking, the soft caps, the level curve, and the damage formula. A bug in
 // any of it is a balance bug that no rendering test would ever catch.
 //
-// Tests use the real PASSIVES data from src/data.js wherever the numbers are
+// Tests use the real PASSIVES data from src/data.ts wherever the numbers are
 // meaningful, so the assertions describe the game as shipped rather than a
 // private copy of it. Synthetic defs are used only to reach the clamped edges
 // that the real data cannot reach within its 5-stack limit.
@@ -16,7 +16,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/entities.js';
 import { CONFIG } from '../src/config.ts';
-import { PASSIVES } from '../src/data.js';
+import { PASSIVES } from '../src/data.ts';
 
 /** Run `fn` with Math.random pinned, restoring it afterwards. */
 function withRandom(value, fn) {
@@ -386,7 +386,7 @@ test('player/takeDamage: reports the damage taken and flags the run', () => {
 });
 
 test('player/takeDamage: works when handed no game object at all', () => {
-    // weapons.js calls this from paths that may not have a full game bag.
+    // weapons.ts calls this from paths that may not have a full game bag.
     const p = new Player(0, 0);
     assert.doesNotThrow(() => p.takeDamage(10));
     assert.equal(p.hp, 90);

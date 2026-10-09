@@ -5,7 +5,7 @@
  * independent (delta-time in seconds), and per-class state is owned, never
  * shared.
  *
- * Dependencies: .ts`, `./data.js`. The Weapon class is injected at
+ * Dependencies: .ts`, `./data.ts`. The Weapon class is injected at
  * boot via `registerWeaponClass()` to break a circular import.
  *
  * Exports:
@@ -16,7 +16,7 @@
  */
 
 import { CONFIG } from './config.ts';
-import { ENEMIES } from './data.js';
+import { ENEMIES } from './data.ts';
 
 export class Player {
     constructor(x, y) {
@@ -748,7 +748,7 @@ export class OrbitShard {
         // the largest enemy in the bucket might be (boss is 64) plus the
         // shard's own visual radius — no more fixed 40 px that misses bosses.
         const SHARD_HIT = 10; // matches shard core in render()
-        const queryR = SHARD_HIT + 64; // 64 = largest enemy.size in data.js
+        const queryR = SHARD_HIT + 64; // 64 = largest enemy.size in data.ts
         for (const e of game.spatial.queryRect(this.x, this.y, queryR)) {
             if (this.hitTimers.has(e)) continue;
             const d = Math.hypot(e.x - this.x, e.y - this.y);

@@ -1,7 +1,7 @@
 /**
  * @module weapons
  * @description Single `Weapon` class that consumes a definition from
- * `data.js` and dispatches to the appropriate `_fire*` strategy each tick.
+ * `data.ts` and dispatches to the appropriate `_fire*` strategy each tick.
  * Level scaling formulas:
  *   damage   = base * (1 + (lvl-1) * 0.2) * player.damageMult * critMult
  *   cooldown = base * 0.92^(lvl-1) * player.cooldownMult
@@ -17,7 +17,37 @@
 
 import { Mine, OrbitShard, Projectile } from './entities.js';
 
+/** A weapon catalogue entry. Every field here is read by `Weapon`. */
+export interface WeaponDef {
+    id: string;
+    name: string;
+    icon: string;
+    /** Dispatch key: melee, projectile, instant, aura, mine, nova, drain, orbit. */
+    type: string;
+    baseDamage: number;
+    baseCooldown: number;
+    baseRange: number;
+    projectileCount: number;
+    /** Level at which the weapon evolves, if it can. */
+    evolveLevel?: number;
+    evolveName?: string;
+    evolveDamageMult?: number;
+    evolveCooldownMult?: number;
+    evolveBonusCrit?: number;
+    description?: string;
+    [key: string]: any;
+}
+
 export class Weapon {
+    def: WeaponDef;
+    id: string;
+    name: string;
+    icon: string;
+    level: number;
+    /** Seconds until the next shot; a fresh weapon starts ready. */
+    cooldown: number;
+    /** Orbit weapons only; built lazily and rebuilt when the count changes. */
+    _shards: any[] | null = null;
     constructor(def) {
         this.def = def;
         this.id = def.id;

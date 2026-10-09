@@ -1,4 +1,4 @@
-// Unit tests for src/stages.js + src/daily.ts (iter-12). Runs in Node, no DOM.
+// Unit tests for src/stages.ts + src/daily.ts (iter-12). Runs in Node, no DOM.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ import {
     getWavesFor,
     listStages,
     pickWeighted
-} from '../src/stages.js';
+} from '../src/stages.ts';
 import {
     _resetDailyForTests,
     buildShareText,
@@ -22,14 +22,14 @@ import {
     saveDailyResult,
     todayKey
 } from '../src/daily.ts';
-import { BOSSES } from '../src/data.js';
+import { BOSSES } from '../src/data.ts';
 import {
     _resetStorageForTests,
     getStageHighScores,
     loadSave,
     recordHighScore,
     resetSave
-} from '../src/storage.js';
+} from '../src/storage.ts';
 
 // A fixed instant used as "now" wherever a test both writes and reads daily
 // history. `saveDailyResult` prunes anything older than 14 days relative to
@@ -62,7 +62,7 @@ function daysBeforePinned(days) {
 }
 
 // ---------------------------------------------------------------------------
-// stages.js
+// stages.ts
 // ---------------------------------------------------------------------------
 test('stages: forest is the default and exposes balanced background', () => {
     assert.equal(DEFAULT_STAGE_ID, 'forest');

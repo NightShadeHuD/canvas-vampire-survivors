@@ -17,7 +17,7 @@ import {
     loadReplay,
     quantize,
     saveReplay
-} from '../src/replay.js';
+} from '../src/replay.ts';
 
 test.beforeEach(() => {
     _resetReplayForTests();

@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 71.97,
-            "branches": 81.06,
-            "functions": 66.92
+            "lines": 72.27,
+            "branches": 81.16,
+            "functions": 67.29
         },
         "files": {
             "scripts/lib/suppression-scanner.mjs": {
@@ -50,7 +50,7 @@
                 "branches": 66.67,
                 "functions": 63.16
             },
-            "src/data.js": {
+            "src/data.ts": {
                 "lines": 100,
                 "branches": 100,
                 "functions": 100
@@ -75,10 +75,10 @@
                 "branches": 90,
                 "functions": 100
             },
-            "src/input.js": {
-                "lines": 71.79,
-                "branches": 70.91,
-                "functions": 37.84
+            "src/input.ts": {
+                "lines": 74,
+                "branches": 71.93,
+                "functions": 41.03
             },
             "src/keymap.ts": {
                 "lines": 92.18,
@@ -100,24 +100,24 @@
                 "branches": 100,
                 "functions": 100
             },
-            "src/replay.js": {
-                "lines": 90.52,
-                "branches": 80.28,
-                "functions": 86.36
+            "src/replay.ts": {
+                "lines": 91.02,
+                "branches": 80.82,
+                "functions": 87.5
             },
             "src/spatial-hash.ts": {
                 "lines": 100,
                 "branches": 100,
                 "functions": 100
             },
-            "src/stages.js": {
-                "lines": 99.66,
+            "src/stages.ts": {
+                "lines": 99.68,
                 "branches": 85,
                 "functions": 100
             },
-            "src/storage.js": {
-                "lines": 96.23,
-                "branches": 75.29,
+            "src/storage.ts": {
+                "lines": 96.25,
+                "branches": 75.58,
                 "functions": 100
             },
             "src/systems.ts": {
@@ -135,10 +135,10 @@
                 "branches": 66.4,
                 "functions": 65.52
             },
-            "src/weapons.js": {
-                "lines": 52.96,
-                "branches": 87.27,
-                "functions": 63.64
+            "src/weapons.ts": {
+                "lines": 56.19,
+                "branches": 87.5,
+                "functions": 65.22
             }
         }
     }

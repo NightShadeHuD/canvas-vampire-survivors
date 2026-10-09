@@ -7,13 +7,13 @@
  *
  * iter-19 introduced this module as the source of truth for every keyboard
  * action InputManager and the global hotkey listener care about. Previously
- * those were string literals scattered through `input.js` and `main.js`; now
+ * those were string literals scattered through `input.ts` and `main.js`; now
  * they consult the keymap so a remap UI can rebind any of them at runtime.
  *
  * Design notes:
  *   - Keys are stored as the lowercased `KeyboardEvent.key` value (`'w'`,
  *     `'arrowup'`, `'escape'`, `' '` for Space). This matches what
- *     `input.js` already lowercases on read so we don't have to decide
+ *     `input.ts` already lowercases on read so we don't have to decide
  *     between `code` and `key` — `key` is good enough for the seven actions
  *     we expose and produces a more user-readable label.
  *   - Multiple keys can be bound to the same action (the default has WASD

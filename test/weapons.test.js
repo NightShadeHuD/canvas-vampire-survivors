@@ -3,8 +3,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Weapon } from '../src/weapons.js';
-import { WEAPONS } from '../src/data.js';
+import { Weapon } from '../src/weapons.ts';
+import { WEAPONS } from '../src/data.ts';
 import { CONFIG } from '../src/config.ts';
 
 // Minimal player that satisfies every getter Weapon touches.
@@ -184,7 +184,7 @@ test('Weapon: orbit shard count is clamped to 12', () => {
 });
 
 test('Weapon: config WEAPON_MAX_LEVEL + evolveLevel agree on 5', () => {
-    // Regression: make sure the CONFIG cap and the data.js evolveLevel don't
+    // Regression: make sure the CONFIG cap and the data.ts evolveLevel don't
     // drift apart — the UI relies on them matching to show the evolve tag.
     assert.equal(CONFIG.WEAPON_MAX_LEVEL, 5);
     for (const w of Object.values(WEAPONS)) {

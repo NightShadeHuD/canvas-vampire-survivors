@@ -1,9 +1,9 @@
-// Unit tests for the static catalogue in src/data.js. These guard the
+// Unit tests for the static catalogue in src/data.ts. These guard the
 // shape of the data layer so cross-module assumptions don't drift.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACHIEVEMENTS, BOSSES, ENEMIES, UNLOCKS, WAVES, WEAPONS, PASSIVES } from '../src/data.js';
+import { ACHIEVEMENTS, BOSSES, ENEMIES, UNLOCKS, WAVES, WEAPONS, PASSIVES } from '../src/data.ts';
 
 test('data: every weapon has the required fields', () => {
     for (const w of Object.values(WEAPONS)) {
