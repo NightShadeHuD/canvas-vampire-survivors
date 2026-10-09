@@ -212,8 +212,23 @@ Pass `-R NightShadeHuD/canvas-vampire-survivors` on any scripted `gh` command as
 well. Belt and braces — the rename protects interactive use, the flag protects
 automation.
 
-**GitHub Pages is not enabled on this repository**, so the
-`Deploy to GitHub Pages` workflow cannot complete until it is. The workflow
-itself is correct and gated on the full verify job; it is disabled so that a
-permanent red X cannot mask real failures. Re-enable it with
-`gh workflow enable "Deploy to GitHub Pages"` once Pages is switched on.
+**GitHub Pages is ENABLED, and the game is playable at**
+<https://nightshadehud.github.io/canvas-vampire-survivors/>.
+
+This was previously recorded here as _not enabled_, with the deploy workflow disabled so a
+permanent red X could not mask real failures. Both were corrected once the workflow was
+verified to gate on the full `Verify` job before deploying:
+
+```bash
+gh api --method POST repos/NightShadeHuD/canvas-vampire-survivors/pages -f build_type=workflow
+gh workflow enable "Deploy to GitHub Pages"
+```
+
+First deploy verified end to end: the workflow ran `Verify`, built `dist/`, assembled `_site`
+and deployed; every asset returned 200; and a headless browser confirmed the deployed game
+starts a run, advances its clock and reports **0 page errors**.
+
+**`__SURV_DEBUG__` is deliberately absent on the deployed site.** It is gated on
+`location.hostname` being `localhost`, `127.0.0.1` or empty, so the debug hooks that
+`scripts/boot-smoke.mjs` drives exist locally and not in production. That is intended, and it
+means boot smoke cannot verify the live site — it is verified by observation instead.
