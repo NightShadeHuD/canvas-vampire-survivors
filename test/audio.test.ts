@@ -127,14 +127,14 @@ function makeFakeCtx({ state = 'running', resumeFails = false } = {}) {
 /** Install a fake browser environment; always restore it. */
 function withBrowser({ AudioContext = undefined, webkitAudioContext = undefined }, fn) {
     const realWindow = globalThis.window;
-    globalThis.window = {};
+    (globalThis as any).window = {};
     if (AudioContext) globalThis.window.AudioContext = AudioContext;
-    if (webkitAudioContext) globalThis.window.webkitAudioContext = webkitAudioContext;
+    if (webkitAudioContext) (globalThis.window as any).webkitAudioContext = webkitAudioContext;
     try {
         return fn();
     } finally {
         if (realWindow === undefined) delete globalThis.window;
-        else globalThis.window = realWindow;
+        else (globalThis as any).window = realWindow;
     }
 }
 
@@ -149,12 +149,12 @@ function withFakeTimers(fn) {
     const intervals = [];
     const clearedIntervals = [];
 
-    globalThis.setTimeout = (cb, ms) => {
+    (globalThis as any).setTimeout = (cb, ms) => {
         timeouts.push({ cb, ms });
         return timeouts.length;
     };
-    globalThis.clearTimeout = () => {};
-    globalThis.setInterval = (cb, ms) => {
+    (globalThis as any).clearTimeout = () => {};
+    (globalThis as any).setInterval = (cb, ms) => {
         intervals.push({ cb, ms });
         return intervals.length;
     };
@@ -175,8 +175,8 @@ function withFakeTimers(fn) {
             }
         });
     } finally {
-        globalThis.setTimeout = realSetTimeout;
-        globalThis.clearTimeout = realClearTimeout;
+        (globalThis as any).setTimeout = realSetTimeout;
+        (globalThis as any).clearTimeout = realClearTimeout;
         globalThis.setInterval = realSetInterval;
         globalThis.clearInterval = realClearInterval;
     }
@@ -557,7 +557,7 @@ test('audio/startMusic: refuses to start when disabled, uninitialised or already
         engine.startMusic();
         assert.equal(t.intervals.length, 0, 'no context, no music');
 
-        engine.ctx = ctx;
+        engine.ctx = ctx as unknown as AudioContext;
         engine.startMusic();
         assert.equal(t.intervals.length, 1);
         engine.startMusic();
@@ -638,7 +638,7 @@ test('audio/stopMusic: clears the interval and is safe to call twice', () => {
 });
 
 test('audio/toggleMusic: persists the setting, applies volumes and starts or stops', () => {
-    const settings = { musicVolume: 0.5 };
+    const settings = { musicVolume: 0.5 } as Record<string, any>;
     const { engine, ctx } = readyEngine(settings);
     withFakeTimers(() => {
         engine.toggleMusic(true);

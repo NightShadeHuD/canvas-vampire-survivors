@@ -126,7 +126,7 @@ test('recordHighScore: does not regress the legacy best-of on a worse run', () =
 });
 
 test('accumulateTotals: initializes totals block if missing', () => {
-    const save = {};
+    const save: Record<string, any> = {};
     accumulateTotals(save, { kills: 10, gameTime: 5, bossKills: 1 });
     assert.equal(save.totals.kills, 10);
     assert.equal(save.totals.timePlayed, 5);
@@ -135,7 +135,7 @@ test('accumulateTotals: initializes totals block if missing', () => {
 });
 
 test('accumulateTotals: increments across runs', () => {
-    const save = {};
+    const save: Record<string, any> = {};
     accumulateTotals(save, { kills: 5, gameTime: 30, bossKills: 0 });
     accumulateTotals(save, { kills: 7, gameTime: 50, bossKills: 1 });
     assert.equal(save.totals.kills, 12);
@@ -145,7 +145,7 @@ test('accumulateTotals: increments across runs', () => {
 });
 
 test('accumulateTotals: handles undefined fields in the run argument', () => {
-    const save = {};
+    const save: Record<string, any> = {};
     accumulateTotals(save, {});
     assert.equal(save.totals.kills, 0);
     assert.equal(save.totals.timePlayed, 0);
@@ -201,7 +201,7 @@ test('recordHighScore: empty save is initialized correctly', () => {
 test('saveSave: tolerates unserializable values without throwing', () => {
     const s = loadSave();
     // Circular reference. saveSave wraps in try/catch so should just warn.
-    const circ = {};
+    const circ: Record<string, any> = {};
     circ.self = circ;
     s.evil = circ;
     assert.doesNotThrow(() => saveSave(s));

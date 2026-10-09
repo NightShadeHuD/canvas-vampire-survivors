@@ -112,14 +112,7 @@ function measure() {
     try {
         out = execFileSync(
             process.execPath,
-            [
-                '--test',
-                '--test-isolation=none',
-                '--experimental-test-coverage',
-                // Both extensions: the test tree is mid-migration.
-                'test/*.test.js',
-                'test/*.test.ts'
-            ],
+            ['--test', '--test-isolation=none', '--experimental-test-coverage', 'test/*.test.ts'],
             { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
         );
     } catch (err) {

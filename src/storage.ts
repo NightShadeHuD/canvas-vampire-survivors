@@ -31,7 +31,7 @@ const DEFAULT_SAVE = {
         runs: 0,
         bossKills: 0
     },
-    achievements: {},
+    achievements: {} as Record<string, number>,
     // v2.6 (iter-12): per-stage leaderboards. Each key is a stage id; the
     // value is a top-N array shaped like `highScores`. The legacy global
     // `highScores` field is retained as the union-of-all-stages view so old
@@ -96,7 +96,10 @@ function usableLS() {
     return _usable;
 }
 
-export function loadSave() {
+// The save object is assembled by mergeDeep, which erases DEFAULT_SAVE's
+// shape. Returning the loose record is honest about that; giving saves a real
+// interface is Phase B work.
+export function loadSave(): Record<string, any> {
     try {
         const raw = usableLS() ? window.localStorage.getItem(STORAGE_KEY) : memoryFallback;
         if (!raw) return structuredCloneCompat(DEFAULT_SAVE);

@@ -8,7 +8,7 @@ import { AchievementTracker } from '../src/achievements.ts';
 import { ACHIEVEMENTS, UNLOCKS } from '../src/data.ts';
 
 function makeSave() {
-    return { achievements: {} };
+    return { achievements: {} as Record<string, number> };
 }
 
 function makeGame({ kills = 0, gameTime = 0, level = 1 } = {}) {
@@ -131,12 +131,12 @@ test('AchievementTracker: throwing check functions do not break iteration', () =
     };
     // Temporarily splice into the catalogue. We mutate the array because
     // the module exports the live reference.
-    ACHIEVEMENTS.push(bad);
+    ACHIEVEMENTS.push(bad as any);
     try {
         assert.doesNotThrow(() => t.check(makeGame({ kills: 1 })));
         assert.ok(save.achievements.first_blood);
     } finally {
-        const idx = ACHIEVEMENTS.indexOf(bad);
+        const idx = ACHIEVEMENTS.indexOf(bad as any);
         if (idx >= 0) ACHIEVEMENTS.splice(idx, 1);
     }
 });
@@ -169,7 +169,7 @@ test('AchievementTracker: catalogue has 10+ entries and unique ids', () => {
 // --- v2.4 additions ---------------------------------------------------
 
 test('AchievementTracker: speed_demon needs BOTH void_lord + sub-5min real time', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     // Only boss defeated, but no real-time window set → no unlock.
     t.run.bossesDefeated.void_lord = true;
@@ -182,7 +182,7 @@ test('AchievementTracker: speed_demon needs BOTH void_lord + sub-5min real time'
 });
 
 test('AchievementTracker: max_all only fires at 6 maxed weapons', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.maxedWeaponCount = 5;
     t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
@@ -193,7 +193,7 @@ test('AchievementTracker: max_all only fires at 6 maxed weapons', () => {
 });
 
 test('AchievementTracker: early_evolve requires the explicit flag', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.check({ kills: 0, gameTime: 100, player: { level: 1 } });
     assert.ok(!save.achievements.early_evolve);
@@ -203,7 +203,7 @@ test('AchievementTracker: early_evolve requires the explicit flag', () => {
 });
 
 test('AchievementTracker: zen_5min demands ZERO passives during the 5 min', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.passivesPicked = 0;
     // Less than 300s → not yet.
@@ -215,7 +215,7 @@ test('AchievementTracker: zen_5min demands ZERO passives during the 5 min', () =
 });
 
 test('AchievementTracker: zen_5min fails the moment a passive was picked', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.passivesPicked = 1;
     t.check({ kills: 0, gameTime: 600, player: { level: 1 } });
@@ -223,7 +223,7 @@ test('AchievementTracker: zen_5min fails the moment a passive was picked', () =>
 });
 
 test('AchievementTracker: triple_build reads save.totals.uniqueBuilds', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.check({ kills: 0, gameTime: 0, player: { level: 1 }, save: { totals: { uniqueBuilds: 2 } } });
     assert.ok(!save.achievements.triple_build);
@@ -232,7 +232,7 @@ test('AchievementTracker: triple_build reads save.totals.uniqueBuilds', () => {
 });
 
 test('AchievementTracker: no_hit_boss requires the explicit run flag', () => {
-    const save = { achievements: {} };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
     assert.ok(!save.achievements.no_hit_boss);

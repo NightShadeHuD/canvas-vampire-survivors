@@ -13,10 +13,25 @@
 
 import { ACHIEVEMENTS, UNLOCKS } from './data.ts';
 
+/** Per-run counters used by the achievement checks. */
+export interface AchievementRun {
+    /** Boss id -> defeated. */
+    bossesDefeated: Record<string, boolean>;
+    maxedWeapon: boolean;
+    orbsCollected: number;
+    longestUnhit: number;
+    tookAnyDamage: boolean;
+    konamiCode: boolean;
+    fastBossClear: boolean;
+    /** Rolling seconds-without-a-kill window, capped at 60. */
+    pacifistTimer: number;
+    [key: string]: any;
+}
+
 export class AchievementTracker {
     declare save: any;
     /** Per-run counters, reset by `resetRun()`. */
-    declare run: ReturnType<typeof AchievementTracker._freshRun>;
+    declare run: AchievementRun;
     /** Achievements unlocked this run and awaiting a toast. */
     declare queue: any[];
     constructor(save) {
@@ -26,7 +41,7 @@ export class AchievementTracker {
     }
 
     /** Per-run state defaults. Centralised so constructor + resetRun match. */
-    static _freshRun() {
+    static _freshRun(): AchievementRun {
         return {
             bossesDefeated: {},
             maxedWeapon: false,

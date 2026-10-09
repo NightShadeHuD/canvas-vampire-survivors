@@ -39,7 +39,7 @@ export class Pool {
      * @param {(obj: any, ...args: any[]) => void} [reset]   re-inits before re-use
      * @param {{ maxSize?: number, prealloc?: number }} [opts]
      */
-    constructor(factory, reset, opts: Record<string, any> = {}) {
+    constructor(factory, reset?, opts: Record<string, any> = {}) {
         if (typeof factory !== 'function') {
             throw new TypeError('Pool: factory must be a function');
         }
