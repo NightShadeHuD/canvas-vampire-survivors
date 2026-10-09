@@ -124,7 +124,7 @@ test('iter20 achievements: hidden trio is registered with the hidden flag', () =
 });
 
 test('iter20 achievements: konami_code unlocks via run.konamiCode flag', () => {
-    const save = { achievements: {} as Record<string, boolean> };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
     assert.ok(!save.achievements.konami_code);
@@ -134,7 +134,7 @@ test('iter20 achievements: konami_code unlocks via run.konamiCode flag', () => {
 });
 
 test('iter20 achievements: speedrun_plus reads run.fastBossClear', () => {
-    const save = { achievements: {} as Record<string, boolean> };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
     assert.ok(!save.achievements.speedrun_plus);
@@ -144,7 +144,7 @@ test('iter20 achievements: speedrun_plus reads run.fastBossClear', () => {
 });
 
 test('iter20 achievements: pacifist_provoked needs 60s AND zero kills', () => {
-    const save = { achievements: {} as Record<string, boolean> };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.pacifistTimer = 60;
     // A single kill forfeits the achievement — the check guards on game.kills.
@@ -156,7 +156,7 @@ test('iter20 achievements: pacifist_provoked needs 60s AND zero kills', () => {
 });
 
 test('iter20 achievements: pacifist_provoked stays locked at 59s', () => {
-    const save = { achievements: {} as Record<string, boolean> };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.pacifistTimer = 59.99;
     t.check({ kills: 0, gameTime: 60, player: { level: 1 } });
@@ -192,7 +192,7 @@ test('iter20 weapons: RETRO_BLASTER is registered in WEAPONS catalogue', () => {
 });
 
 test('iter20 achievements: resetRun zeroes konami + pacifist + fastBossClear', () => {
-    const save = { achievements: {} as Record<string, boolean> };
+    const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.konamiCode = true;
     t.run.fastBossClear = true;

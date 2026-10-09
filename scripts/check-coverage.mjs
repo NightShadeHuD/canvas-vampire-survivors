@@ -153,15 +153,14 @@ const extOf = (f) => {
 // ---------------------------------------------------------------------------
 {
     const runner = pkg.scripts.test || '';
-    // The runner may list SEVERAL globs — the test tree is mid-migration, so
-    // it passes .js and .ts side by side. Reading only the first would report
-    // every converted file as unrun, which is exactly the false alarm that
-    // teaches people to ignore this check.
-    //
-    // Match everything AFTER `--test` and pull out each quoted token: a global
-    // match on `--test` itself finds only the one occurrence of that word.
-    const afterTest = runner.slice(runner.indexOf('--test') + '--test'.length);
-    const runnerGlobs = [...afterTest.matchAll(/'([^']+)'|"([^"]+)"/g)].map((m) => m[1] || m[2]);
+    // Take everything after `--test` and pull out each glob, quoted or bare.
+    // Both forms occur: the runner lists several quoted globs while the test
+    // tree is mid-migration, and one bare glob once it is not. Reading only the
+    // first quoted token reported every converted file as unrun.
+    const afterTest = runner.slice(runner.indexOf('--test') + '--test'.length).trim();
+    const runnerGlobs = /^['"]/.test(afterTest)
+        ? [...afterTest.matchAll(/'([^']+)'|"([^"]+)"/g)].map((m) => m[1] || m[2])
+        : afterTest.split(/\s+/).filter(Boolean);
     const runnerGlob = runnerGlobs.length ? runnerGlobs.join(' ') : null;
 
     // Node's own bare-discovery heuristics. Any file matching these outside

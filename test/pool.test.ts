@@ -5,6 +5,9 @@ import assert from 'node:assert/strict';
 import { Pool, resetFloatingText, resetParticle, resetEnemyProjectile } from '../src/pool.ts';
 
 class Box {
+    declare reset: boolean;
+    declare x: number;
+    declare y: number;
     constructor() {
         this.reset = false;
         this.x = 0;
@@ -86,30 +89,30 @@ test('Pool: release(null) is a no-op', () => {
 });
 
 test('resetFloatingText: applies all fields including defaults', () => {
-    const obj = {};
+    const obj: Record<string, any> = {};
     resetFloatingText(obj, 'hello', 10, 20, '#fff');
-    assert.equal(obj.text, 'hello');
-    assert.equal(obj.x, 10);
-    assert.equal(obj.y, 20);
-    assert.equal(obj.color, '#fff');
-    assert.equal(obj.weight, 'bold');
-    assert.equal(obj.crit, false);
-    assert.equal(obj.life, 1);
+    assert.equal((obj as any).text, 'hello');
+    assert.equal((obj as any).x, 10);
+    assert.equal((obj as any).y, 20);
+    assert.equal((obj as any).color, '#fff');
+    assert.equal((obj as any).weight, 'bold');
+    assert.equal((obj as any).crit, false);
+    assert.equal((obj as any).life, 1);
 });
 
 test('resetFloatingText: opts override defaults', () => {
-    const obj = {};
+    const obj: Record<string, any> = {};
     resetFloatingText(obj, 'boom', 0, 0, '#f00', { crit: true, life: 2, vy: -100 });
-    assert.equal(obj.crit, true);
-    assert.equal(obj.life, 2);
-    assert.equal(obj.vy, -100);
+    assert.equal((obj as any).crit, true);
+    assert.equal((obj as any).life, 2);
+    assert.equal((obj as any).vy, -100);
 });
 
 test('resetParticle: sets velocity components from angle+speed', () => {
-    const obj = {};
+    const obj: Record<string, any> = {};
     resetParticle(obj, 5, 6, '#0f0', { angle: 0, speed: 100 });
-    assert.equal(obj.x, 5);
-    assert.equal(obj.y, 6);
+    assert.equal((obj as any).x, 5);
+    assert.equal((obj as any).y, 6);
     assert.ok(Math.abs(obj.vx - 100) < 1e-6);
     assert.ok(Math.abs(obj.vy - 0) < 1e-6);
 });
@@ -117,12 +120,12 @@ test('resetParticle: sets velocity components from angle+speed', () => {
 test('resetEnemyProjectile: resets life + shouldRemove on re-use', () => {
     const obj = { life: 0, shouldRemove: true };
     resetEnemyProjectile(obj, 100, 200, 0, 250, 7);
-    assert.equal(obj.x, 100);
-    assert.equal(obj.y, 200);
-    assert.equal(obj.damage, 7);
-    assert.equal(obj.life, 3);
-    assert.equal(obj.shouldRemove, false);
-    assert.equal(obj.size, 6);
+    assert.equal((obj as any).x, 100);
+    assert.equal((obj as any).y, 200);
+    assert.equal((obj as any).damage, 7);
+    assert.equal((obj as any).life, 3);
+    assert.equal((obj as any).shouldRemove, false);
+    assert.equal((obj as any).size, 6);
 });
 
 test('Pool end-to-end: churn without creating unbounded objects', () => {
@@ -157,20 +160,20 @@ test('Pool: default maxSize is 512', () => {
 });
 
 test('resetParticle: zero speed keeps entity stationary', () => {
-    const obj = {};
+    const obj: Record<string, any> = {};
     resetParticle(obj, 10, 20, '#fff', { angle: 0, speed: 0 });
-    assert.equal(obj.vx, 0);
-    assert.equal(obj.vy, 0);
+    assert.equal((obj as any).vx, 0);
+    assert.equal((obj as any).vy, 0);
 });
 
 test('resetFloatingText: empty opts leaves weight as default "bold"', () => {
-    const obj = {};
+    const obj: Record<string, any> = {};
     resetFloatingText(obj, 'x', 0, 0, '#fff');
-    assert.equal(obj.weight, 'bold');
+    assert.equal((obj as any).weight, 'bold');
 });
 
 test('resetEnemyProjectile: negative angles map to correct velocity signs', () => {
-    const obj = {};
+    const obj: Record<string, any> = {};
     resetEnemyProjectile(obj, 0, 0, -Math.PI / 2, 100, 5);
     assert.ok(Math.abs(obj.vx) < 1e-6);
     assert.ok(Math.abs(obj.vy + 100) < 1e-6);
