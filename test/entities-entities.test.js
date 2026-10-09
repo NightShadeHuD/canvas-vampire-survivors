@@ -19,7 +19,7 @@ import {
     registerWeaponClass
 } from '../src/entities.js';
 import { CONFIG } from '../src/config.ts';
-import { ENEMIES } from '../src/data.js';
+import { ENEMIES } from '../src/data.ts';
 
 /** Run `fn` with Math.random pinned, restoring it afterwards. */
 function withRandom(value, fn) {

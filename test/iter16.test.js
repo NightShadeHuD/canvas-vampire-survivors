@@ -20,8 +20,8 @@ import {
     getWavesFor,
     listStages,
     pickWeighted
-} from '../src/stages.js';
-import { SeededRng, _resetStorageForTests, saveSave } from '../src/storage.js';
+} from '../src/stages.ts';
+import { SeededRng, _resetStorageForTests, saveSave } from '../src/storage.ts';
 import { SpatialHash } from '../src/spatial-hash.ts';
 import { dailyChallenge, dailySeed } from '../src/daily.ts';
 import {
@@ -31,7 +31,7 @@ import {
     _resetReplayForTests,
     compressFrames,
     expandFrames
-} from '../src/replay.js';
+} from '../src/replay.ts';
 import { availableLocales, getLocale, setLocale, t } from '../src/i18n.ts';
 
 // ---------------------------------------------------------------------------

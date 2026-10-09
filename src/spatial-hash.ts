@@ -125,7 +125,7 @@ export class SpatialHash {
         return best;
     }
 
-    /** Alias used throughout `weapons.js`/`entities.js`. */
+    /** Alias used throughout `weapons.ts`/`entities.js`. */
     findNearestEnemy(x, y, maxRange) {
         return this.findNearest(x, y, maxRange);
     }

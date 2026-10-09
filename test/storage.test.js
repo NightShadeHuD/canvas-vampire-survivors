@@ -1,4 +1,4 @@
-// Unit tests for src/storage.js. Runs in Node without a DOM; the module
+// Unit tests for src/storage.ts. Runs in Node without a DOM; the module
 // falls back to an in-memory store when `window` is missing.
 
 import test from 'node:test';
@@ -11,7 +11,7 @@ import {
     accumulateTotals,
     mergeDeep,
     _resetStorageForTests
-} from '../src/storage.js';
+} from '../src/storage.ts';
 import { CONFIG } from '../src/config.ts';
 
 test.beforeEach(() => {

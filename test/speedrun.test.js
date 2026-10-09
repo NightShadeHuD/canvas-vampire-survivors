@@ -10,7 +10,7 @@ import {
     saveSpeedrunScores,
     _resetSpeedrunForTests,
     _resetStorageForTests
-} from '../src/storage.js';
+} from '../src/storage.ts';
 import { CONFIG } from '../src/config.ts';
 
 test.beforeEach(() => {

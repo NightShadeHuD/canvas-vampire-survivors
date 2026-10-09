@@ -2,7 +2,7 @@
  * @module data
  * @description Pure-data catalogue: weapons, passives, enemies, bosses, wave
  * director timeline, achievement definitions and unlock map. Behaviour lives
- * elsewhere (`weapons.js`, `entities.js`, `achievements.ts`); this module is
+ * elsewhere (`weapons.ts`, `entities.js`, `achievements.ts`); this module is
  * intentionally side-effect free so it can be diffed during balancing.
  *
  * Dependencies: none.
@@ -20,7 +20,7 @@
 // ---------------------------------------------------------------------------
 // Weapons
 // Level scaling is uniform: damage +20% per level, cooldown ×0.92, range +10%.
-// Level 5 triggers a weapon's "evolution" flag (see weapons.js).
+// Level 5 triggers a weapon's "evolution" flag (see weapons.ts).
 // ---------------------------------------------------------------------------
 export const WEAPONS = {
     WHIP: {
@@ -422,7 +422,9 @@ export const ENEMIES = {
         damage: 14,
         exp: 24,
         color: '#33cc88',
-        size: 20
+        size: 20,
+        /** What this splitter produces on death, looked up by id. */
+        splitInto: 'slimeling'
     },
     SLIMELING: {
         id: 'slimeling',
@@ -467,9 +469,6 @@ export const ENEMIES = {
         size: 15
     }
 };
-
-// Splitter produces this type (lookup by id to avoid circular assignment).
-ENEMIES.SLIME.splitInto = 'slimeling';
 
 // ---------------------------------------------------------------------------
 // Bosses

@@ -5,7 +5,7 @@
  * in localStorage with a 14-day rolling window. The Wordle-style share string
  * is generated here too so the UI module stays render-only.
  *
- * Dependencies: `./stages.js` (default stage when none supplied), `./storage.js`
+ * Dependencies: `./stages.ts` (default stage when none supplied), `./storage.ts`
  * (only the in-memory fallback usable check — we read/write the daily slot
  * directly so the regular save isn't bloated).
  *

@@ -5,13 +5,13 @@
  * for the UI. Cheap to call: most checks short-circuit on the persistent
  * "already unlocked" flag.
  *
- * Dependencies: `./data.js` (ACHIEVEMENTS, UNLOCKS).
+ * Dependencies: `./data.ts` (ACHIEVEMENTS, UNLOCKS).
  *
  * Exports:
  *   - class AchievementTracker
  */
 
-import { ACHIEVEMENTS, UNLOCKS } from './data.js';
+import { ACHIEVEMENTS, UNLOCKS } from './data.ts';
 
 export class AchievementTracker {
     save: any;

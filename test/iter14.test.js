@@ -14,13 +14,13 @@ import {
     getStage,
     getStageModifiers,
     listStages
-} from '../src/stages.js';
+} from '../src/stages.ts';
 import { dailyChallenge, dailySeed } from '../src/daily.ts';
-import { GAMEPAD_BUTTON, InputManager, applyGamepadDeadzone } from '../src/input.js';
-import { _resetStorageForTests, getTouchButtonScale, loadSave, resetSave } from '../src/storage.js';
-import { BOSSES, PASSIVES, WEAPONS } from '../src/data.js';
+import { GAMEPAD_BUTTON, InputManager, applyGamepadDeadzone } from '../src/input.ts';
+import { _resetStorageForTests, getTouchButtonScale, loadSave, resetSave } from '../src/storage.ts';
+import { BOSSES, PASSIVES, WEAPONS } from '../src/data.ts';
 import { Player } from '../src/entities.js';
-import { Weapon } from '../src/weapons.js';
+import { Weapon } from '../src/weapons.ts';
 
 // ---------------------------------------------------------------------------
 // Tundra stage

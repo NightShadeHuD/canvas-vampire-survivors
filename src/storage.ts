@@ -299,6 +299,8 @@ export function _resetSpeedrunForTests() {
 // stream, which is the whole point of speedruns.
 // ---------------------------------------------------------------------------
 export class SeededRng {
+    /** Current generator state; saved and restored for deterministic runs. */
+    state: number;
     constructor(seed = 1) {
         // Force unsigned 32-bit; 0 seed is illegal (collapses to 0 forever).
         this.state = seed >>> 0 || 1;

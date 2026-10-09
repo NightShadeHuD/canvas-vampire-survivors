@@ -1,6 +1,6 @@
-// Unit tests for the Weapon class in src/weapons.js.
+// Unit tests for the Weapon class in src/weapons.ts.
 //
-// weapons.js was 43.84% covered. The Weapon class is the whole combat model:
+// weapons.ts was 43.84% covered. The Weapon class is the whole combat model:
 // damage, cooldown, range, crit and evolution scaling. It is pure arithmetic
 // over the player's passive-derived multipliers, which makes it both easy to
 // test and easy to break silently — a wrong exponent here is a balance change
@@ -14,8 +14,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Weapon } from '../src/weapons.js';
-import { WEAPONS } from '../src/data.js';
+import { Weapon } from '../src/weapons.ts';
+import { WEAPONS } from '../src/data.ts';
 
 /** A weapon definition with every field the class reads. */
 function makeDef(overrides = {}) {

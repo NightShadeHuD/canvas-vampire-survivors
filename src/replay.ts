@@ -28,7 +28,7 @@
  * holding the same direction) collapse to a single `[x, y, count]` triplet.
  * `expandFrames` inflates back to a flat per-frame array on load.
  *
- * Dependencies: .ts, ./storage.js (loadSpeedrunScores not used; we
+ * Dependencies: .ts, ./storage.ts (loadSpeedrunScores not used; we
  * own a separate localStorage slot to keep the replay payload outside the
  * normal save blob).
  */
@@ -43,7 +43,7 @@ export const REPLAY_VERSION = 1;
 // fills localStorage.
 export const REPLAY_MAX_FRAMES = 60 * 60 * 30;
 
-// -- minimal localStorage adapter (mirrors storage.js, kept local so replay --
+// -- minimal localStorage adapter (mirrors storage.ts, kept local so replay --
 // -- code doesn't pull in unrelated save defaults) -------------------------
 let _memoryFallback = null;
 let _usable = null;
@@ -133,6 +133,17 @@ export function quantize(v) {
  * frames have been pushed (cheaper than `frames.length` after compression).
  */
 export class ReplayRecorder {
+    frames: any[] = [];
+    seed: number;
+    stage: string;
+    difficulty: string;
+    /** Fixed timestep between recorded frames. */
+    dt: number;
+    finalTime: number;
+    finalKills: number;
+    finalLevel: number;
+    /** True once the frame cap was hit and oldest frames were dropped. */
+    _truncated: boolean;
     constructor({ seed, stage, difficulty, dt }) {
         this.seed = seed >>> 0;
         this.stage = stage || 'forest';
@@ -240,6 +251,12 @@ export function clearReplay() {
  * fall back to the menu.
  */
 export class ReplayPlayer {
+    blob: any;
+    frames: any[];
+    cursor: number;
+    /** Playback rate multiplier. */
+    speed: number;
+    done: boolean;
     constructor(blob, { speed = 1 } = {}) {
         if (!blob) throw new Error('[replay] cannot construct player without blob');
         this.blob = blob;

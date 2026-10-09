@@ -9,10 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AchievementTracker } from '../src/achievements.ts';
-import { ACHIEVEMENTS, UNLOCKS, WEAPONS } from '../src/data.js';
+import { ACHIEVEMENTS, UNLOCKS, WEAPONS } from '../src/data.ts';
 import { EffectLayer, EmojiRain } from '../src/effects.ts';
 import { KONAMI_SEQUENCE, KonamiDetector, normaliseKonamiKey } from '../src/konami.ts';
-import { getStageModifiers } from '../src/stages.js';
+import { getStageModifiers } from '../src/stages.ts';
 
 // ---------------------------------------------------------------------------
 // Konami detector — sequence matching, reset behaviour, idempotent unlock.

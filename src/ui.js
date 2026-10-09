@@ -5,17 +5,17 @@
  * UI state mutations always funnel through these helpers (easier to audit,
  * easier to swap renderers later).
  *
- * Dependencies: `./data.js`, .ts`, `./i18n.ts`.
+ * Dependencies: `./data.ts`, .ts`, `./i18n.ts`.
  *
  * Exports:
  *   - class UI               cached element references + render helpers
  *   - totalAchievements()    convenience for tests / badges
  */
 
-import { ACHIEVEMENTS, PASSIVES, WEAPONS } from './data.js';
+import { ACHIEVEMENTS, PASSIVES, WEAPONS } from './data.ts';
 import { CONFIG } from './config.ts';
 import { t, setLocale, availableLocales } from './i18n.ts';
-import { getStage, listStages } from './stages.js';
+import { getStage, listStages } from './stages.ts';
 import { buildShareText, dailyStreakSummary, loadDailyHistory } from './daily.ts';
 import {
     DEFAULT_KEYMAP,

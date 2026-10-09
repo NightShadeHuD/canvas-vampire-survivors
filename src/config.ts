@@ -51,7 +51,7 @@ export const CONFIG = {
     LEADERBOARD_PAGE_SIZE: 20, // how many rows the scroll UI renders at a time
     EARLY_EVOLVE_THRESHOLD: 420, // seconds — used by Early Evolve achievement
     NOVA_SLOW_DEFAULT: 0.5, // fallback slow % when def omits slowPct
-    BOMBER_DEFAULT_RADIUS: 120, // used if data.js omits blastRadius
+    BOMBER_DEFAULT_RADIUS: 120, // used if data.ts omits blastRadius
     // --- v2.5: polish + reflection -------------------------------------
     SEEN_BUILDS_CAP: 1000, // hard upper bound on unique builds tracked in totals
     VERSION: '2.8.0'
