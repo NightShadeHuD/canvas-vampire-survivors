@@ -42,6 +42,10 @@ const STEPS = [
         script: 'check:register',
         proves: 'every declared shortcut is bounded, tracked and correctly cited'
     },
+    {
+        script: 'check:docs',
+        proves: 'rule documents have well-formed tables and resolvable citations'
+    },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
     {
