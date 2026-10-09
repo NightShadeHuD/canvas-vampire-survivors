@@ -60,9 +60,9 @@
     },
     "homepage": "https://github.com/NightShadeHuD/canvas-vampire-survivors#readme",
     "devDependencies": {
-        "@axe-core/playwright": "^4.11.2",
-        "eslint": "^9.0.0",
-        "playwright": "^1.59.1",
-        "prettier": "^3.2.0"
+        "@axe-core/playwright": "^4.13.0",
+        "eslint": "^10.12.0",
+        "playwright": "^1.63.0",
+        "prettier": "^3.9.9"
     }
 }
