@@ -49,6 +49,7 @@ import { SpatialHash } from './spatial-hash.ts';
 import { Pool, resetFloatingText, resetParticle } from './pool.ts';
 import { EffectLayer } from './effects.ts';
 import { AchievementTracker } from './achievements.ts';
+import type { AchievementRun } from './achievements.ts';
 import {
     SeededRng,
     accumulateTotals,
@@ -125,29 +126,31 @@ export class Game {
      * application and giving it real types is the next piece of work, not
      * something to guess at while the port is still landing.
      */
-    declare _bossWarnedAt: any;
-    declare _bossesSpawned: any;
-    declare _coldTickAccum: any;
-    declare _hiddenPaused: any;
-    declare _konami: any;
-    declare _lastAnnouncedWave: any;
-    declare _lastMoveVec: any;
-    declare _nextSplitIdx: any;
-    declare _pauseStartedAt: any;
-    declare _pendingLevelUps: any;
-    declare _runStartWallClock: any;
-    declare _spawnAccumulator: any;
-    declare _speedrunEntry: any;
-    declare _speedrunRank: any;
-    declare _tutorialBanner: any;
-    declare _tutorialKeyHandler: any;
+    declare _bossWarnedAt: Set<any>;
+    declare _bossesSpawned: Set<any>;
+    declare _coldTickAccum: number;
+    declare _hiddenPaused: boolean;
+    declare _konami: KonamiDetector;
+    /** Label of the last wave announced, so it is not announced twice. */
+    declare _lastAnnouncedWave: string | null;
+    declare _lastMoveVec: { x: number; y: number };
+    declare _nextSplitIdx: number;
+    declare _pauseStartedAt: number;
+    declare _pendingLevelUps: number;
+    declare _runStartWallClock: number;
+    declare _spawnAccumulator: number;
+    declare _speedrunEntry: Record<string, any> | null;
+    declare _speedrunRank: number | null;
+    /** The tutorial banner element, while one is on screen. */
+    declare _tutorialBanner: HTMLElement | null;
+    declare _tutorialKeyHandler: ((e: KeyboardEvent) => void) | null;
     declare achievements: AchievementTracker;
     declare audio: AudioEngine;
     declare camera: ShakeCamera;
     declare canvas: HTMLCanvasElement;
     declare ctx: CanvasRenderingContext2D;
-    declare currentWave: any;
-    declare dailyChallenge: any;
+    declare currentWave: Record<string, any>;
+    declare dailyChallenge: ReturnType<typeof dailyChallenge> | null;
     declare dailyMode: boolean;
     declare effects: EffectLayer;
     declare enemies: Enemy[];
@@ -159,29 +162,30 @@ export class Game {
     declare gameTime: number;
     declare haptics: HapticEngine;
     declare input: InputManager;
-    declare keymap: any;
+    declare keymap: Record<string, string[]>;
     declare kills: number;
     declare lastTime: number;
     declare mines: Mine[];
     declare particles: Particle[];
     declare player: Player;
-    declare pools: any;
+    /** Reusable object pools, keyed by entity name. */
+    declare pools: Record<string, Pool>;
     declare projectiles: Projectile[];
     declare raf: number | null;
     declare replayActive: boolean;
-    declare replayPlayer: any;
-    declare replayRecorder: any;
-    declare run: any;
+    declare replayPlayer: ReplayPlayer | null;
+    declare replayRecorder: ReplayRecorder | null;
+    declare run: AchievementRun;
     declare save: Record<string, any>;
     declare spatial: SpatialHash;
     declare speedrunMode: boolean;
-    declare speedrunRng: any;
-    declare speedrunSplits: any;
-    declare speedrunStart: any;
-    declare stageBosses: any;
+    declare speedrunRng: SeededRng | null;
+    declare speedrunSplits: any[];
+    declare speedrunStart: number;
+    declare stageBosses: ReturnType<typeof getBossesFor>;
     declare stageId: string;
-    declare stageMods: any;
-    declare stageWaves: any;
+    declare stageMods: ReturnType<typeof getStageModifiers>;
+    declare stageWaves: ReturnType<typeof getWavesFor>;
     declare state: string;
     declare tutorial: TutorialState;
     declare ui: UI;
