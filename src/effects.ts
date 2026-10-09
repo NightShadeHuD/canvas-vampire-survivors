@@ -167,7 +167,7 @@ export class EmojiRain {
             });
         }
     }
-    update(dt, height) {
+    update(dt, height?) {
         const h = Number.isFinite(height) && height > 0 ? height : 800;
         for (let i = this.drops.length - 1; i >= 0; i--) {
             const d = this.drops[i];
@@ -265,7 +265,7 @@ export class EffectLayer {
         this.delays.push(entry);
         return entry;
     }
-    update(dt, viewport) {
+    update(dt, viewport?) {
         this.flash.update(dt);
         this.pulses.update(dt);
         this.hits.update(dt);

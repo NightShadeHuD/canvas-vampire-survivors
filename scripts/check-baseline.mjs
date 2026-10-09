@@ -31,12 +31,13 @@ const baselinePath = path.join(repoRoot, 'quality-baseline.json');
 const update = process.argv.includes('--update');
 
 const testFiles = readdirSync(path.join(repoRoot, 'test'))
-    .filter((f) => f.endsWith('.test.js'))
+    // Mid-migration: some test files are still JavaScript.
+    .filter((f) => f.endsWith('.test.js') || f.endsWith('.test.ts'))
     .sort()
     .map((f) => path.join('test', f));
 
 if (testFiles.length === 0) {
-    console.error('check-baseline: no test/*.test.js files found');
+    console.error('check-baseline: no test/*.test.{js,ts} files found');
     process.exit(1);
 }
 

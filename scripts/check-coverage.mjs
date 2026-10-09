@@ -153,8 +153,16 @@ const extOf = (f) => {
 // ---------------------------------------------------------------------------
 {
     const runner = pkg.scripts.test || '';
-    const glob = /--test\s+(\S+)/.exec(runner);
-    const runnerGlob = glob ? glob[1] : null;
+    // The runner may list SEVERAL globs — the test tree is mid-migration, so
+    // it passes .js and .ts side by side. Reading only the first would report
+    // every converted file as unrun, which is exactly the false alarm that
+    // teaches people to ignore this check.
+    //
+    // Match everything AFTER `--test` and pull out each quoted token: a global
+    // match on `--test` itself finds only the one occurrence of that word.
+    const afterTest = runner.slice(runner.indexOf('--test') + '--test'.length);
+    const runnerGlobs = [...afterTest.matchAll(/'([^']+)'|"([^"]+)"/g)].map((m) => m[1] || m[2]);
+    const runnerGlob = runnerGlobs.length ? runnerGlobs.join(' ') : null;
 
     // Node's own bare-discovery heuristics. Any file matching these outside
     // test/ will be executed as a test by a bare `node --test`.
@@ -184,7 +192,7 @@ const extOf = (f) => {
     if (!runnerGlob) {
         failures.push('tests: package.json `test` script has no `--test <glob>` to inspect');
     } else {
-        const notRun = testFiles.filter((f) => !path.matchesGlob(f, runnerGlob));
+        const notRun = testFiles.filter((f) => !runnerGlobs.some((g) => path.matchesGlob(f, g)));
         if (notRun.length > 0) {
             failures.push(
                 `tests: ${notRun.length} test file(s) are not matched by "${runnerGlob}", so\n` +

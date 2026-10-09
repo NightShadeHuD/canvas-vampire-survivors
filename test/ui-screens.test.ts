@@ -13,7 +13,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { installBrowserStub } from './helpers/browser-stub.js';
+import { installBrowserStub } from './helpers/browser-stub.ts';
 import { UI } from '../src/ui.ts';
 import { CONFIG } from '../src/config.ts';
 
@@ -35,14 +35,14 @@ function withFakeTimers(fn) {
     const pending = new Map(); // id -> { cb, ms }
     const cleared = [];
 
-    globalThis.setTimeout = (cb, ms) => {
+    (globalThis as any).setTimeout = (cb, ms) => {
         const id = nextId++;
         pending.set(id, { cb, ms });
         return id;
     };
     // Cancellation must actually cancel, or a test can "prove" a cleared timer
     // fires and the stub lies about the behaviour it is meant to model.
-    globalThis.clearTimeout = (id) => {
+    (globalThis as any).clearTimeout = (id) => {
         cleared.push(id);
         pending.delete(id);
     };
@@ -60,8 +60,8 @@ function withFakeTimers(fn) {
             }
         });
     } finally {
-        globalThis.setTimeout = realSet;
-        globalThis.clearTimeout = realClear;
+        (globalThis as any).setTimeout = realSet;
+        (globalThis as any).clearTimeout = realClear;
     }
 }
 
