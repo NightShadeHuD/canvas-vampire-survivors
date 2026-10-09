@@ -243,6 +243,26 @@ investigates it.
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
 
+### A gate that checks nothing is not a pass
+
+Two states look identical from the outside and must never be conflated:
+
+- **Nothing to check** — the scan set is empty because a glob is wrong or the
+  tree moved. That is a **failure**. Measured: with its glob pointed at nothing,
+  `check:hygiene` printed `clean — 0 tracked files checked` and `check:docs`
+  printed `0 document(s) ... resolve`, **both exit 0**. Neither had looked at
+  anything, and both reported success in exactly the shape a real pass takes.
+  Every scanning gate now refuses an empty set.
+- **Nothing to check yet** — a project with no shortcut register has genuinely
+  declared no shortcuts. That is a **notice**, printed with a `NOTICE:` prefix
+  and counted by `verify`, so a run ends with either
+  `all 15 gates passed, and every one checked something` or a list of the gates
+  that checked nothing and the rule each does not yet apply to.
+
+Adopted from the agent-scaffold method, whose closing line is the model:
+_"ALL 12 GATES PASSED (3 skipped as unconfigured — each is a rule this project
+does not yet check)."_
+
 ### Suite mandates
 
 `check:suite` reads the suite's own machine-readable report — Node's

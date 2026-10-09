@@ -23,6 +23,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { checkDocuments } from './lib/rule-docs.mjs';
+import { refuseEmptyScan } from './lib/gate-input.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -33,6 +34,16 @@ const documents = execFileSync('git', ['ls-files', '*.md'], { cwd: repoRoot, enc
     .map((line) => line.trim())
     .filter((line) => line && !line.includes('node_modules'))
     .sort();
+
+const emptyScan = refuseEmptyScan(
+    documents.length,
+    'rule documents',
+    'The glob is wrong, the tree moved, or nothing is tracked.'
+);
+if (emptyScan) {
+    console.error(`check-docs: FAILED — ${emptyScan}`);
+    process.exit(1);
+}
 
 const loaded = documents.map((rel) => ({
     path: rel,

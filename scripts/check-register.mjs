@@ -26,6 +26,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { checkRegister } from './lib/shortcut-register.mjs';
+import { notice } from './lib/gate-input.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -43,10 +44,13 @@ const CITING = [
 
 const registerPath = path.join(repoRoot, REGISTER);
 if (!existsSync(registerPath)) {
+    // A project with no register has genuinely declared no shortcuts. That is a
+    // legitimate state rather than a failure — but it is REPORTED, and counted by
+    // verify.mjs, so a run says how many gates checked nothing.
     console.log(
-        `check-register: no register at ${REGISTER}, so nothing is declared and ` +
-            'nothing is checked. This is a notice: add one when the first ' +
-            'shortcut is taken.'
+        `check-register: ${notice(
+            `no register at ${REGISTER}, so nothing is declared and nothing is checked`
+        )}`
     );
     process.exit(0);
 }

@@ -14,6 +14,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { noticesIn } from './lib/gate-input.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -72,6 +73,8 @@ const gaps = declaredGaps();
 console.log(`verify: running ${STEPS.length} gates\n`);
 
 const failures = [];
+/** Gates that passed while reporting they had nothing to check. */
+const notCheckingAnything = [];
 
 for (const [i, step] of STEPS.entries()) {
     const label = step.script.padEnd(20);
@@ -86,7 +89,21 @@ for (const [i, step] of STEPS.entries()) {
     const ms = Date.now() - started;
     const ok = result.status === 0;
 
-    console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label} ${String(ms).padStart(6)} ms   ${step.proves}`);
+    // A gate that legitimately had nothing to check says so with a NOTICE line.
+    // It PASSES — "no shortcuts are declared yet" is a real state — but the run
+    // reports how many did, so "passed" is never mistaken for "verified
+    // everything". The scaffold's closing line is the model:
+    //   "ALL 12 GATES PASSED (3 skipped as unconfigured — each is a rule this
+    //    project does not yet check)"
+    const notices = ok ? noticesIn(`${result.stdout || ''}${result.stderr || ''}`) : [];
+    if (notices.length) {
+        for (const text of notices) notCheckingAnything.push({ step: step.script, text });
+    }
+
+    console.log(
+        `  ${ok ? 'ok  ' : 'FAIL'} ${label} ${String(ms).padStart(6)} ms   ${step.proves}` +
+            (notices.length ? '  (checked nothing — see below)' : '')
+    );
 
     if (!ok) {
         const output = `${result.stdout || ''}${result.stderr || ''}`;
@@ -109,7 +126,18 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
-console.log('\nverify: all gates passed.');
+if (notCheckingAnything.length > 0) {
+    console.log(
+        `\nverify: all ${STEPS.length} gates passed, ${notCheckingAnything.length} of which ` +
+            'checked nothing:'
+    );
+    for (const { step, text } of notCheckingAnything) {
+        console.log(`  - ${step}: ${text}`);
+    }
+    console.log('  Each is a rule this project does not yet have anything to apply to.');
+} else {
+    console.log(`\nverify: all ${STEPS.length} gates passed, and every one checked something.`);
+}
 
 if (gaps.length > 0) {
     console.log(`\nDeclared gaps still open (${gaps.length}) — tracked, not forgotten:`);
