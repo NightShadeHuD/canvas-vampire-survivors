@@ -13,7 +13,7 @@
  * Usage (normally via `npm run test:clock`, which drives this):
  *   CLOCK_SHIFT_MS=157680000000 \
  *     NODE_OPTIONS="--import file://$PWD/scripts/clock-shift.mjs" \
- *     node --test test/*.test.js
+ *     node --test 'test/*.test.js' 'test/*.test.ts'
  *
  * Why this exists: two tests in this repo stored a hardcoded '2026-04-25' and
  * were pruned by a real-clock 14-day window, so they passed until 2026-05-09

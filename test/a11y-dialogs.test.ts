@@ -127,7 +127,7 @@ function makeStubDoc() {
 
 /** Build a UI against a fresh stub document and hand back both. */
 function withStubUi(fn) {
-    globalThis.document = makeStubDoc();
+    (globalThis as any).document = makeStubDoc();
     try {
         const ui = new UI({});
         return fn(ui);

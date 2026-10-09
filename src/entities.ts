@@ -200,7 +200,7 @@ export class Player {
         return levelUps;
     }
 
-    takeDamage(damage, game) {
+    takeDamage(damage, game?) {
         if (this.invincible || this.dead) return;
         // iter-14: dodge fires *before* armor / damageReduction so a dodged
         // hit also doesn't burn an invincibility window — feels like the hit

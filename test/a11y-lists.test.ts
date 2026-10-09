@@ -140,7 +140,7 @@ function makeStubDoc() {
 }
 
 function withStubUi(fn) {
-    globalThis.document = makeStubDoc();
+    (globalThis as any).document = makeStubDoc();
     try {
         return fn(new UI({}));
     } finally {
