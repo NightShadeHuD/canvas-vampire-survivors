@@ -38,6 +38,7 @@ import {
     renderParticle,
     renderProjectile
 } from './entity-render.ts';
+import { drawGrid } from './game-render.ts';
 import { Weapon } from './weapons.ts';
 import { AudioEngine } from './audio.ts';
 import { InputManager } from './input.ts';
@@ -1761,7 +1762,7 @@ export class Game {
         ctx.save();
         ctx.translate(-this.camera.worldX + this.camera.x, -this.camera.worldY + this.camera.y);
 
-        this._drawGrid();
+        drawGrid(this.ctx, this);
 
         for (const o of this.expOrbs) renderExpOrb(ctx, o);
         for (const m of this.mines) renderMine(ctx, m);
@@ -1820,31 +1821,6 @@ export class Game {
      * the first grid line >= camera.worldX to the last one <= worldX+vw,
      * which auto-clips to the visible region without any per-frame guess.
      */
-    _drawGrid() {
-        const ctx = this.ctx;
-        const alpha = (getBackgroundFor(this.stageId).gridAlpha ?? 0.04).toFixed(3);
-        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-        ctx.lineWidth = 1;
-        const size = CONFIG.GRID_SIZE;
-        const cx = this.camera.worldX;
-        const cy = this.camera.worldY;
-        const vw = CONFIG.CANVAS_WIDTH;
-        const vh = CONFIG.CANVAS_HEIGHT;
-        const startX = Math.floor(cx / size) * size;
-        const startY = Math.floor(cy / size) * size;
-        for (let x = startX; x <= cx + vw; x += size) {
-            ctx.beginPath();
-            ctx.moveTo(x, cy);
-            ctx.lineTo(x, cy + vh);
-            ctx.stroke();
-        }
-        for (let y = startY; y <= cy + vh; y += size) {
-            ctx.beginPath();
-            ctx.moveTo(cx, y);
-            ctx.lineTo(cx + vw, y);
-            ctx.stroke();
-        }
-    }
 
     openAchievements() {
         this.ui.showAchievements(this.save.achievements || {}, () => {
