@@ -45,7 +45,9 @@
         <link rel="stylesheet" href="./styles.css" />
     </head>
     <body>
-        <div id="gameContainer" aria-label="Survivor game">
+        <!-- role="main" so every piece of page content sits inside a landmark;
+             axe's `region` rule flags content that is outside all landmarks. -->
+        <div id="gameContainer" role="main" aria-label="Survivor game">
             <canvas
                 id="gameCanvas"
                 width="1200"

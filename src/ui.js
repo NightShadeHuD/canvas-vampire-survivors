@@ -75,15 +75,36 @@ export class UI {
         // these are the dynamically-populated dialogs that share the same
         // `.overlay` class and need the same announcement contract for
         // assistive tech to pick them up consistently.
-        for (const id of [
-            'achievementsScreen',
-            'leaderboardScreen',
-            'stagePickerScreen',
-            'streakScreen',
-            'helpScreen',
-            'howToPlayScreen',
-            'settingsMenu'
-        ]) {
+        this._applyDialogAria();
+    }
+
+    /**
+     * Harden the dynamically-populated overlay hosts for assistive tech, and
+     * give each one an accessible name.
+     *
+     * The static overlays in index.html (`startScreen`, `levelUpMenu`,
+     * `pauseMenu`, `gameOver`) declare role + aria-modal + aria-labelledby in
+     * markup. These are the JS-populated dialogs that share the same `.overlay`
+     * class, so they need the same contract or assistive tech announces them
+     * inconsistently.
+     *
+     * `role="dialog"` without an accessible name is announced as bare
+     * "dialog", leaving a screen-reader user with no idea which panel just
+     * opened. The name is taken from the same i18n key the visible `<h2>` uses,
+     * so the announcement always matches the heading on screen. Re-applied on
+     * locale change (see `onLocaleChanged`) so it never goes stale.
+     */
+    _applyDialogAria() {
+        const labelKeys = {
+            achievementsScreen: 'achievements',
+            leaderboardScreen: 'leaderboard',
+            stagePickerScreen: 'chooseStage',
+            streakScreen: 'dailyStreak',
+            helpScreen: 'helpTitle',
+            howToPlayScreen: 'howToTitle',
+            settingsMenu: 'settings'
+        };
+        for (const [id, labelKey] of Object.entries(labelKeys)) {
             const el = this.els[id];
             if (!el || typeof el.setAttribute !== 'function') continue;
             // Some test stubs don't implement hasAttribute — fall back to
@@ -91,6 +112,10 @@ export class UI {
             const hasAttr = typeof el.hasAttribute === 'function';
             if (!hasAttr || !el.hasAttribute('role')) el.setAttribute('role', 'dialog');
             if (!hasAttr || !el.hasAttribute('aria-modal')) el.setAttribute('aria-modal', 'true');
+            // Set unconditionally, not only when absent: these hosts carry no
+            // markup-supplied label, and overwriting is what keeps the name in
+            // sync when the locale changes.
+            el.setAttribute('aria-label', t(labelKey));
         }
     }
 
@@ -673,6 +698,9 @@ export class UI {
      * regardless of whether a particular overlay is visible at the time.
      */
     onLocaleChanged() {
+        // Re-label the dynamic dialogs so their accessible names follow the
+        // language, exactly like the visible headings below.
+        this._applyDialogAria();
         if (this._activeBannerKey && this.els.bossBanner) {
             this.els.bossBanner.textContent = t(this._activeBannerKey);
         }
