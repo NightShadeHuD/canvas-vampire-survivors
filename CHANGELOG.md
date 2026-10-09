@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed two tooling scripts so they no longer collide with Node's built-in
+  test discovery. `node --test` with no arguments treats any `test-*` file as a
+  test, so `scripts/test-clock.mjs` and `scripts/test-live-deploy.js` were being
+  executed _as tests_ — the former passing, the latter failing against a live
+  URL. They are now `scripts/check-clocks.mjs` and `scripts/smoke-live-deploy.js`.
+  The npm script names (`test:clock`, `smoke:live`) are unchanged.
+- References in earlier entries below and in `docs/JOURNEY.md` /
+  `docs/VERIFICATION_iter21.md` are left as written: those are point-in-time
+  records of what was verified then, and rewriting them would misstate history.
+
 ## [2.8.0] - 2026-04-25
 
 Onboarding, replays, deep bug-bash, and a final round of polish. New

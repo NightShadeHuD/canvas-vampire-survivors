@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @file scripts/test-clock.mjs
+ * @file scripts/check-clocks.mjs
  * @description Runs the unit suite repeatedly with the ambient clock offset,
  * to catch date-dependent "time bomb" tests before they detonate in CI months
  * from now. See scripts/clock-shift.mjs for the mechanism.
@@ -37,7 +37,7 @@ const testFiles = readdirSync(path.join(repoRoot, 'test'))
     .map((f) => path.join('test', f));
 
 if (testFiles.length === 0) {
-    console.error('test-clock: no test/*.test.js files found');
+    console.error('check-clocks: no test/*.test.js files found');
     process.exit(1);
 }
 
@@ -99,10 +99,10 @@ for (const days of OFFSETS) {
 
 console.log('');
 if (failures.length > 0) {
-    console.error(`test-clock: FAILED at ${failures.length}/${OFFSETS.length} clock offsets.`);
+    console.error(`check-clocks: FAILED at ${failures.length}/${OFFSETS.length} clock offsets.`);
     console.error('A test is reading the wall clock instead of pinning its own time.');
     console.error('Fix the test to inject a fixed `now` — do not delete this check.');
     process.exit(1);
 }
 
-console.log(`test-clock: all ${OFFSETS.length} clock offsets passed. Suite is date-hermetic.`);
+console.log(`check-clocks: all ${OFFSETS.length} clock offsets passed. Suite is date-hermetic.`);
