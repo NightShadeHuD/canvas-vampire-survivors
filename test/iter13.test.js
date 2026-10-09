@@ -13,6 +13,15 @@ import {
 } from '../src/daily.js';
 import { _resetStorageForTests, loadSave, resetSave } from '../src/storage.js';
 
+// A fixed instant used as "now" wherever a test both writes and reads daily
+// history. `saveDailyResult` prunes anything older than 14 days relative to
+// `now`, so a test that stores a hardcoded date without pinning the clock is a
+// time bomb: it passes until the literal ages out of the window, then deletes
+// its own entry mid-write. (This is not hypothetical — that is exactly how the
+// '2026-04-25' literal below began failing on 2026-05-10.) Always pass this
+// explicitly; never let these tests read the wall clock.
+const PINNED_NOW = new Date(Date.UTC(2026, 3, 25, 12, 0));
+
 // ---------------------------------------------------------------------------
 // daily.dailyStreakSummary
 // ---------------------------------------------------------------------------
@@ -109,18 +118,23 @@ test('streak: collapses multiple stages on the same date to one played day', () 
 
 test('streak: saveDailyResult round-trips into the streak summary', () => {
     _resetDailyForTests();
-    saveDailyResult({
-        date: '2026-04-25',
-        stage: 'forest',
-        timeSurvived: 480,
-        kills: 320,
-        level: 14,
-        weapons: ['whip'],
-        won: true,
-        noHit: false,
-        seed: 1
-    });
-    const s = dailyStreakSummary(undefined, new Date(Date.UTC(2026, 3, 25)));
+    // Pin the clock on the write AND the read so the prune window and the
+    // summary agree on what "today" is, whatever the wall clock says.
+    saveDailyResult(
+        {
+            date: todayKey(PINNED_NOW),
+            stage: 'forest',
+            timeSurvived: 480,
+            kills: 320,
+            level: 14,
+            weapons: ['whip'],
+            won: true,
+            noHit: false,
+            seed: 1
+        },
+        PINNED_NOW
+    );
+    const s = dailyStreakSummary(undefined, PINNED_NOW);
     // Today is played, won.
     assert.equal(s.days[0].played, true);
     assert.equal(s.days[0].won, true);

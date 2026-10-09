@@ -15,7 +15,7 @@
  *   - dailySeed(dateStr)           → uint32 seed for SeededRng
  *   - dailyChallenge(dateStr)      → { date, seed, stage, bossOffsets, ... }
  *   - loadDailyHistory()           → { 'YYYY-MM-DD-stage': entry, ... }
- *   - saveDailyResult(entry)       → void (also prunes >14d)
+ *   - saveDailyResult(entry, now)  → void (also prunes >14d)
  *   - buildShareText(entry, all)   → string, ASCII-art Wordle-style
  */
 
@@ -126,20 +126,29 @@ function writeDailyHistory(history) {
 /**
  * Persist one daily run result and prune entries older than 14 calendar days.
  * Only one entry per (date, stage) is kept — the most recent overwrite wins.
+ *
+ * `now` is injectable so a caller can pin the clock, mirroring `todayKey` and
+ * `dailyStreakSummary`. This matters for correctness of the *prune*, not just
+ * for tests: without a pinnable clock a test that stores a fixed date is
+ * silently racing the rolling window, and deletes its own entry in the same
+ * call that writes it once that date ages out. That failure surfaces months
+ * later on a wall clock the test never controlled.
+ *
  * @param {{date:string, stage:string, timeSurvived:number, kills:number,
  *          level:number, weapons:string[], won:boolean, noHit:boolean,
  *          seed:number}} entry
+ * @param {Date} [now] current time; defaults to the wall clock
  */
-export function saveDailyResult(entry) {
+export function saveDailyResult(entry, now = new Date()) {
     if (!entry || !entry.date || !entry.stage) return;
     const history = loadDailyHistory();
     const key = `${entry.date}-${entry.stage}`;
-    history[key] = { ...entry, savedAt: Date.now() };
+    history[key] = { ...entry, savedAt: now.getTime() };
 
     // Prune anything older than DAILY_KEEP_DAYS by comparing the stored date
     // string. We deliberately don't trust `savedAt` for the cutoff because a
     // user could have a clock skew across runs.
-    const cutoff = todayKey(new Date(Date.now() - DAILY_KEEP_DAYS * 86400 * 1000));
+    const cutoff = todayKey(new Date(now.getTime() - DAILY_KEEP_DAYS * 86400 * 1000));
     for (const k of Object.keys(history)) {
         const d = k.slice(0, 10); // 'YYYY-MM-DD'
         if (d < cutoff) delete history[k];

@@ -31,6 +31,36 @@ import {
     resetSave
 } from '../src/storage.js';
 
+// A fixed instant used as "now" wherever a test both writes and reads daily
+// history. `saveDailyResult` prunes anything older than 14 days relative to
+// `now`, so storing a hardcoded date without pinning the clock is a time bomb:
+// it passes until the literal ages out of the window, then deletes its own
+// entry mid-write. Always pass this explicitly; never read the wall clock.
+// Noon, not midnight, so subtracting whole days can never straddle a date
+// boundary and make the assertions below depend on the time of day.
+const PINNED_NOW = new Date(Date.UTC(2026, 3, 25, 12, 0));
+
+/** A minimal valid daily entry; override any field per test. */
+function dailyEntry(date, overrides = {}) {
+    return {
+        date,
+        stage: 'forest',
+        timeSurvived: 123,
+        kills: 45,
+        level: 7,
+        weapons: ['whip'],
+        won: false,
+        noHit: false,
+        seed: 1,
+        ...overrides
+    };
+}
+
+/** 'YYYY-MM-DD' for `days` before PINNED_NOW (UTC). */
+function daysBeforePinned(days) {
+    return todayKey(new Date(PINNED_NOW.getTime() - days * 86400 * 1000));
+}
+
 // ---------------------------------------------------------------------------
 // stages.js
 // ---------------------------------------------------------------------------
@@ -124,32 +154,78 @@ test('daily: dailyChallenge is deterministic per date and pins a stage', () => {
 
 test('daily: saveDailyResult persists and prunes old days (>14d)', () => {
     _resetDailyForTests();
-    saveDailyResult({
-        date: '2026-04-25',
-        stage: 'forest',
-        timeSurvived: 600,
-        kills: 500,
-        level: 18,
-        weapons: ['whip', 'orbit'],
-        won: true,
-        noHit: false,
-        seed: 12345
-    });
+    // Derived from the pinned clock so the write and the prune window agree.
+    const recent = daysBeforePinned(0);
+    saveDailyResult(dailyEntry(recent, { timeSurvived: 600, won: true }), PINNED_NOW);
+
+    // Comfortably outside the 14-day window relative to PINNED_NOW.
     const ancient = '2024-01-01';
-    saveDailyResult({
-        date: ancient,
-        stage: 'forest',
-        timeSurvived: 50,
-        kills: 5,
-        level: 2,
-        weapons: ['whip'],
-        won: false,
-        noHit: false,
-        seed: 1
-    });
+    saveDailyResult(dailyEntry(ancient), PINNED_NOW);
+
     const h = loadDailyHistory();
-    assert.ok(h['2026-04-25-forest'], 'today entry should be present');
+    assert.ok(h[`${recent}-forest`], 'entry inside the 14-day window should be present');
     assert.equal(h[`${ancient}-forest`], undefined, 'entries older than 14 days should be pruned');
+});
+
+// --- prune-window boundary -------------------------------------------------
+// The prune is `storedDate < cutoff`, so the cutoff day itself must survive.
+// These two pins are what stop an off-by-one from silently eating a real
+// player's most recent result.
+test('daily: saveDailyResult keeps an entry exactly on the 14-day boundary', () => {
+    _resetDailyForTests();
+    const boundary = daysBeforePinned(14);
+    saveDailyResult(dailyEntry(boundary), PINNED_NOW);
+    assert.ok(
+        loadDailyHistory()[`${boundary}-forest`],
+        'the boundary day is inside the window and must not be pruned'
+    );
+});
+
+test('daily: saveDailyResult prunes an entry one day past the boundary', () => {
+    _resetDailyForTests();
+    const justOut = daysBeforePinned(15);
+    saveDailyResult(dailyEntry(justOut), PINNED_NOW);
+    assert.equal(
+        loadDailyHistory()[`${justOut}-forest`],
+        undefined,
+        'one day past the window must be pruned'
+    );
+});
+
+// --- input contract --------------------------------------------------------
+test('daily: saveDailyResult ignores entries with no date or no stage', () => {
+    _resetDailyForTests();
+    saveDailyResult({ stage: 'forest' }, PINNED_NOW);
+    saveDailyResult({ date: daysBeforePinned(0) }, PINNED_NOW);
+    saveDailyResult(null, PINNED_NOW);
+    saveDailyResult(undefined, PINNED_NOW);
+    assert.deepEqual(loadDailyHistory(), {}, 'no malformed entry may be persisted');
+});
+
+test('daily: saveDailyResult overwrites the same (date, stage) slot', () => {
+    _resetDailyForTests();
+    const date = daysBeforePinned(0);
+    saveDailyResult(dailyEntry(date, { kills: 10 }), PINNED_NOW);
+    saveDailyResult(dailyEntry(date, { kills: 99 }), PINNED_NOW);
+    const h = loadDailyHistory();
+    assert.equal(Object.keys(h).length, 1, 'same date+stage must collapse to one slot');
+    assert.equal(h[`${date}-forest`].kills, 99, 'the most recent write wins');
+});
+
+// --- production default path ----------------------------------------------
+test('daily: saveDailyResult defaults to the wall clock and stamps savedAt', () => {
+    _resetDailyForTests();
+    const date = todayKey();
+    const before = Date.now();
+    saveDailyResult(dailyEntry(date)); // no `now` -> must use the real clock
+    const after = Date.now();
+
+    const entry = loadDailyHistory()[`${date}-forest`];
+    assert.ok(entry, 'entry written with the default clock should persist');
+    assert.ok(
+        entry.savedAt >= before && entry.savedAt <= after,
+        `savedAt should come from the wall clock (got ${entry.savedAt})`
+    );
 });
 
 test('daily: buildShareText contains stage label, time, and a 7-tile grid', () => {
