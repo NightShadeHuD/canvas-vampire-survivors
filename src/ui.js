@@ -210,7 +210,9 @@ export class UI {
                     ? `${d.date} · ${Math.floor(d.timeSurvived / 60)}:${String(Math.floor(d.timeSurvived % 60)).padStart(2, '0')} · ${d.kills} kills`
                     : `${d.date} — no run`;
                 const day = d.date.slice(8);
-                return `<div class="${cls}" title="${tip}" aria-label="${tip}">${day}</div>`;
+                // role="listitem" because the wrapper is role="list"; axe
+                // reports aria-required-children without it.
+                return `<div class="${cls}" role="listitem" title="${tip}" aria-label="${tip}">${day}</div>`;
             })
             .join('');
         const empty =
@@ -578,6 +580,12 @@ export class UI {
             const div = document.createElement('div');
             div.className = 'chip active' + (it.level >= it.max ? ' maxed' : '');
             if (it.evolved) div.classList.add('evolved');
+            // The container is role="list", which requires role="listitem"
+            // children. Without it axe reports aria-required-children, and a
+            // screen reader does not announce the chips as a list at all.
+            // (role="menu" on #upgradeOptions already did this correctly; the
+            // role="list" containers were missed.)
+            div.setAttribute('role', 'listitem');
             div.textContent = it.icon;
             const lvl = document.createElement('span');
             lvl.className = 'chip-lvl';

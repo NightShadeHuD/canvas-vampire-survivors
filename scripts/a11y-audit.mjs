@@ -2,21 +2,27 @@
 /**
  * @file scripts/a11y-audit.mjs
  * @description Accessibility gate. Loads the real game in a real browser and
- * runs axe-core against every reachable surface, failing the build on
+ * runs axe-core against **every overlay the game ships**, failing the build on
  * violations at or above the configured impact level.
  * See docs/ENGINEERING-STANDARDS.md §4.
  *
- * This is deliberately separate from scripts/runtime-smoke.js. That script is a
- * QA/reporting tool: it produces screenshots and a written report and tolerates
- * a rough edge. A gate has to be fast, deterministic, and fail loudly, so it
- * lives on its own and is wired into CI.
+ * Coverage matters more than the tool here. An earlier version scanned only the
+ * six surfaces reachable by clicking a menu button, so `a11yCeiling: 0` meant
+ * "clean on the six surfaces we looked at" while five overlays — the stage
+ * picker, the daily streak, help, and the in-game pause / level-up / game-over
+ * screens — were never examined at all. That is the same "green light wired to
+ * nothing" failure mode as the ESLint glob, and `scripts/check-coverage.mjs`
+ * cannot catch it. So the surface list below is exhaustive on purpose.
  *
- * Two passes, because the first-run experience is itself a surface we ship:
- *   Pass A  clean profile -> the five surfaces reachable from the main menu.
- *   Pass B  fresh profile -> the first-run How-to-Play overlay.
- * A clean Chromium profile opens that overlay on top of the menu and it
- * intercepts clicks, so auditing it needs its own context rather than a
- * suppressed one. (Storage key and flags match STORAGE_KEY in src/config.js.)
+ * How each surface is reached, and why:
+ *   - Menu overlays are reached by clicking their real button, which also
+ *     proves the button is clickable.
+ *   - Overlays with no menu button (help) and the in-game overlays are driven
+ *     by invoking the game object directly. Simulating the key or gamepad
+ *     binding would test the input layer rather than the overlay; boot-smoke
+ *     already covers the input wiring end to end.
+ *   - The first-run How-to-Play overlay needs a genuinely fresh profile, since
+ *     on a clean profile it opens on top of the menu and intercepts clicks.
  *
  * Usage:
  *   node scripts/a11y-audit.mjs            # enforce (CI)
@@ -51,6 +57,48 @@ const SEED_FLAGS = () => {
         /* sandboxed context — the game falls back to an in-memory save */
     }
 };
+
+/**
+ * Every overlay the game ships, and how to open it.
+ *
+ * `selector`  must become visible before the scan runs — asserted, so a surface
+ *             that silently fails to open is reported instead of being scanned
+ *             as the empty page underneath and passing.
+ * `click`     open by clicking this menu button.
+ * `invoke`    open by evaluating this expression against the running game.
+ * `needsRun`  start a run first (in-game overlays).
+ */
+const SURFACES = [
+    { name: 'main menu', selector: '#startScreen' },
+    { name: 'how-to-play', selector: '#howToPlayScreen', click: '#btnHowTo' },
+    { name: 'settings', selector: '#settingsMenu', click: '#btnSettings' },
+    { name: 'achievements', selector: '#achievementsScreen', click: '#btnAchievements' },
+    { name: 'leaderboard', selector: '#leaderboardScreen', click: '#btnLeaderboard' },
+    { name: 'stage picker', selector: '#stagePickerScreen', click: '#btnStage' },
+    { name: 'daily streak', selector: '#streakScreen', click: '#btnViewStreak' },
+    // No menu button: bound to an input action. Driving it through the input
+    // layer would test the binding, not the overlay.
+    { name: 'help', selector: '#helpScreen', invoke: 'window.__vsGame.toggleHelp()' },
+    // In-game overlays.
+    {
+        name: 'pause menu',
+        selector: '#pauseMenu',
+        needsRun: true,
+        invoke: 'window.__vsGame.togglePause()'
+    },
+    {
+        name: 'level-up menu',
+        selector: '#levelUpMenu',
+        needsRun: true,
+        invoke: 'window.__SURV_DEBUG__.grantLevel(1)'
+    },
+    {
+        name: 'game over',
+        selector: '#gameOver',
+        needsRun: true,
+        invoke: 'window.__SURV_DEBUG__.killPlayer()'
+    }
+];
 
 function freePort() {
     return new Promise((resolve, reject) => {
@@ -99,7 +147,7 @@ try {
 }
 
 /**
- * Load one surface and scan it. Always starts from a fresh navigation, because
+ * Open one surface and scan it. Always starts from a fresh navigation, because
  * the game's overlays are modal and stacking them makes later clicks fail on
  * pointer interception.
  */
@@ -110,13 +158,25 @@ async function auditSurface(context, url, surface) {
 
     try {
         await page.goto(url, { waitUntil: 'load' });
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(900);
 
-        if (surface.open) {
-            const btn = await page.$(surface.open);
-            if (!btn) {
-                return { surface: surface.name, skipped: `${surface.open} not present` };
-            }
+        if (surface.needsRun) {
+            const started = await page
+                .click('#btnStart', { timeout: 5000 })
+                .then(() => true)
+                .catch(() => false);
+            if (!started) return { surface: surface.name, skipped: '#btnStart not clickable' };
+
+            const playing = await page
+                .waitForFunction(() => window.__vsGame?.state === 'playing', { timeout: 8000 })
+                .then(() => true)
+                .catch(() => false);
+            if (!playing) return { surface: surface.name, skipped: 'run never started' };
+        }
+
+        if (surface.click) {
+            const btn = await page.$(surface.click);
+            if (!btn) return { surface: surface.name, skipped: `${surface.click} not present` };
             try {
                 await btn.click({ timeout: 5000 });
             } catch (err) {
@@ -125,8 +185,39 @@ async function auditSurface(context, url, surface) {
                     skipped: `click failed: ${String(err.message).split('\n')[0]}`
                 };
             }
-            await page.waitForTimeout(500);
         }
+
+        if (surface.invoke) {
+            const invoked = await page
+                .evaluate(surface.invoke)
+                .then(() => true)
+                .catch((err) => String(err.message).split('\n')[0]);
+            if (invoked !== true) {
+                return { surface: surface.name, skipped: `invoke failed: ${invoked}` };
+            }
+        }
+
+        // Assert the overlay actually opened. Without this, a surface that fails
+        // to open gets scanned as the empty page underneath and reports clean —
+        // which would be another green light wired to nothing.
+        const visible = await page
+            .waitForFunction(
+                (sel) => {
+                    const el = document.querySelector(sel);
+                    return !!el && getComputedStyle(el).display !== 'none';
+                },
+                surface.selector,
+                { timeout: 6000 }
+            )
+            .then(() => true)
+            .catch(() => false);
+
+        if (!visible) {
+            return { surface: surface.name, skipped: `${surface.selector} never became visible` };
+        }
+
+        // Let the overlay settle (fonts, injected rows) before measuring.
+        await page.waitForTimeout(350);
 
         const results = await new AxeBuilder({ page }).analyze();
         return { surface: surface.name, violations: results.violations, pageErrors };
@@ -134,14 +225,6 @@ async function auditSurface(context, url, surface) {
         await page.close().catch(() => {});
     }
 }
-
-const MENU_SURFACES = [
-    { name: 'main menu', open: null },
-    { name: 'how-to-play', open: '#btnHowTo' },
-    { name: 'settings', open: '#btnSettings' },
-    { name: 'achievements', open: '#btnAchievements' },
-    { name: 'leaderboard', open: '#btnLeaderboard' }
-];
 
 const port = await freePort();
 const url = `http://127.0.0.1:${port}/`;
@@ -170,14 +253,14 @@ try {
 
     const findings = [];
 
-    // Pass A — the menu and everything reachable from it, with the one-time
-    // first-run overlays suppressed so the menu is actually clickable.
+    // Pass A — every surface, with the one-time first-run overlays suppressed
+    // so the menu is actually clickable.
     const seeded = await browser.newContext({
         viewport: { width: 1280, height: 900 },
         deviceScaleFactor: 1
     });
     await seeded.addInitScript(SEED_FLAGS);
-    for (const surface of MENU_SURFACES) {
+    for (const surface of SURFACES) {
         findings.push(await auditSurface(seeded, url, surface));
     }
     await seeded.close();
@@ -187,18 +270,22 @@ try {
         viewport: { width: 1280, height: 900 },
         deviceScaleFactor: 1
     });
-    findings.push(await auditSurface(fresh, url, { name: 'first-run overlay', open: null }));
+    findings.push(
+        await auditSurface(fresh, url, { name: 'first-run overlay', selector: '#howToPlayScreen' })
+    );
     await fresh.close();
 
     // --- report -------------------------------------------------------------
     let blocking = 0;
     let totalNodes = 0;
+    const skipped = [];
 
-    console.log('a11y-audit: axe-core results\n');
+    console.log(`a11y-audit: axe-core across ${findings.length} surfaces\n`);
 
     for (const f of findings) {
         if (f.skipped) {
             console.log(`  ${f.surface.padEnd(18)} SKIPPED (${f.skipped})`);
+            skipped.push(f.surface);
             continue;
         }
         const viol = f.violations || [];
@@ -225,10 +312,19 @@ try {
     const ceiling = loadCeiling();
     console.log(
         `\na11y-audit: blocking=${blocking} (ceiling ${ceiling.blockingViolations}), ` +
-            `total nodes=${totalNodes} (ceiling ${ceiling.nodes})`
+            `total nodes=${totalNodes} (ceiling ${ceiling.nodes}), skipped=${skipped.length}`
     );
 
-    if (reportOnly) {
+    if (skipped.length > 0) {
+        // A skipped surface is an unscanned surface. Failing loudly is the whole
+        // point: silence here is indistinguishable from "clean".
+        console.error(
+            `\na11y-audit: FAILED — ${skipped.length} surface(s) could not be opened, so they\n` +
+                `were not scanned: ${skipped.join(', ')}.\n` +
+                'An unscanned surface is not a clean surface.'
+        );
+        exitCode = 1;
+    } else if (reportOnly) {
         console.log('\na11y-audit: --report mode, not failing the build.');
     } else if (blocking > ceiling.blockingViolations) {
         console.error(
@@ -242,7 +338,7 @@ try {
         );
         exitCode = 1;
     } else {
-        console.log('\na11y-audit: ok — within the recorded ceiling.');
+        console.log('\na11y-audit: ok — every surface scanned, within the recorded ceiling.');
     }
 } catch (err) {
     console.error(`\na11y-audit: ERROR — ${err.message}`);
