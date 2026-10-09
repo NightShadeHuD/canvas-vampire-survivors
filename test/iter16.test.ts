@@ -96,7 +96,7 @@ test('iter16 boundary: negative input on a corner does not punch through', () =>
 // ---------------------------------------------------------------------------
 test('iter16 stages: getStageModifiers returns a fresh object each call', () => {
     const a = getStageModifiers('tundra');
-    a.coldTickInterval = 9999;
+    (a as any).coldTickInterval = 9999;
     const b = getStageModifiers('tundra');
     assert.notEqual(b.coldTickInterval, 9999, 'mutating one copy must not leak into the next');
 });
@@ -155,7 +155,7 @@ test('iter16 storage: saveSave falls back to memory when quota is exhausted', ()
     };
     // Patch globalThis.window for the duration of the test.
     const prevWindow = globalThis.window;
-    globalThis.window = { localStorage: fakeLS };
+    (globalThis as any).window = { localStorage: fakeLS };
     try {
         const ok = saveSave({ runs: 5, settings: { stage: 'forest' } });
         // The quota throw must NOT propagate to the caller — saveSave
@@ -164,7 +164,7 @@ test('iter16 storage: saveSave falls back to memory when quota is exhausted', ()
         // the in-memory fallback (best-effort).
         assert.equal(ok, false, 'saveSave returns false when LS write fails');
     } finally {
-        globalThis.window = prevWindow;
+        (globalThis as any).window = prevWindow;
         _resetStorageForTests();
     }
 });
@@ -172,7 +172,7 @@ test('iter16 storage: saveSave falls back to memory when quota is exhausted', ()
 test('iter16 storage: saveSave with a circular reference does not throw', () => {
     _resetStorageForTests();
     const obj = { runs: 1 };
-    obj.self = obj; // intentional cycle — JSON.stringify will throw
+    (obj as any).self = obj; // intentional cycle — JSON.stringify will throw
     const ok = saveSave(obj);
     assert.equal(ok, false, 'circular structure should fail soft, not throw');
     _resetStorageForTests();
