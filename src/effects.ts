@@ -51,13 +51,13 @@ export class ScreenFlash {
         this.alpha = Math.max(this.alpha, intensity);
         this.decay = decay;
     }
-    update(dt) {
+    update(dt: number) {
         if (this.alpha > 0) {
             this.alpha -= this.decay * dt;
             if (this.alpha < 0) this.alpha = 0;
         }
     }
-    render(ctx, w, h) {
+    render(ctx: CanvasRenderingContext2D, w: number, h: number) {
         if (this.alpha <= 0) return;
         ctx.save();
         ctx.globalAlpha = this.alpha;
@@ -73,10 +73,10 @@ export class RingPulse {
     constructor() {
         this.pulses = [];
     }
-    emit(x, y, color = '255,210,77') {
+    emit(x: number, y: number, color = '255,210,77') {
         this.pulses.push({ x, y, color, r: 10, life: 1 });
     }
-    update(dt) {
+    update(dt: number) {
         for (let i = this.pulses.length - 1; i >= 0; i--) {
             const p = this.pulses[i];
             p.r += 220 * dt;
@@ -84,7 +84,7 @@ export class RingPulse {
             if (p.life <= 0) this.pulses.splice(i, 1);
         }
     }
-    render(ctx) {
+    render(ctx: CanvasRenderingContext2D) {
         for (const p of this.pulses) {
             ctx.save();
             ctx.globalAlpha = Math.max(0, p.life);
@@ -107,11 +107,11 @@ export class HitBursts {
         this.bursts = [];
         this.max = 40;
     }
-    emit(x, y, color = '255,255,255') {
+    emit(x: number, y: number, color = '255,255,255') {
         if (this.bursts.length >= this.max) this.bursts.shift();
         this.bursts.push({ x, y, color, r: 2, life: 0.25 });
     }
-    update(dt) {
+    update(dt: number) {
         for (let i = this.bursts.length - 1; i >= 0; i--) {
             const b = this.bursts[i];
             b.r += 160 * dt;
@@ -119,7 +119,7 @@ export class HitBursts {
             if (b.life <= 0) this.bursts.splice(i, 1);
         }
     }
-    render(ctx) {
+    render(ctx: CanvasRenderingContext2D) {
         for (const b of this.bursts) {
             ctx.save();
             ctx.globalAlpha = Math.max(0, b.life);
@@ -147,7 +147,7 @@ export class EmojiRain {
         this.glyphs = ['🎉', '🎊', '✨', '⭐', '🏆', '🥳'];
     }
     /** Spit a fresh batch of `count` emoji from the top of the screen. */
-    burst(width, height, count = 24) {
+    burst(width: number, height: number, count = 24) {
         // Defensive: width/height are pulled from the canvas — guard against
         // zero/NaN so the math below stays well-defined in tests.
         const w = Number.isFinite(width) && width > 0 ? width : 1200;
@@ -167,7 +167,7 @@ export class EmojiRain {
             });
         }
     }
-    update(dt, height?) {
+    update(dt: number, height?: number) {
         const h = Number.isFinite(height) && height > 0 ? height : 800;
         for (let i = this.drops.length - 1; i >= 0; i--) {
             const d = this.drops[i];
@@ -180,7 +180,7 @@ export class EmojiRain {
             if (d.life <= 0 || d.y > h + 40) this.drops.splice(i, 1);
         }
     }
-    render(ctx) {
+    render(ctx: CanvasRenderingContext2D) {
         if (!this.drops.length || !ctx) return;
         ctx.save();
         ctx.textAlign = 'center';
@@ -229,16 +229,16 @@ export class EffectLayer {
      * dimensions so the spread covers the visible area. No-op cap is
      * enforced inside `EmojiRain.burst`.
      */
-    celebrate(width, height) {
+    celebrate(width: number, height: number) {
         this.emojiRain.burst(width, height);
         // A small green flash to underline the moment.
         this.flash.flash('200,255,200', 0.18, 1.5);
     }
-    levelUp(x, y) {
+    levelUp(x: number, y: number) {
         this.pulses.emit(x, y, '255,220,80');
         this.flash.flash('255,230,140', 0.22, 2.5);
     }
-    hit(x, y, color = '255,255,255') {
+    hit(x: number, y: number, color = '255,255,255') {
         this.hits.emit(x, y, color);
     }
     bossSpawn() {
@@ -260,12 +260,12 @@ export class EffectLayer {
      * is drained inside `update(dt)`, so it implicitly pauses with the game.
      * Returns a token whose `.cancelled = true` stops the callback.
      */
-    schedule(seconds, fn) {
+    schedule(seconds: number, fn: any) {
         const entry = { t: seconds, fn, cancelled: false };
         this.delays.push(entry);
         return entry;
     }
-    update(dt, viewport?) {
+    update(dt: number, viewport?: { w: number; h: number }) {
         this.flash.update(dt);
         this.pulses.update(dt);
         this.hits.update(dt);
@@ -290,7 +290,7 @@ export class EffectLayer {
             }
         }
     }
-    render(ctx, w, h) {
+    render(ctx: CanvasRenderingContext2D, w: number, h: number) {
         this.pulses.render(ctx);
         this.hits.render(ctx);
         this.flash.render(ctx, w, h);
