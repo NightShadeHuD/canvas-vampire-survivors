@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "_comment": "Machine-readable engineering baseline. Read by scripts/check-baseline.mjs and scripts/check-suppressions.mjs. Rules: docs/ENGINEERING-STANDARDS.md §1.1, §1.2, §5. Never raise a ceiling without a declaredGaps entry in the same commit.",
+    "_comment": "Machine-readable engineering baseline. Read by scripts/check-baseline.mjs and scripts/check-suppressions.mjs. Rules: docs/ENGINEERING-STANDARDS.md \u00a71.1, \u00a71.2, \u00a75. Never raise a ceiling without a declaredGaps entry in the same commit.",
     "knownFailingTests": [],
     "suppressionCeilings": {
         "ts-nocheck": 0,
@@ -18,7 +18,7 @@
     },
     "declaredGaps": [],
     "coverageFloors": {
-        "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
+        "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
             "lines": 73.77,
             "branches": 81.32,
@@ -157,5 +157,5 @@
             }
         }
     },
-    "testCountFloor": 530
+    "testCountFloor": 549
 }

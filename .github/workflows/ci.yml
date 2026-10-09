@@ -28,6 +28,13 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+              with:
+                  # `check:assertions` compares the branch against its base, so
+                  # it needs the history a shallow clone omits. Without this the
+                  # gate reports "no base revision is reachable" and skips —
+                  # a notice, not a pass, but a gate that never runs in CI is
+                  # not doing its job.
+                  fetch-depth: 0
 
             # Node 24: required for native TypeScript type stripping, which the
             # migration relies on to run test/*.ts directly with no build step.
