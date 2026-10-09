@@ -108,3 +108,30 @@ back into a project with good intentions instead of guarantees.
   partitioning are load-bearing; `test/perf-budget.test.js` guards them.
 - **Accessibility is a feature.** Every dialog needs an accessible name; see
   `test/a11y-dialogs.test.js`.
+
+---
+
+## Repository setup notes
+
+**Never add a git remote named `upstream`.** The `gh` CLI prefers a remote with
+that exact name over `origin`, which means every `gh` command run without an
+explicit `-R` would silently target a repository you do not own. This bit us
+once already: `gh repo view` in this working copy resolved to the original
+public project rather than to ours. The reference remote is therefore named
+`source`:
+
+```
+origin    https://github.com/NightShadeHuD/canvas-vampire-survivors.git
+source    https://github.com/ricardo-foundry/canvas-vampire-survivors.git
+```
+
+Pass `-R NightShadeHuD/canvas-vampire-survivors` on any scripted `gh` command as
+well. Belt and braces — the rename protects interactive use, the flag protects
+automation.
+
+**GitHub Pages is not enabled on this private repository**, so the
+`Deploy to GitHub Pages` workflow cannot complete until it is (Pages on a
+private repo needs a plan that includes it, or the repository made public). The
+workflow itself is correct and now gated on the full verify job; it is disabled
+so that a permanent red X cannot mask real failures. Re-enable it with
+`gh workflow enable "Deploy to GitHub Pages"` once Pages is switched on.
