@@ -1,4 +1,4 @@
-// Unit tests for src/systems.js — the shake camera and the FPS meter.
+// Unit tests for src/systems.ts — the shake camera and the FPS meter.
 //
 // This module had 0% coverage: no test imported it, so it did not appear in the
 // coverage report at all. It is small, pure, and drives two things a player
@@ -10,7 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ShakeCamera, FpsMeter, SpatialHash } from '../src/systems.js';
+import { ShakeCamera, FpsMeter, SpatialHash } from '../src/systems.ts';
 
 /** Run `fn` with Math.random pinned to `value`, restoring it afterwards. */
 function withRandom(value, fn) {
