@@ -31,7 +31,7 @@ import { InputManager } from './input.js';
 import { HapticEngine } from './haptics.js';
 import { loadKeymap, saveKeymap } from './keymap.js';
 import { UI } from './ui.js';
-import { FpsMeter, ShakeCamera } from './systems.js';
+import { FpsMeter, ShakeCamera } from './systems.ts';
 import { SpatialHash } from './spatial-hash.js';
 import { Pool, resetFloatingText, resetParticle } from './pool.js';
 import { EffectLayer } from './effects.js';

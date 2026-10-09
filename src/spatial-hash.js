@@ -8,7 +8,7 @@
  * suffices. The module is decoupled from game types: buckets just store
  * whatever object you hand them, as long as each has numeric `.x` and `.y`.
  *
- * Layered on top of this class, `src/systems.js` re-exports a thin wrapper
+ * Layered on top of this class, `src/systems.ts` re-exports a thin wrapper
  * tuned for enemies. This file is the authoritative implementation and is
  * the one exercised by the unit tests.
  *

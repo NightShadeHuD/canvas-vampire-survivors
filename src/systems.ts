@@ -16,20 +16,23 @@
 export { SpatialHash } from './spatial-hash.js';
 
 export class ShakeCamera {
-    constructor() {
-        this.intensity = 0;
-        // shake offset
-        this.x = 0;
-        this.y = 0;
-        // world-space follow target (top-left of the viewport in arena coords).
-        // Set by `Game._updateCamera()` each frame.
-        this.worldX = 0;
-        this.worldY = 0;
-    }
-    shake(amount) {
+    /** Current shake magnitude. Decays at 2 units per second. */
+    intensity = 0;
+    /** Screen-space offset applied to this frame's render. */
+    x = 0;
+    y = 0;
+    /**
+     * World-space follow target — the top-left of the viewport in arena
+     * coordinates. Set by `Game._updateCamera()` each frame.
+     */
+    worldX = 0;
+    worldY = 0;
+
+    shake(amount: number) {
         this.intensity = Math.max(this.intensity, amount);
     }
-    update(dt, enabled) {
+
+    update(dt: number, enabled: boolean) {
         if (!enabled || this.intensity <= 0) {
             this.x = 0;
             this.y = 0;
@@ -44,11 +47,11 @@ export class ShakeCamera {
 }
 
 export class FpsMeter {
-    constructor() {
-        this.samples = [];
-        this.fps = 0;
-    }
-    tick(dt) {
+    /** Frame deltas in seconds, oldest first. Capped at 60 by `tick`. */
+    samples: number[] = [];
+    fps = 0;
+
+    tick(dt: number) {
         this.samples.push(dt);
         if (this.samples.length > 60) this.samples.shift();
         const avg = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
