@@ -197,8 +197,38 @@ Hooks are installed by `npm run setup` (sets `core.hooksPath` to `.githooks`).
 - `pre-push` — full `npm run verify`.
 
 Hooks are convenience and fast feedback. **CI is the authority**, because hooks
-can be bypassed with `--no-verify` and CI cannot. Branch protection on `main`
-requires the CI check to pass before merge.
+can be bypassed with `--no-verify` and CI cannot.
+
+### Branch protection
+
+`main` is locked by GitHub itself, which is the layer that cannot be talked
+around. Enforced: the required `Verify` check (strict), pull requests
+mandatory, force pushes denied, deletions denied, and `enforce_admins` on so
+that not even the repository owner bypasses it.
+
+Verified by probe rather than assumed — a force push and a direct commit push
+were both rejected:
+
+```
+remote: - Changes must be made through a pull request.
+remote: - Required status check "Verify" is expected.
+ ! [remote rejected] HEAD -> main (protected branch hook declined)
+```
+
+So every change lands through a pull request:
+
+```bash
+git switch -c my-change
+git commit -m "..."                     # pre-commit gate
+git push -u origin my-change            # pre-push gate
+gh pr create --fill                     # CI runs the full gate
+gh pr merge --squash --delete-branch    # only once Verify is green
+```
+
+The approval count is 0 so a solo maintainer can merge their own PR. An
+approval count of 1 would lock the owner out of their own repository, since
+GitHub forbids self-approval — a protection that stops all work is a bug, not a
+safeguard.
 
 ---
 
