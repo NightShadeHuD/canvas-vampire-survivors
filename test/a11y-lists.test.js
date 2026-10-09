@@ -15,7 +15,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { UI } from '../src/ui.js';
+import { UI } from '../src/ui.ts';
 
 /** Every id the UI constructor caches. */
 const CACHED_IDS = [

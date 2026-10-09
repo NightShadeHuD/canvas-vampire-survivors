@@ -1,6 +1,6 @@
-// Unit tests for the screen-building half of src/ui.js.
+// Unit tests for the screen-building half of src/ui.ts.
 //
-// ui.js is the largest remaining coverage gap. The existing a11y tests cover
+// ui.ts is the largest remaining coverage gap. The existing a11y tests cover
 // `_applyDialogAria` and `_renderChips`; this file covers the per-frame HUD
 // update and the overlay show/hide contract.
 //
@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installBrowserStub } from './helpers/browser-stub.js';
-import { UI } from '../src/ui.js';
+import { UI } from '../src/ui.ts';
 import { CONFIG } from '../src/config.ts';
 
 /** Build a UI against a fresh stub; always restore. */
@@ -92,8 +92,8 @@ function makeGame(overrides = {}) {
 test('ui/updateHud: writes health rounded up, so 1hp never reads as 0', () => {
     withUi((ui) => {
         ui.updateHud(makeGame({ player: { ...makeGame().player, hp: 0.4, maxHp: 100 } }));
-        assert.equal(ui.els.hp.textContent, 1, 'a living player must not display 0 health');
-        assert.equal(ui.els.maxHp.textContent, 100);
+        assert.equal(ui.els.hp.textContent, '1', 'a living player must not display 0 health');
+        assert.equal(ui.els.maxHp.textContent, '100');
     });
 });
 
@@ -147,8 +147,8 @@ test('ui/updateHud: the timer floors fractional seconds rather than rounding', (
 test('ui/updateHud: kills and level are written straight through', () => {
     withUi((ui) => {
         ui.updateHud(makeGame({ kills: 1234, player: { ...makeGame().player, level: 17 } }));
-        assert.equal(ui.els.kills.textContent, 1234);
-        assert.equal(ui.els.level.textContent, 17);
+        assert.equal(ui.els.kills.textContent, '1234');
+        assert.equal(ui.els.level.textContent, '17');
     });
 });
 

@@ -53,7 +53,7 @@ const DEFAULT_SAVE = {
         // iter-13: global mute toggle, persisted so refresh keeps the choice.
         muted: false,
         // iter-14: touch UI scaling. 0.8 = small, 1.0 = default, 1.2 = large.
-        // Applied by ui.js as CSS custom properties on the document root
+        // Applied by ui.ts as CSS custom properties on the document root
         // (--touch-button-size etc) so the joystick + special button grow
         // together. Clamped to the 0.8–1.4 range on read.
         touchButtonScale: 1,

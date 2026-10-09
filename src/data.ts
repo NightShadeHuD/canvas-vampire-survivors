@@ -756,7 +756,7 @@ export const ACHIEVEMENTS = [
     // --- iter-20: hidden / easter-egg achievements ------------------------
     // These three are intentionally undocumented in the gallery's tooltip
     // copy until they're earned (the UI reveals them once unlocked). Their
-    // `hidden: true` flag is read by ui.js to gate the description preview.
+    // `hidden: true` flag is read by ui.ts to gate the description preview.
     {
         id: 'konami_code',
         name: 'Konami Code',

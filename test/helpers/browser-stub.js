@@ -43,7 +43,17 @@ export function makeElement(id = '') {
         tagName: 'DIV',
         style: makeStyle(),
         dataset: {},
-        textContent: '',
+        // The real DOM coerces whatever you assign into a string, so the stub
+        // must too. Without this a test can assert `textContent === 1` against
+        // the stub and pass, while the browser would report '1' — the stub
+        // being more permissive than the thing it stands in for.
+        _text: '',
+        get textContent() {
+            return this._text;
+        },
+        set textContent(v) {
+            this._text = v === null || v === undefined ? '' : String(v);
+        },
         children: [],
         _attrs: attrs,
         _classes: classes,
