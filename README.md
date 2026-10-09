@@ -4,9 +4,7 @@
 -->
 
 <p align="center">
-  <a href="https://ricardo-foundry.github.io/canvas-vampire-survivors/">
-    <img src="./docs/hero.svg" alt="Survivor — open-source HTML5 Canvas roguelite" width="720" />
-  </a>
+  <img src="./docs/hero.svg" alt="Survivor — open-source HTML5 Canvas roguelite" width="720" />
 </p>
 
 ```
@@ -15,7 +13,7 @@
   \___ \| | | | |_) | | | || |  \ \ / /| | | | |_) |
    ___) | |_| |  _ <| |_| || |   \ V / | |_| |  _ <
   |____/ \___/|_| \_\\___/|___|   \_/   \___/|_| \_\
-                  zero deps · vanilla js · MIT
+                  zero deps · typescript · MIT
 ```
 
 <p align="center">
@@ -24,21 +22,20 @@
 
 <p align="center">
   <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
-  <a href="https://ricardo-foundry.github.io/canvas-vampire-survivors/"><img alt="Live demo" src="https://img.shields.io/badge/▶-Live%20Demo-3388ff.svg"></a>
-  <a href="https://github.com/ricardo-foundry/canvas-vampire-survivors/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ricardo-foundry/canvas-vampire-survivors/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/ricardo-foundry/canvas-vampire-survivors"><img alt="Top language" src="https://img.shields.io/github/languages/top/ricardo-foundry/canvas-vampire-survivors.svg"></a>
-  <a href="https://github.com/ricardo-foundry/canvas-vampire-survivors/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/ricardo-foundry/canvas-vampire-survivors.svg"></a>
+  <a href="https://github.com/NightShadeHuD/canvas-vampire-survivors/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/NightShadeHuD/canvas-vampire-survivors/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/NightShadeHuD/canvas-vampire-survivors"><img alt="Top language" src="https://img.shields.io/github/languages/top/NightShadeHuD/canvas-vampire-survivors.svg"></a>
+  <a href="https://github.com/NightShadeHuD/canvas-vampire-survivors/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/NightShadeHuD/canvas-vampire-survivors.svg"></a>
   <a href="./CONTRIBUTING.md"><img alt="Issues welcome" src="https://img.shields.io/badge/issues-welcome-brightgreen.svg"></a>
   <a href="./package.json"><img alt="Zero runtime deps" src="https://img.shields.io/badge/runtime%20deps-0-informational.svg"></a>
-  <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"><img alt="Made with Vanilla JS" src="https://img.shields.io/badge/made%20with-vanilla%20JS-f7df1e.svg"></a>
-  <a href="./test"><img alt="Tests: 241+" src="https://img.shields.io/badge/tests-241%2B-success.svg"></a>
-  <a href="./src/stages.js"><img alt="Stages: 3" src="https://img.shields.io/badge/stages-3-blueviolet.svg"></a>
-  <a href="./src/data.js"><img alt="Weapons: 10" src="https://img.shields.io/badge/weapons-10-orange.svg"></a>
+  <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"><img alt="Made with TypeScript" src="https://img.shields.io/badge/made%20with-TypeScript-3178c6.svg"></a>
+  <a href="./test"><img alt="Tests: 512" src="https://img.shields.io/badge/tests-512-success.svg"></a>
+  <a href="./src/stages.ts"><img alt="Stages: 3" src="https://img.shields.io/badge/stages-3-blueviolet.svg"></a>
+  <a href="./src/data.ts"><img alt="Weapons: 10" src="https://img.shields.io/badge/weapons-10-orange.svg"></a>
   <a href="./docs/JOURNEY.md"><img alt="Journey: 16 iterations" src="https://img.shields.io/badge/journey-16%20iters-lightgrey.svg"></a>
 </p>
 
 <p align="center">
-  <a href="https://ricardo-foundry.github.io/canvas-vampire-survivors/"><strong>▶ &nbsp;Play in your browser</strong></a>
+  <a href="#-quickstart"><strong>▶ &nbsp;Run it locally</strong></a>
   &nbsp;·&nbsp;
   <a href="#-quickstart">Quickstart</a>
   &nbsp;·&nbsp;
@@ -76,7 +73,7 @@
 ## 🚀 Quickstart
 
 ```bash
-git clone https://github.com/ricardo-foundry/canvas-vampire-survivors.git
+git clone https://github.com/NightShadeHuD/canvas-vampire-survivors.git
 cd canvas-vampire-survivors
 npm install     # ESLint + Prettier only — zero runtime deps
 npm start       # http://localhost:3000
@@ -87,9 +84,13 @@ serve the folder with `python -m http.server`.
 
 ## 🌐 Play online
 
-An always-up-to-date build ships from `main` to GitHub Pages:
+The browser loads the compiled output from `dist/`, which `npm run build`
+produces. Serve the repository root over HTTP and open the page — GitHub Pages
+is not enabled on this repository:
 
-> **▶ <https://ricardo-foundry.github.io/canvas-vampire-survivors/>**
+```bash
+npm run build && npx serve .
+```
 
 The Pages build is also a [PWA](./manifest.json): on mobile, "Add to Home
 Screen" gives you an offline-capable icon thanks to a tiny
@@ -342,21 +343,18 @@ open a public issue.
 - Every contributor who has filed an issue, sent a PR, or translated a
   string. You are why this repo exists.
 
-## 🌌 Sister projects
+## 🌌 Attribution
 
-Three small, independent, MIT-licensed repos under the same org. If you
-liked this one, the other two are built with the same iterate-in-public,
-near-zero-dep philosophy:
+This is an independent project that began from
+[ricardo-foundry/canvas-vampire-survivors](https://github.com/ricardo-foundry/canvas-vampire-survivors),
+which is MIT-licensed. It has since been ported to TypeScript, restructured so
+the simulation is independent of the DOM and canvas, and given its own
+engineering standards and verification gates. See
+[docs/ENGINEERING-STANDARDS.md](./docs/ENGINEERING-STANDARDS.md) and
+[docs/TYPESCRIPT-MIGRATION.md](./docs/TYPESCRIPT-MIGRATION.md).
 
-- **[openhand](https://github.com/ricardo-foundry/openhand)** — LLM-agnostic,
-  plugin-first agent framework. TypeScript strict, sandboxed tools, Docker-ready.
-- **[terminal-quest-cli](https://github.com/ricardo-foundry/terminal-quest-cli)**
-  — Bilingual terminal RPG with 11 quests and 11 minigames. `npx terminal-quest-cli`
-  to play, zero runtime deps.
-
-Each project keeps a `docs/JOURNEY.md` with per-iteration notes — the
-"build log" of how it got to its current shape. See [`docs/CROSSPROMO.md`](./docs/CROSSPROMO.md)
-for the rationale and the symmetric block on the other two repos.
+The original remains the upstream reference, kept as the `source` git remote
+rather than `origin`.
 
 ## 📜 License
 
@@ -364,7 +362,7 @@ Released under the [MIT License](./LICENSE). Use it, fork it, ship it.
 
 ## ⭐ Stars over time
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ricardo-foundry/canvas-vampire-survivors&type=Date)](https://star-history.com/#ricardo-foundry/canvas-vampire-survivors&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=NightShadeHuD/canvas-vampire-survivors&type=Date)](https://star-history.com/#NightShadeHuD/canvas-vampire-survivors&Date)
 
 If you have read this far, please drop a ⭐ — it costs nothing and makes the
 next person who finds the repo trust it more.
@@ -380,7 +378,7 @@ v2.2 版本添加了 PWA 离线支持、成就画廊、社交分享卡，以及�
 Pages 静态入口。
 
 - 🚀 一键启动：`npm install && npm start`，或直接用浏览器打开 `index.html`
-- 🌐 在线试玩：<https://ricardo-foundry.github.io/canvas-vampire-survivors/>
+- 🌐 本地运行：`npm run build && npx serve .`（本仓库未启用 GitHub Pages）
 - 🤝 欢迎贡献：查看 [CONTRIBUTING.md](./CONTRIBUTING.md)，我们对新手非常友好
 - 📜 协议：MIT，随意 fork 和二次创作
 
