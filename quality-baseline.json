@@ -23,13 +23,6 @@
             "why": "Pre-existing. Measured at 83 no-undef errors and 8 warnings across 6 files. The scripts are Playwright drivers that reference browser globals (window, document) inside page.evaluate() callbacks, which need per-file-type config blocks (CJS vs ESM vs browser-context) rather than one blanket glob. Fixing this properly is its own reviewed change.",
             "bound": "Must be closed before the TypeScript migration is declared complete; scripts/ must be lint-clean under a correct multi-scope eslint config.",
             "trackedBy": "scripts/verify.mjs — printed as an open gap on every `npm run verify`"
-        },
-        {
-            "id": "no-branch-protection",
-            "what": "The `Verify` CI check cannot be made *required*, so a red commit can still be pushed or merged to main. CI reports failure; it cannot block.",
-            "why": "External plan limit, not a code problem. GitHub returns HTTP 403 'Upgrade to GitHub Pro or make this repository public to enable this feature' for both the branch-protection API and the newer rulesets API on a private repository on a free plan. Verified against repos/NightShadeHuD/canvas-vampire-survivors/branches/main/protection and repos/.../rulesets.",
-            "bound": "Closed by either upgrading the account to GitHub Pro, or making the repository public; then apply a ruleset requiring the `Verify` check with strict status checks, non-fast-forward and deletion protection. Until then, the compensating controls are the committed .githooks/pre-push gate (real, but bypassable with --no-verify) and CI itself (detects but does not block).",
-            "trackedBy": "AGENTS.md repository setup notes; this entry"
         }
     ]
 }

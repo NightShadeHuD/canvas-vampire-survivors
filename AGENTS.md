@@ -113,6 +113,34 @@ back into a project with good intentions instead of guarantees.
 
 ## Repository setup notes
 
+**`main` is protected. Every change goes through a pull request.** Direct pushes
+are rejected by GitHub, not merely discouraged:
+
+```
+remote: - Changes must be made through a pull request.
+remote: - Required status check "Verify" is expected.
+ ! [remote rejected] HEAD -> main (protected branch hook declined)
+```
+
+Enforced on `main`: the required `Verify` check (strict — the branch must be up
+to date), pull requests mandatory, force pushes denied, deletions denied, and
+`enforce_admins` on so nobody bypasses it, not even the owner. Verified by probe:
+both a force push and a direct commit push were rejected.
+
+The practical workflow is therefore:
+
+```bash
+git switch -c my-change
+git commit -m "..."                     # pre-commit gate runs
+git push -u origin my-change            # pre-push gate runs
+gh pr create --fill                     # CI runs the full gate on the PR
+gh pr merge --squash --delete-branch    # succeeds only once Verify is green
+```
+
+`required_approving_review_count` is 0, so a solo maintainer can merge their own
+PR once the gate passes. Setting it to 1 would have locked the owner out of
+their own repository, because GitHub does not allow self-approval.
+
 **Never add a git remote named `upstream`.** The `gh` CLI prefers a remote with
 that exact name over `origin`, which means every `gh` command run without an
 explicit `-R` would silently target a repository you do not own. This bit us
@@ -129,9 +157,8 @@ Pass `-R NightShadeHuD/canvas-vampire-survivors` on any scripted `gh` command as
 well. Belt and braces — the rename protects interactive use, the flag protects
 automation.
 
-**GitHub Pages is not enabled on this private repository**, so the
-`Deploy to GitHub Pages` workflow cannot complete until it is (Pages on a
-private repo needs a plan that includes it, or the repository made public). The
-workflow itself is correct and now gated on the full verify job; it is disabled
-so that a permanent red X cannot mask real failures. Re-enable it with
+**GitHub Pages is not enabled on this repository**, so the
+`Deploy to GitHub Pages` workflow cannot complete until it is. The workflow
+itself is correct and gated on the full verify job; it is disabled so that a
+permanent red X cannot mask real failures. Re-enable it with
 `gh workflow enable "Deploy to GitHub Pages"` once Pages is switched on.
