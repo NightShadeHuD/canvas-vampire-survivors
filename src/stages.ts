@@ -24,7 +24,7 @@
  *
  * iter-14 introduces the third stage `tundra`. On top of the existing pool
  * / boss / palette knobs, tundra ships three brand-new gameplay levers,
- * exposed under `getStageModifiers(id)` so the consumer (`main.js`) can apply
+ * exposed under `getStageModifiers(id)` so the consumer (`main.ts`) can apply
  * them generically rather than hard-coding string checks:
  *   - playerSpeedMult: multiplier baked into player speed (0.9 = -10%).
  *   - enemyHpMult:      multiplier baked into enemy HP at spawn (1.2 = +20%).
@@ -119,7 +119,7 @@ export const STAGES: Readonly<Record<string, StageDef>> = Object.freeze({
     //   - playerSpeedMult 0.9   (ice underfoot, -10% movement)
     //   - enemyHpMult     1.2   (thicker furred enemies, +20% HP)
     //   - cold tick       1 HP / 10 s (slow attrition)
-    // The cold tick is implemented in main.js (`_applyColdTick`) and reads
+    // The cold tick is implemented in main.ts (`_applyColdTick`) and reads
     // its config from `getStageModifiers(id)` so the modifier surface stays
     // declarative. The "warmth-source" pickup that temporarily disables the
     // cold tick is *intentionally disabled this iteration* — see

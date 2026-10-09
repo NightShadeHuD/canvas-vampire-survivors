@@ -36,7 +36,7 @@ export class AchievementTracker {
             // iter-20 easter eggs ------------------------------------------------
             // konamiCode: flipped when the player enters the Konami sequence
             //   from the main menu, persisted across runs via the achievement.
-            // fastBossClear: flipped by main.js when ANY boss dies before 300s
+            // fastBossClear: flipped by main.ts when ANY boss dies before 300s
             //   real-time, used by the hidden Speedrunner Plus achievement.
             // pacifistTimer: rolling seconds-without-a-kill window, capped at
             //   60s. Resets the moment kills > 0.

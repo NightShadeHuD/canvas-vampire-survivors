@@ -7,7 +7,7 @@
  *
  * iter-19 introduced this module as the source of truth for every keyboard
  * action InputManager and the global hotkey listener care about. Previously
- * those were string literals scattered through `input.ts` and `main.js`; now
+ * those were string literals scattered through `input.ts` and `main.ts`; now
  * they consult the keymap so a remap UI can rebind any of them at runtime.
  *
  * Design notes:

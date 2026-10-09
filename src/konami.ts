@@ -3,7 +3,7 @@
  * @description Tiny standalone detector for the canonical Konami Code
  * (↑↑↓↓←→←→BA). Built as a pure state machine so we can unit-test it without
  * any DOM, then wire one keydown listener to the document on the main menu in
- * main.js. Nothing here touches save state — the caller decides what to do
+ * main.ts. Nothing here touches save state — the caller decides what to do
  * with the unlock event (in our case: flip a per-run flag and let the
  * AchievementTracker handle the rest).
  *
