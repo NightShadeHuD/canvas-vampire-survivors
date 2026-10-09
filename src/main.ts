@@ -28,17 +28,8 @@ import {
     findEnemyDef,
     registerWeaponClass
 } from './entities.ts';
-import {
-    renderEnemy,
-    renderEnemyProjectile,
-    renderPlayer,
-    renderExpOrb,
-    renderFloatingText,
-    renderMine,
-    renderParticle,
-    renderProjectile
-} from './entity-render.ts';
-import { drawGrid } from './game-render.ts';
+import {} from './entity-render.ts';
+import { renderGame } from './game-render.ts';
 import { Weapon } from './weapons.ts';
 import { AudioEngine } from './audio.ts';
 import { InputManager } from './input.ts';
@@ -65,7 +56,6 @@ import {
 import { setLocale, t as _t } from './i18n.ts';
 import {
     DEFAULT_STAGE_ID,
-    getBackgroundFor,
     getBossesFor,
     getStageModifiers,
     getWavesFor,
@@ -83,36 +73,6 @@ registerWeaponClass(Weapon);
 // blitting the bitmap each frame is measurably faster than redoing the
 // gradient/fill path every draw call. Cache key = `${id}-${size}`.
 // ---------------------------------------------------------------------------
-const SPRITE_CACHE = new Map();
-
-function spriteKey(id, size) {
-    return `${id}@${size}`;
-}
-
-function getEnemySprite(def, size) {
-    const key = spriteKey(def.id, size);
-    const cached = SPRITE_CACHE.get(key);
-    if (cached) return cached;
-    if (typeof document === 'undefined') return null; // SSR / test guard
-    const pad = 4;
-    const d = size * 2 + pad * 2;
-    const off = document.createElement('canvas');
-    off.width = d;
-    off.height = d;
-    const ox = d / 2;
-    const oy = d / 2;
-    const c = off.getContext('2d');
-    c.fillStyle = def.color || '#ff4444';
-    c.beginPath();
-    c.arc(ox, oy, size, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.25)';
-    c.beginPath();
-    c.arc(ox, oy, size * 0.5, 0, Math.PI * 2);
-    c.fill();
-    SPRITE_CACHE.set(key, off);
-    return off;
-}
 
 export class Game {
     /*
@@ -1150,7 +1110,7 @@ export class Game {
             w: this.canvas?.width || CONFIG.CANVAS_WIDTH,
             h: this.canvas?.height || CONFIG.CANVAS_HEIGHT
         });
-        this.render(dt);
+        renderGame(this.ctx, this);
         this.fpsMeter.tick(dt);
         this.ui.setFps(this.fpsMeter.fps, this.save.settings.showFps);
         this._scheduleFrame();
@@ -1748,73 +1708,6 @@ export class Game {
     }
 
     // --- Rendering --------------------------------------------------------
-    render(_dt) {
-        const ctx = this.ctx;
-        // 1) Background fill in screen space (no transform). This guarantees
-        //    the viewport is always cleared even when the camera sits flush
-        //    against an arena edge and a sliver would otherwise be unfilled.
-        const bg = getBackgroundFor(this.stageId);
-        ctx.fillStyle = bg.fill;
-        ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
-
-        // 2) World-space pass: translate by -camera + shake so entity coords
-        //    (which live in arena space) project into the viewport.
-        ctx.save();
-        ctx.translate(-this.camera.worldX + this.camera.x, -this.camera.worldY + this.camera.y);
-
-        drawGrid(this.ctx, this);
-
-        for (const o of this.expOrbs) renderExpOrb(ctx, o);
-        for (const m of this.mines) renderMine(ctx, m);
-        this._renderEnemies(ctx);
-        if (this.player) {
-            renderPlayer(ctx, this.player);
-            // Orbit shards live on the weapon, so render per-weapon extras here.
-            for (const w of this.player.weapons) w.renderExtras?.(ctx);
-        }
-        for (const p of this.projectiles) renderProjectile(ctx, p);
-        for (const ep of this.enemyProjectiles) renderEnemyProjectile(ctx, ep);
-        for (const p of this.particles) renderParticle(ctx, p);
-        for (const t of this.floatingTexts) renderFloatingText(ctx, t);
-
-        ctx.restore();
-
-        // 3) Screen-space effects (flash, pulses, vignette) on top — these
-        //    render relative to the viewport, not the world.
-        this.effects.render(ctx, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
-    }
-
-    /**
-     * Draw enemies using the cached offscreen sprite when available. Bosses
-     * and flashing enemies still go through the full per-frame path because
-     * their visuals include HP bars and hit-flash highlights that the cached
-     * bitmap cannot reproduce. This cuts per-enemy drawing calls from ~4
-     * (gradient + two arcs + fill) to a single drawImage for the common case.
-     */
-    _renderEnemies(ctx) {
-        for (const e of this.enemies) {
-            if (e.boss || e.flashTimer > 0 || e.shielded) {
-                renderEnemy(ctx, e);
-                continue;
-            }
-            const sprite = getEnemySprite(e.type, e.size);
-            if (sprite) {
-                ctx.drawImage(sprite, e.x - sprite.width / 2, e.y - sprite.height / 2);
-                // Cheap HP bar (cached sprite can't reflect current HP).
-                const pct = Math.max(0, e.hp / e.maxHp);
-                if (pct < 1) {
-                    const w = 30;
-                    ctx.fillStyle = '#222';
-                    ctx.fillRect(e.x - w / 2, e.y - e.size - 10, w, 3);
-                    ctx.fillStyle = pct > 0.5 ? '#44ff44' : pct > 0.25 ? '#ffaa33' : '#ff4444';
-                    ctx.fillRect(e.x - w / 2, e.y - e.size - 10, w * pct, 3);
-                }
-            } else {
-                renderEnemy(ctx, e);
-            }
-        }
-    }
-
     /**
      * Draws a faint grid in arena/world space. Because we're inside the
      * world-space transform (-camera + shake) we can just iterate from
