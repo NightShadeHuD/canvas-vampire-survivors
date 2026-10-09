@@ -20,11 +20,11 @@
 
 export class SpatialHash {
     /** Bucket edge length in world units. */
-    cell: number;
+    declare cell: number;
     /** Bucket key -> objects currently in that bucket. */
-    map: Map<string, object[]>;
+    declare map: Map<string, object[]>;
     /** Number of objects inserted; bucket arrays are not counted. */
-    _size: number;
+    declare _size: number;
     /**
      * @param {number} cell - cell edge length in world units (px). 64 is a
      *     good default for this game: matches the biggest non-boss enemy
@@ -125,7 +125,7 @@ export class SpatialHash {
         return best;
     }
 
-    /** Alias used throughout `weapons.ts`/`entities.js`. */
+    /** Alias used throughout `weapons.ts`/`entities.ts`. */
     findNearestEnemy(x, y, maxRange) {
         return this.findNearest(x, y, maxRange);
     }

@@ -41,9 +41,9 @@ export function normaliseKonamiKey(k) {
 
 export class KonamiDetector {
     /** How many steps of the sequence have matched so far. */
-    _idx: number;
+    declare _idx: number;
     /** True once the sequence has fired, until the player backs out. */
-    _fired: boolean;
+    declare _fired: boolean;
     /** Called on the key press that completes the sequence. */
     onUnlock: () => void;
     constructor(onUnlock = () => {}) {

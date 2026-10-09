@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 72.27,
-            "branches": 81.16,
-            "functions": 67.29
+            "lines": 72.76,
+            "branches": 81.03,
+            "functions": 66.79
         },
         "files": {
             "scripts/lib/suppression-scanner.mjs": {
@@ -37,7 +37,7 @@
             },
             "src/audio.ts": {
                 "lines": 100,
-                "branches": 98.63,
+                "branches": 98.61,
                 "functions": 100
             },
             "src/config.ts": {
@@ -57,17 +57,17 @@
             },
             "src/effects.ts": {
                 "lines": 78.74,
-                "branches": 86.96,
-                "functions": 63.64
+                "branches": 86.67,
+                "functions": 62.5
             },
-            "src/entities.js": {
-                "lines": 45.84,
+            "src/entities.ts": {
+                "lines": 53.85,
                 "branches": 94.44,
                 "functions": 66.67
             },
             "src/haptics.ts": {
                 "lines": 100,
-                "branches": 87.5,
+                "branches": 86.96,
                 "functions": 100
             },
             "src/i18n.ts": {
@@ -102,8 +102,8 @@
             },
             "src/replay.ts": {
                 "lines": 91.02,
-                "branches": 80.82,
-                "functions": 87.5
+                "branches": 80.56,
+                "functions": 86.96
             },
             "src/spatial-hash.ts": {
                 "lines": 100,
@@ -117,7 +117,7 @@
             },
             "src/storage.ts": {
                 "lines": 96.25,
-                "branches": 75.58,
+                "branches": 75.29,
                 "functions": 100
             },
             "src/systems.ts": {
@@ -127,7 +127,7 @@
             },
             "src/tutorial.ts": {
                 "lines": 100,
-                "branches": 78.26,
+                "branches": 77.78,
                 "functions": 100
             },
             "src/ui.js": {

@@ -59,16 +59,16 @@ export const TUTORIAL_STEPS = [
 ];
 
 export class TutorialState {
-    active: boolean;
-    stepIndex: number;
+    declare active: boolean;
+    declare stepIndex: number;
     /** Per-step counters, reset on each transition. */
-    _moveSeconds: number;
-    _autoAttackSeconds: number;
-    _orbsPicked: number;
-    _levelUps: number;
-    _pauses: number;
-    completed: boolean;
-    skipped: boolean;
+    declare _moveSeconds: number;
+    declare _autoAttackSeconds: number;
+    declare _orbsPicked: number;
+    declare _levelUps: number;
+    declare _pauses: number;
+    declare completed: boolean;
+    declare skipped: boolean;
     /**
      * @param {object} [opts]
      * @param {boolean} [opts.active=false]   start disabled until host opts in

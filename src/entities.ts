@@ -19,6 +19,25 @@ import { CONFIG } from './config.ts';
 import { ENEMIES } from './data.ts';
 
 export class Player {
+    declare x: number;
+    declare y: number;
+    declare size: number;
+    declare hp: number;
+    declare maxHp: number;
+    /** Maximum health before passive bonuses are applied. */
+    declare baseMaxHp: number;
+    declare level: number;
+    declare exp: number;
+    declare expToNext: number;
+    declare weapons: any[];
+    /** Keyed by passive `def.id`, which is lowercase. */
+    declare passives: Record<string, { def: any; count: number }>;
+    declare dead: boolean;
+    declare invincible: boolean;
+    /** Seconds of invincibility remaining, set by `takeDamage`. */
+    declare invincibleTimer: number;
+    /** Seconds since the player was last hit; drives the no-hit award. */
+    declare unhitTimer: number;
     constructor(x, y) {
         this.x = x;
         this.y = y;
@@ -263,7 +282,74 @@ export function registerWeaponClass(_cls) {
 // ---------------------------------------------------------------------------
 // Enemy
 // ---------------------------------------------------------------------------
+/**
+ * A bestiary entry.
+ *
+ * Archetype-specific tuning lives in the optional tail: a bomber reads
+ * `fuseRange`/`fuseTime`/`blastRadius`/`blastDamage`, a ranged enemy reads
+ * `firingRange`/`fireCooldown`, and so on. The index signature keeps that open
+ * so adding an archetype does not require editing this interface, while the
+ * fields every enemy has stay concretely typed.
+ */
+export interface EnemyDef {
+    id: string;
+    name: string;
+    archetype: string;
+    hp: number;
+    speed: number;
+    damage: number;
+    exp: number;
+    color: string;
+    size: number;
+    boss?: boolean;
+    splitter?: boolean;
+    splitCount?: number;
+    /** What a splitter leaves behind on death. */
+    splitInto?: string;
+    [key: string]: any;
+}
+
 export class Enemy {
+    declare x: number;
+    declare y: number;
+    declare size: number;
+    declare hp: number;
+    declare maxHp: number;
+    declare speed: number;
+    declare damage: number;
+    /** Experience granted on death. */
+    declare expValue: number;
+    declare id: string;
+    /** The bestiary entry this enemy was spawned from. */
+    declare type: EnemyDef;
+    declare archetype: string;
+    declare color: string;
+    declare boss: boolean;
+    /// --- Per-archetype state. Only the matching archetype reads its own. ---
+    declare ability: string | null;
+    declare abilityTimer: number;
+    declare bomber: boolean;
+    declare cloneTimer: number;
+    /** Seconds of dash remaining; 0 when not dashing. */
+    declare dashActive: number;
+    declare dashAngle: number;
+    declare dashTimer: number;
+    declare dasher: boolean;
+    declare fireTimer: number;
+    /** Counts down after a hit to tint the sprite. */
+    declare flashTimer: number;
+    declare fuseArmed: boolean;
+    declare fuseTimer: number;
+    declare illusionist: boolean;
+    /** A summon produced by an illusionist; grants no experience. */
+    declare isClone: boolean;
+    declare ranged: boolean;
+    declare shieldHp: number;
+    declare shielded: boolean;
+    /** Slow applied on contact, as a fraction. */
+    declare slowPct: number;
+    declare slowTimer: number;
+    declare splitter: boolean;
     constructor(x, y, type, hpMult, dmgMult) {
         this.x = x;
         this.y = y;
@@ -526,6 +612,14 @@ export class Enemy {
 // EnemyProjectile (fired by ranged archetypes). Simple straight-line shot.
 // ---------------------------------------------------------------------------
 export class EnemyProjectile {
+    declare x: number;
+    declare y: number;
+    declare vx: number;
+    declare vy: number;
+    declare damage: number;
+    declare life: number;
+    declare size: number;
+    declare shouldRemove: boolean;
     constructor(x, y, angle, speed, damage) {
         this.x = x;
         this.y = y;
@@ -572,6 +666,34 @@ export class EnemyProjectile {
 // Projectile
 // ---------------------------------------------------------------------------
 export class Projectile {
+    declare x: number;
+    declare y: number;
+    declare startX: number;
+    declare startY: number;
+    declare vx: number;
+    declare vy: number;
+    declare angle: number;
+    /** Curved flight, used only as a guard in `update()`. */
+    declare arc: boolean;
+    declare boomerang: boolean;
+    declare damage: number;
+    /** The weapon definition that fired this, for evolution checks. */
+    declare def: any;
+    declare explode: boolean;
+    declare explodeRadius: number;
+    declare hitEnemies: Set<any>;
+    declare id: string;
+    declare level: number;
+    declare life: number;
+    /** Range cap in world units. */
+    declare maxDist: number;
+    declare piercing: boolean;
+    declare shouldRemove: boolean;
+    declare size: number;
+    declare speed: number;
+    /** Distance travelled so far; compared against `maxDist`. */
+    declare travelDist: number;
+    declare homing: boolean;
     constructor(x, y, angle, def, damage, level, player) {
         this.x = x;
         this.y = y;
@@ -723,6 +845,16 @@ export class Projectile {
 // Orbit weapon, which owns a set of shards and updates them each tick.
 // ---------------------------------------------------------------------------
 export class OrbitShard {
+    declare x: number;
+    declare y: number;
+    declare angle: number;
+    declare damage: number;
+    /** Enemy -> seconds until this shard may hit it again. */
+    declare hitTimers: Map<any, number>;
+    declare index: number;
+    declare radius: number;
+    declare total: number;
+    declare weapon: any;
     constructor(weapon, index, total, radius, damage) {
         this.weapon = weapon;
         this.index = index;
@@ -779,6 +911,14 @@ export class OrbitShard {
 // Mine: dropped at the hero's location, arms during `fuse` then detonates.
 // ---------------------------------------------------------------------------
 export class Mine {
+    declare x: number;
+    declare y: number;
+    declare damage: number;
+    declare fuse: number;
+    declare maxFuse: number;
+    /** Blast radius. */
+    declare radius: number;
+    declare shouldRemove: boolean;
     constructor(x, y, radius, damage, fuse) {
         this.x = x;
         this.y = y;
@@ -839,6 +979,14 @@ export class Mine {
 // Exp Orb
 // ---------------------------------------------------------------------------
 export class ExpOrb {
+    declare x: number;
+    declare y: number;
+    declare life: number;
+    /** Units per second once magnetised. */
+    declare magnetSpeed: number;
+    declare shouldRemove: boolean;
+    declare size: number;
+    declare value: number;
     constructor(x, y, value) {
         this.x = x;
         this.y = y;
@@ -899,7 +1047,16 @@ export class ExpOrb {
 // Particle / FloatingText
 // ---------------------------------------------------------------------------
 export class Particle {
-    constructor(x, y, color, opts = {}) {
+    declare x: number;
+    declare y: number;
+    declare vx: number;
+    declare vy: number;
+    declare color: string;
+    declare decay: number;
+    declare friction: number;
+    declare life: number;
+    declare size: number;
+    constructor(x, y, color, opts: Record<string, any> = {}) {
         this.x = x;
         this.y = y;
         this.color = color;
@@ -932,7 +1089,19 @@ export class Particle {
 }
 
 export class FloatingText {
-    constructor(text, x, y, color, opts = {}) {
+    declare x: number;
+    declare y: number;
+    declare text: string;
+    declare color: string;
+    /** Rendered larger and emphasised when the hit was a critical. */
+    declare crit: boolean;
+    declare life: number;
+    declare size: number;
+    /** Initial upward velocity; decays over the text's lifetime. */
+    declare vy: number;
+    /** Drift applied while rising. */
+    declare weight: number;
+    constructor(text, x, y, color, opts: Record<string, any> = {}) {
         this.text = text;
         this.x = x;
         this.y = y;

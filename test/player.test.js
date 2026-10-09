@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Player } from '../src/entities.js';
+import { Player } from '../src/entities.ts';
 import { CONFIG } from '../src/config.ts';
 
 // Minimal game scaffold that satisfies what Player.update touches.

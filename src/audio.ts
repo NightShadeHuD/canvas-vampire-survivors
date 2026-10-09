@@ -12,18 +12,18 @@
  */
 
 export class AudioEngine {
-    settings: Record<string, any>;
-    ctx: AudioContext | null;
-    masterGain: GainNode | null;
-    sfxGain: GainNode | null;
-    musicGain: GainNode | null;
+    declare settings: Record<string, any>;
+    declare ctx: AudioContext | null;
+    declare masterGain: GainNode | null;
+    declare sfxGain: GainNode | null;
+    declare musicGain: GainNode | null;
     /** Handle for the music scheduler; null when music is stopped. */
-    musicInterval: ReturnType<typeof setInterval> | null;
-    enabled: boolean;
+    declare musicInterval: ReturnType<typeof setInterval> | null;
+    declare enabled: boolean;
     /** True once the first user gesture has resumed the context. */
-    unlocked: boolean;
+    declare unlocked: boolean;
     /** Cached white-noise buffer, built lazily by `_noiseBuffer()`. */
-    _noise: AudioBuffer | null;
+    declare _noise: AudioBuffer | null;
     constructor(settings) {
         this.settings = settings;
         this.ctx = null;
