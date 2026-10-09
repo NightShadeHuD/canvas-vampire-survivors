@@ -10,7 +10,12 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkTables, checkReferences, checkDocuments } from '../scripts/lib/rule-docs.mjs';
+import {
+    checkTables,
+    checkReferences,
+    checkDocuments,
+    checkAcceptanceCriteria
+} from '../scripts/lib/rule-docs.mjs';
 
 /** An `exists` probe backed by a plain list of paths. */
 const probe =
@@ -145,4 +150,94 @@ test('rule-docs/check: a clean document set reports nothing', () => {
     const documents = [{ path: 'a.md', text: '| A |\n| --- |\n| 1 |\n\nSee `docs/b.md`.' }];
     const { findings } = checkDocuments(documents, probe('docs/b.md'));
     assert.deepEqual(findings, []);
+});
+
+// ---------------------------------------------------------------------------
+// acceptance criteria
+// ---------------------------------------------------------------------------
+
+/** A criteria table with the given rows. */
+function criteriaDoc(...rows: string[]): string {
+    return [
+        '## Acceptance criteria',
+        '',
+        '| Id | The claim | The check | The evidence | Tier | Status |',
+        '| --- | --- | --- | --- | --- | --- |',
+        ...rows
+    ].join('\n');
+}
+
+const criterion = (id: string, evidence = '`585 tests, 0 skipped`, floor 585') =>
+    `| ${id} | A claim. | \`npm run check:suite\` | ${evidence} | Production | MET |`;
+
+test('rule-docs/criteria: a sound table passes', () => {
+    assert.deepEqual(checkAcceptanceCriteria('docs/A.md', criteriaDoc(criterion('AC-1'))), []);
+});
+
+test('rule-docs/criteria: evidence that restates the build is refused', () => {
+    // ACCEPTANCE.md's own rule: "A criterion whose evidence column is 'tests
+    // pass' is not a criterion. It restates the build."
+    const findings = checkAcceptanceCriteria(
+        'docs/A.md',
+        criteriaDoc(criterion('AC-1', 'tests pass'))
+    );
+    assert.equal(findings.length, 1);
+    assert.match(findings[0], /restates the build rather than settling the claim/);
+});
+
+test('rule-docs/criteria: an escaped pipe inside a cell is one cell', () => {
+    // The regression. `\|` is legitimate Markdown, and a criteria row runs
+    // `git ls-files 'src/*.js' \| wc -l` — reading it as a cell boundary
+    // reported defects in a correct document.
+    const row =
+        "| AC-1 | No JavaScript. | `git ls-files 'src/*.js' \\| wc -l` | `0` | Functional | MET |";
+    assert.deepEqual(checkAcceptanceCriteria('docs/A.md', criteriaDoc(row)), []);
+});
+
+test('rule-docs/criteria: a gap in the numbering is refused', () => {
+    const findings = checkAcceptanceCriteria(
+        'docs/A.md',
+        criteriaDoc(criterion('AC-1'), criterion('AC-3'))
+    );
+    assert.match(findings.join('\n'), /has no AC-2/);
+});
+
+test('rule-docs/criteria: a duplicate id is refused', () => {
+    const findings = checkAcceptanceCriteria(
+        'docs/A.md',
+        criteriaDoc(criterion('AC-1'), criterion('AC-1'))
+    );
+    assert.match(findings.join('\n'), /defines AC-1 more than once/);
+});
+
+test('rule-docs/criteria: a blank check is refused', () => {
+    const row = '| AC-1 | A claim. |  | `0` | Functional | MET |';
+    assert.match(
+        checkAcceptanceCriteria('docs/A.md', criteriaDoc(row)).join('\n'),
+        /AC-1 has no check/
+    );
+});
+
+test('rule-docs/criteria: a blank status is refused', () => {
+    const row = '| AC-1 | A claim. | `cmd` | `0` | Functional |  |';
+    assert.match(
+        checkAcceptanceCriteria('docs/A.md', criteriaDoc(row)).join('\n'),
+        /AC-1 has no status/
+    );
+});
+
+test('rule-docs/criteria: a struck-through criterion keeps its number', () => {
+    const struck = '| ~~AC-2~~ | Was a claim. | `cmd` | `0` | Functional | RESOLVED at abc123 |';
+    const findings = checkAcceptanceCriteria(
+        'docs/A.md',
+        criteriaDoc(criterion('AC-1'), struck, criterion('AC-3'))
+    );
+    assert.deepEqual(findings, [], 'a discharged criterion holds its number');
+});
+
+test('rule-docs/criteria: another document is not scanned for criteria', () => {
+    // Only the section that declares them is measured, so a sentence elsewhere
+    // saying "AC-1" is not read as a definition.
+    const text = 'We cite AC-1 here.\n\n| Id | X |\n| --- | --- |\n| AC-9 | y |';
+    assert.deepEqual(checkAcceptanceCriteria('docs/A.md', text), []);
 });

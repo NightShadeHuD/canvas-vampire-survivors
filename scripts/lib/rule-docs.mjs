@@ -50,10 +50,18 @@ const DOCUMENT_REFERENCE = /`((?:docs\/)?[A-Za-z][A-Za-z0-9._-]*\.md)`/g;
 
 /** Split a markdown table row into its cells. */
 function cells(line) {
-    return line
-        .trim()
-        .replace(/^\||\|$/g, '')
-        .split('|');
+    return (
+        line
+            .trim()
+            .replace(/^\||\|$/g, '')
+            // `\|` is a legitimate Markdown escape for a pipe INSIDE a cell,
+            // and this repository uses it: a criteria row runs
+            // `git ls-files 'src/*.js' \| wc -l`. Splitting on the raw character
+            // read that row one cell too wide and reported defects in a correct
+            // document — measured on the first run of the acceptance check.
+            .split(/(?<!\\)\|/)
+            .map((cell) => cell.trim())
+    );
 }
 
 /**
@@ -133,6 +141,112 @@ export function checkReferences(documentPath, text, exists, owed = new Set()) {
     return findings;
 }
 
+/** An acceptance criterion's id: `AC-14`, optionally struck through. */
+const CRITERION_ID = /^(?:~~)?\s*(AC-\d+)\s*(?:~~)?$/;
+/** Evidence that restates the build rather than producing a value. */
+const BUILD_RESTATEMENT = /^\s*(all\s+)?tests?\s+pass(es)?\s*\.?\s*$/i;
+
+/**
+ * Acceptance criteria must be claims a command can settle.
+ *
+ * Adopted from the agent-scaffold's ACCEPTANCE.md, whose central rule is the one
+ * this enforces: *"A criterion whose evidence column is 'tests pass' is not a
+ * criterion. It restates the build."*
+ *
+ * Checked here: the ids do not renumber or develop gaps (a vanished number takes
+ * every citation to it with it), no load-bearing cell is blank, and the evidence
+ * is a produced value rather than a restatement of the suite.
+ *
+ * @param {string} documentPath path used in findings
+ * @param {string} text the document
+ * @returns {string[]}
+ */
+export function checkAcceptanceCriteria(documentPath, text) {
+    const findings = [];
+    const lines = text.split('\n');
+
+    let inSection = false;
+    let header = null;
+    const ids = [];
+
+    for (const [index, line] of lines.entries()) {
+        const lineNumber = index + 1;
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith('## ')) {
+            inSection = /^##\s+Acceptance criteria/i.test(trimmed);
+            header = null;
+            continue;
+        }
+        if (!inSection || !trimmed.startsWith('|')) continue;
+        if (TABLE_SEPARATOR.test(trimmed)) continue;
+
+        const row = cells(trimmed);
+        if (header === null) {
+            header = row;
+            continue;
+        }
+
+        const id = row[0] ?? '';
+        if (!CRITERION_ID.test(id)) continue;
+        ids.push({ id: id.replace(/[~\s]/g, ''), lineNumber });
+
+        if (row.length !== header.length) continue; // checkTables already reports this
+
+        // #, claim, check, evidence, tier, status
+        for (const [cell, label] of [
+            [1, 'claim'],
+            [2, 'check'],
+            [3, 'evidence'],
+            [4, 'tier'],
+            [5, 'status']
+        ]) {
+            if (!row[cell]) {
+                findings.push(`${documentPath}:${lineNumber} ${id} has no ${label}`);
+            }
+        }
+
+        const evidence = row[3] ?? '';
+        if (BUILD_RESTATEMENT.test(evidence)) {
+            findings.push(
+                `${documentPath}:${lineNumber} ${id} uses "${evidence.trim()}" as evidence. ` +
+                    'That restates the build rather than settling the claim — name what the ' +
+                    'check PRODUCES: a count, a hash, a listing, an observation.'
+            );
+        }
+    }
+
+    // Numbering: ids keep their meaning forever, so a gap is a deleted criterion
+    // or a renumbered one, and both take every citation with them.
+    const numbers = ids
+        .map((entry) => Number(entry.id.replace('AC-', '')))
+        .filter((n) => Number.isFinite(n));
+    if (numbers.length) {
+        const low = Math.min(...numbers);
+        const high = Math.max(...numbers);
+        for (let n = low; n <= high; n += 1) {
+            if (!numbers.includes(n)) {
+                findings.push(
+                    `${documentPath} has no AC-${n}. A superseded criterion is STRUCK THROUGH ` +
+                        'and kept, because a number that vanishes takes every citation to it with it'
+                );
+            }
+        }
+        const seen = new Set();
+        for (const entry of ids) {
+            if (seen.has(entry.id)) {
+                findings.push(
+                    `${documentPath}:${entry.lineNumber} defines ${entry.id} more than once, ` +
+                        'which makes every citation of it ambiguous'
+                );
+            }
+            seen.add(entry.id);
+        }
+    }
+
+    return findings;
+}
+
 /**
  * Run both checks over a set of documents.
  *
@@ -148,6 +262,7 @@ export function checkDocuments(documents, exists, owed = new Set()) {
     for (const document of documents) {
         findings.push(...checkTables(document.path, document.text));
         findings.push(...checkReferences(document.path, document.text, exists, owed));
+        findings.push(...checkAcceptanceCriteria(document.path, document.text));
         for (const _ of document.text.matchAll(DOCUMENT_REFERENCE)) references += 1;
     }
 

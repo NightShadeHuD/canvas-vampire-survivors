@@ -63,6 +63,7 @@ if (findings.length) {
 }
 
 console.log(
-    `check-docs: ${loaded.length} document(s), tables well formed, ` +
-        `${references} document reference(s) resolve.`
+    `check-docs: ${loaded.length} document(s); tables well formed, ` +
+        `${references} document reference(s) resolve, acceptance criteria are numbered ` +
+        'without gaps and carry evidence that is not a restatement of the build.'
 );

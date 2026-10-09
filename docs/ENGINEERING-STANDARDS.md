@@ -101,7 +101,7 @@ It runs, in order, and stops at the first failure:
 | Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
 | Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision           |
 | Shortcut register  | `npm run check:register`       | Every shortcut is bounded, tracked and correctly cited      |
-| Rule documents     | `npm run check:docs`           | Tables are well formed and every citation resolves          |
+| Rule documents     | `npm run check:docs`           | Tables, citations and acceptance criteria all hold          |
 | Date-hermeticity   | `npm run test:clock`           | No test depends on today's date                             |
 | Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
 | Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
