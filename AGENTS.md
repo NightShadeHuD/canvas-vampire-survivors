@@ -80,14 +80,14 @@ npm run setup                     # installs the git hooks
 | No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                     |
 | Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                 |
 | No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                      |
-| Every source file is really linted                      | `scripts/check-lint-coverage.mjs`                |
-| No test depends on today's date                         | `scripts/test-clock.mjs`                         |
+| Every source file is really linted                      | `scripts/check-coverage.mjs`                     |
+| No test depends on today's date                         | `scripts/check-clocks.mjs`                       |
 | The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
 | Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |
 | All of the above, in order, locally                     | `.githooks/pre-push` → `npm run verify`          |
 | All of the above, unbypassably                          | CI job **Verify**, required by branch protection |
 
-`check:lint-coverage` exists because ESLint prints **nothing** — no warning, exit
+`check:coverage` exists because ESLint prints **nothing** — no warning, exit
 0 — for a file that no config block matches, so `npm run lint` can report success
 while whole directories are never linted. That is exactly what had happened to
 `scripts/`, `service-worker.js` and `game.js`. Never trust `eslint .` on its own;
@@ -107,7 +107,7 @@ back into a project with good intentions instead of guarantees.
   fix lands with the test that would have caught it.
 - **Tests are hermetic.** Inject time; never read the wall clock. (Two tests
   once passed for months and then failed forever because they hardcoded a date
-  against a 14-day prune window. `scripts/test-clock.mjs` exists because of
+  against a 14-day prune window. `scripts/check-clocks.mjs` exists because of
   that.)
 - **Boundaries get pinned.** If code prunes, caps, or expires, test the value
   exactly on the boundary and one past it.

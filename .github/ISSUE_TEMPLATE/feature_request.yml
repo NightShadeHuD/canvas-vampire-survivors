@@ -1,61 +1,61 @@
 name: Feature request
 description: Suggest a new weapon, passive, enemy, system, or quality-of-life improvement.
-title: "[Feature]: "
-labels: ["enhancement"]
+title: '[Feature]: '
+labels: ['enhancement']
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for helping shape the game! Please describe your idea with enough detail
-        that a contributor could pick it up and run with it.
-  - type: textarea
-    id: problem
-    attributes:
-      label: Problem / motivation
-      description: What gap does this fill? What player experience is currently missing?
-      placeholder: e.g. Late-game runs feel samey because all weapons have single-target DPS.
-    validations:
-      required: true
-  - type: textarea
-    id: proposal
-    attributes:
-      label: Proposed solution
-      description: Describe the feature. For gameplay changes include rough numbers if you can.
-    validations:
-      required: true
-  - type: dropdown
-    id: scope
-    attributes:
-      label: Scope
-      options:
-        - New weapon
-        - New passive
-        - New enemy / boss
-        - UI / HUD
-        - Accessibility
-        - Performance
-        - Audio
-        - Internationalization
-        - Tooling / build
-        - Other
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: Other approaches you thought about and why you rejected them.
-  - type: textarea
-    id: additional
-    attributes:
-      label: Additional context
-      description: Mockups, references, links to similar games, etc.
-  - type: checkboxes
-    id: checks
-    attributes:
-      label: Pre-submission checklist
-      options:
-        - label: I searched existing issues and discussions for duplicates.
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for helping shape the game! Please describe your idea with enough detail
+              that a contributor could pick it up and run with it.
+    - type: textarea
+      id: problem
+      attributes:
+          label: Problem / motivation
+          description: What gap does this fill? What player experience is currently missing?
+          placeholder: e.g. Late-game runs feel samey because all weapons have single-target DPS.
+      validations:
           required: true
-        - label: This feature aligns with the zero-dependency, vanilla-JS goal of the project.
+    - type: textarea
+      id: proposal
+      attributes:
+          label: Proposed solution
+          description: Describe the feature. For gameplay changes include rough numbers if you can.
+      validations:
           required: true
+    - type: dropdown
+      id: scope
+      attributes:
+          label: Scope
+          options:
+              - New weapon
+              - New passive
+              - New enemy / boss
+              - UI / HUD
+              - Accessibility
+              - Performance
+              - Audio
+              - Internationalization
+              - Tooling / build
+              - Other
+      validations:
+          required: true
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Alternatives considered
+          description: Other approaches you thought about and why you rejected them.
+    - type: textarea
+      id: additional
+      attributes:
+          label: Additional context
+          description: Mockups, references, links to similar games, etc.
+    - type: checkboxes
+      id: checks
+      attributes:
+          label: Pre-submission checklist
+          options:
+              - label: I searched existing issues and discussions for duplicates.
+                required: true
+              - label: This feature aligns with the zero-dependency, vanilla-JS goal of the project.
+                required: true

@@ -24,8 +24,8 @@ const repoRoot = path.resolve(here, '..');
 const STEPS = [
     { script: 'lint', proves: 'no undefined globals, no dead identifiers, style rules hold' },
     {
-        script: 'check:lint-coverage',
-        proves: 'every tracked source file is actually matched by a lint config block'
+        script: 'check:coverage',
+        proves: 'lint, format and test discovery actually reach every file'
     },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },

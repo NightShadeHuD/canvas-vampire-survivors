@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @file scripts/test-live-deploy.js
+ * @file scripts/smoke-live-deploy.js
  * @description Real-browser smoke test against the **live GitHub Pages**
  * deployment. Unlike `runtime-smoke.js` (which spawns a local server), this
  * one verifies the production URL is actually playable end-to-end:
@@ -17,7 +17,7 @@
  *
  * Exits non-zero if any console.error or pageerror occurred during play.
  *
- * Usage: `node scripts/test-live-deploy.js`
+ * Usage: `node scripts/smoke-live-deploy.js`
  *
  * Notes:
  *   - Playwright is the only required dep (already a devDep).

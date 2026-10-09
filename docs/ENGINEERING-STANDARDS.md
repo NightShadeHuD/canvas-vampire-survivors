@@ -91,16 +91,22 @@ npm run verify
 
 It runs, in order, and stops at the first failure:
 
-| Step             | Command                       | Proves                                                       |
-| ---------------- | ----------------------------- | ------------------------------------------------------------ |
-| Lint             | `npm run lint`                | No undefined globals, no dead identifiers, style rules hold  |
-| Lint coverage    | `npm run check:lint-coverage` | Every source file is actually matched by a lint config block |
-| Format           | `npm run format:check`        | Code matches the project's Prettier contract                 |
-| Unit tests       | `npm test`                    | Behaviour is as specified                                    |
-| Date-hermeticity | `npm run test:clock`          | No test depends on today's date                              |
-| Baseline         | `npm run check:baseline`      | No new failures, no unratcheted suppressions                 |
-| Hygiene          | `npm run check:hygiene`       | No debuggers, no `.only`, no conflict markers, no secrets    |
-| Build            | `npm run build`               | The shipped artifact actually builds                         |
+| Step             | Command                      | Proves                                                      |
+| ---------------- | ---------------------------- | ----------------------------------------------------------- |
+| Lint             | `npm run lint`               | No undefined globals, no dead identifiers, style rules hold |
+| Coverage         | `npm run check:coverage`     | Lint, format and test discovery actually reach every file   |
+| Format           | `npm run format:check`       | Code matches the project's Prettier contract                |
+| Unit tests       | `npm test`                   | Behaviour is as specified                                   |
+| Date-hermeticity | `npm run test:clock`         | No test depends on today's date                             |
+| Baseline         | `npm run check:baseline`     | No new failures, no stale baseline entries                  |
+| Suppressions     | `npm run check:suppressions` | Every suppression is within its declared ceiling            |
+| Hygiene          | `npm run check:hygiene`      | No debuggers, no `.only`, no conflict markers, no secrets   |
+
+`scripts/check-coverage.mjs` verifies this table in both directions: every step
+in `scripts/verify.mjs` must appear here, and every command listed here must
+exist in `package.json`. That second direction is not theoretical — this table
+previously listed a build step that has never existed. It will be added here
+when the build step is real.
 
 `npm run verify` is the only thing that may be described as "green". A partial
 run is a partial run.
@@ -180,16 +186,16 @@ Rules for gaps:
 
 ## 6. Enforcement map
 
-| Rule                        | Mechanism                         | Runs           |
-| --------------------------- | --------------------------------- | -------------- |
-| Tests pass, no new failures | `scripts/check-baseline.mjs`      | pre-push, CI   |
-| Suppressions bounded        | `scripts/check-suppressions.mjs`  | pre-commit, CI |
-| Style + format              | eslint, prettier                  | pre-commit, CI |
-| Lint coverage is real       | `scripts/check-lint-coverage.mjs` | pre-push, CI   |
-| Hermetic tests              | `scripts/test-clock.mjs`          | pre-push, CI   |
-| No debug leftovers          | `scripts/check-hygiene.mjs`       | pre-commit, CI |
-| Reviewed before merge       | PR template + branch protection   | GitHub         |
-| Everything at once          | `npm run verify`                  | pre-push, CI   |
+| Rule                        | Mechanism                        | Runs           |
+| --------------------------- | -------------------------------- | -------------- |
+| Tests pass, no new failures | `scripts/check-baseline.mjs`     | pre-push, CI   |
+| Suppressions bounded        | `scripts/check-suppressions.mjs` | pre-commit, CI |
+| Style + format              | eslint, prettier                 | pre-commit, CI |
+| Coverage is real            | `scripts/check-coverage.mjs`     | pre-push, CI   |
+| Hermetic tests              | `scripts/check-clocks.mjs`       | pre-push, CI   |
+| No debug leftovers          | `scripts/check-hygiene.mjs`      | pre-commit, CI |
+| Reviewed before merge       | PR template + branch protection  | GitHub         |
+| Everything at once          | `npm run verify`                 | pre-push, CI   |
 
 ### Why "lint coverage is real" is its own rule
 

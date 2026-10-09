@@ -20,7 +20,7 @@
 /scripts/check-baseline.mjs      @NightShadeHuD
 /scripts/check-suppressions.mjs  @NightShadeHuD
 /scripts/check-hygiene.mjs       @NightShadeHuD
-/scripts/test-clock.mjs          @NightShadeHuD
+/scripts/check-clocks.mjs          @NightShadeHuD
 /scripts/boot-smoke.mjs          @NightShadeHuD
 /scripts/a11y-audit.mjs          @NightShadeHuD
 /.githooks/                      @NightShadeHuD

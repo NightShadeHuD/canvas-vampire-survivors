@@ -1,7 +1,7 @@
 // ESLint v9+ flat config.
 // See https://eslint.org/docs/latest/use/configure/configuration-files
 //
-// Coverage is enforced, not assumed: scripts/check-lint-coverage.mjs fails the
+// Coverage is enforced, not assumed: scripts/check-coverage.mjs fails the
 // build if any tracked source file matches none of the `files:` blocks below.
 // That check exists because ESLint reports *nothing* — no warning, exit 0 —
 // for an uncovered file, which is how `scripts/`, `service-worker.js` and
@@ -108,7 +108,7 @@ const PLAYWRIGHT_DRIVERS = [
     'scripts/boot-smoke.mjs',
     'scripts/extended-smoke.js',
     'scripts/runtime-smoke.js',
-    'scripts/test-live-deploy.js'
+    'scripts/smoke-live-deploy.js'
 ];
 
 const PLAYWRIGHT_BROWSER = {

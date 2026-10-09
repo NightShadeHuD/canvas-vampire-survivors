@@ -9,47 +9,47 @@ name: CI
 # never drift apart. See docs/ENGINEERING-STANDARDS.md §2 and §6.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 permissions:
-  contents: read
+    contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Verify
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    verify:
+        name: Verify
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      # Node 24: required for native TypeScript type stripping, which the
-      # migration relies on to run test/*.ts directly with no build step.
-      # Node 20 cannot do this.
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
+            # Node 24: required for native TypeScript type stripping, which the
+            # migration relies on to run test/*.ts directly with no build step.
+            # Node 20 cannot do this.
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Install dependencies
+              run: npm ci
 
-      # The boot-smoke and a11y gates drive the real game in a real browser, so
-      # CI needs one. --with-deps pulls the OS libraries Chromium links against.
-      - name: Install Chromium for the browser gates
-        run: npx playwright install --with-deps chromium
+            # The boot-smoke and a11y gates drive the real game in a real browser, so
+            # CI needs one. --with-deps pulls the OS libraries Chromium links against.
+            - name: Install Chromium for the browser gates
+              run: npx playwright install --with-deps chromium
 
-      # Tier 1 (no browser): lint, format, unit tests, date-hermeticity, test
-      # baseline, suppression ceilings, hygiene.
-      # Tier 2 (browser): boot smoke through the critical path, axe a11y scan
-      # of every surface.
-      # Both stop at the first failure.
-      - name: Run the full verify gate
-        run: npm run verify:all
+            # Tier 1 (no browser): lint, format, unit tests, date-hermeticity, test
+            # baseline, suppression ceilings, hygiene.
+            # Tier 2 (browser): boot smoke through the critical path, axe a11y scan
+            # of every surface.
+            # Both stop at the first failure.
+            - name: Run the full verify gate
+              run: npm run verify:all
