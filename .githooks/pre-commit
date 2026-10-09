@@ -1,0 +1,29 @@
+#!/bin/sh
+#
+# pre-commit — fast feedback gates.
+# See docs/ENGINEERING-STANDARDS.md §6.
+#
+# Deliberately limited to the checks that are cheap and that catch mistakes
+# which are always wrong. The full gate runs on pre-push and in CI.
+#
+# Bypassing with `git commit --no-verify` is possible, which is exactly why CI
+# is the authority and not this hook.
+
+set -e
+
+# Only run inside the repo root, and only if npm is available.
+command -v npm >/dev/null 2>&1 || {
+    echo "pre-commit: npm not found, skipping local gates (CI will still enforce them)."
+    exit 0
+}
+
+echo "pre-commit: fast gates"
+echo
+
+npm run --silent check:suppressions
+npm run --silent check:hygiene
+npm run --silent format:check
+npm run --silent lint
+
+echo
+echo "pre-commit: ok — full gate runs on push (npm run verify)"

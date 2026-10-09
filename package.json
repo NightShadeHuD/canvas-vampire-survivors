@@ -6,6 +6,7 @@
     "type": "commonjs",
     "private": false,
     "scripts": {
+        "setup": "node scripts/setup.mjs",
         "start": "node server.js",
         "dev": "node server.js",
         "lint": "eslint \"src/**/*.js\" \"test/**/*.js\" server.js",
@@ -14,7 +15,15 @@
         "format:check": "prettier --check \"**/*.{js,mjs,cjs,html,css,md,json}\"",
         "test": "node --test test/*.test.js",
         "test:clock": "node scripts/test-clock.mjs",
-        "check": "npm run lint && npm run format:check && npm test && npm run test:clock",
+        "check:baseline": "node scripts/check-baseline.mjs",
+        "check:suppressions": "node scripts/check-suppressions.mjs",
+        "check:hygiene": "node scripts/check-hygiene.mjs",
+        "verify": "node scripts/verify.mjs",
+        "check": "npm run verify",
+        "a11y": "node scripts/a11y-audit.mjs",
+        "smoke:boot": "node scripts/boot-smoke.mjs",
+        "verify:browser": "npm run smoke:boot && npm run a11y",
+        "verify:all": "npm run verify && npm run verify:browser",
         "smoke": "node scripts/runtime-smoke.js",
         "smoke:live": "node scripts/test-live-deploy.js",
         "smoke:extended": "node scripts/extended-smoke.js"
@@ -39,16 +48,16 @@
     "author": "Survivor contributors",
     "license": "MIT",
     "engines": {
-        "node": ">=18"
+        "node": ">=22.18.0"
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/ricardo-foundry/canvas-vampire-survivors.git"
+        "url": "git+https://github.com/NightShadeHuD/canvas-vampire-survivors.git"
     },
     "bugs": {
-        "url": "https://github.com/ricardo-foundry/canvas-vampire-survivors/issues"
+        "url": "https://github.com/NightShadeHuD/canvas-vampire-survivors/issues"
     },
-    "homepage": "https://github.com/ricardo-foundry/canvas-vampire-survivors#readme",
+    "homepage": "https://github.com/NightShadeHuD/canvas-vampire-survivors#readme",
     "devDependencies": {
         "@axe-core/playwright": "^4.11.2",
         "eslint": "^9.0.0",

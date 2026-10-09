@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# pre-push — the full gate, same as CI.
+# See docs/ENGINEERING-STANDARDS.md §2 and §6.
+#
+# Pushing is the last point where a mistake is still cheap to fix, so this runs
+# everything `npm run verify` runs. If it fails, nothing is pushed.
+
+set -e
+
+command -v npm >/dev/null 2>&1 || {
+    echo "pre-push: npm not found, skipping local gate (CI will still enforce it)."
+    exit 0
+}
+
+npm run --silent verify

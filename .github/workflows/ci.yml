@@ -1,5 +1,13 @@
 name: CI
 
+# The authoritative gate. Hooks are fast feedback and can be bypassed with
+# --no-verify; this cannot. Branch protection on `main` requires the `Verify`
+# job to pass before merge.
+#
+# The gates themselves are defined in one place — scripts/verify.mjs and
+# scripts/boot-smoke.mjs / scripts/a11y-audit.mjs — so CI and local runs can
+# never drift apart. See docs/ENGINEERING-STANDARDS.md §2 and §6.
+
 on:
   push:
     branches: [main]
@@ -14,27 +22,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint & format
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Node 24: required for native TypeScript type stripping, which the
+      # migration relies on to run test/*.ts directly with no build step.
+      # Node 20 cannot do this.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint
-        run: npm run lint
+      # The boot-smoke and a11y gates drive the real game in a real browser, so
+      # CI needs one. --with-deps pulls the OS libraries Chromium links against.
+      - name: Install Chromium for the browser gates
+        run: npx playwright install --with-deps chromium
 
-      - name: Check Prettier formatting
-        run: npm run format:check
-
-      - name: Run unit tests
-        run: npm test
+      # Tier 1 (no browser): lint, format, unit tests, date-hermeticity, test
+      # baseline, suppression ceilings, hygiene.
+      # Tier 2 (browser): boot smoke through the critical path, axe a11y scan
+      # of every surface.
+      # Both stop at the first failure.
+      - name: Run the full verify gate
+        run: npm run verify:all

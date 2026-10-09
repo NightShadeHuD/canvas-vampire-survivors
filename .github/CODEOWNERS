@@ -1,7 +1,27 @@
 # CODEOWNERS — automatic review requests on PRs.
 # Format docs: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 #
-# A catch-all that routes every change to the maintainer. Add module-specific
-# owners below as the contributor base grows (e.g. `src/i18n.js @translator-x`).
+# Combined with branch protection on `main` (required "Verify" check, required
+# review), this is what makes "review before commit" a guarantee rather than a
+# habit. See docs/ENGINEERING-STANDARDS.md §1.5 and §6.
+#
+# Add module-specific owners below as the contributor base grows
+# (e.g. `src/i18n.js @translator-x`).
 
-* @Ricardo-M-L
+# Catch-all: every change routes to the maintainer.
+* @NightShadeHuD
+
+# The rules and the gates themselves need explicit, deliberate review.
+# Weakening a gate must never slip through as an incidental change.
+/AGENTS.md                       @NightShadeHuD
+/docs/ENGINEERING-STANDARDS.md   @NightShadeHuD
+/quality-baseline.json           @NightShadeHuD
+/scripts/verify.mjs              @NightShadeHuD
+/scripts/check-baseline.mjs      @NightShadeHuD
+/scripts/check-suppressions.mjs  @NightShadeHuD
+/scripts/check-hygiene.mjs       @NightShadeHuD
+/scripts/test-clock.mjs          @NightShadeHuD
+/scripts/boot-smoke.mjs          @NightShadeHuD
+/scripts/a11y-audit.mjs          @NightShadeHuD
+/.githooks/                      @NightShadeHuD
+/.github/workflows/              @NightShadeHuD
