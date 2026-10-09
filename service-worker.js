@@ -16,25 +16,25 @@
  * of truth, and ESLint v10 rejects eslint-env comments outright.
  */
 
-const CACHE = 'survivor-v2.2.0';
+const CACHE = 'survivor-v3.0.0';
 const ASSETS = [
     './',
     './index.html',
     './styles.css',
     './manifest.json',
-    './src/main.js',
-    './src/config.js',
-    './src/data.js',
-    './src/entities.js',
-    './src/weapons.js',
-    './src/systems.js',
-    './src/effects.js',
-    './src/audio.js',
-    './src/input.js',
-    './src/ui.js',
-    './src/i18n.js',
-    './src/storage.js',
-    './src/achievements.js',
+    './dist/main.js',
+    './dist/config.js',
+    './dist/data.js',
+    './dist/entities.js',
+    './dist/weapons.js',
+    './dist/systems.js',
+    './dist/effects.js',
+    './dist/audio.js',
+    './dist/input.js',
+    './dist/ui.js',
+    './dist/i18n.js',
+    './dist/storage.js',
+    './dist/achievements.js',
     './docs/hero.svg',
     './docs/og-card.svg'
 ];
