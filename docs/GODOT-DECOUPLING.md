@@ -1,6 +1,26 @@
 # Decoupling game logic from DOM and canvas
 
-**Status: surveyed and measured. No code moved yet.**
+**Status: entities and the game render path are decoupled. Complete.**
+
+Outcome, measured:
+
+| Module                    | before | after                                            |
+| ------------------------- | ------ | ------------------------------------------------ |
+| `entities.ts` canvas refs | 167    | **0** (a docblock mentions it)                   |
+| `entities.ts` LOC         | 1142   | 897                                              |
+| `main.ts` canvas refs     | 81     | **10**                                           |
+| `main.ts` LOC             | 1960   | 1846                                             |
+| drawing modules           | none   | `entity-render.ts` (278), `game-render.ts` (155) |
+
+The ten references left in `main.ts` are the platform boundary, not drawing: two
+field declarations, the two lines that acquire the canvas and its 2D context,
+and seven reads of `canvas.width` / `canvas.height` used to size the render
+target. **No drawing logic remains in `Game`.** Acquiring a surface and asking
+its size is what a port replaces, so that is where the line was drawn.
+
+Ten simulation modules are now canvas-free and translate directly: `entities`,
+`weapons`, `pool`, `spatial-hash`, `systems`, `tutorial`, `konami`,
+`achievements`, `data`, `stages`.
 
 The goal asks for the port to be structured so a future Godot/GDScript port stays
 viable. That means the simulation must not require a browser to exist. This
@@ -110,3 +130,38 @@ done and the reason it landed without a regression.
 `ui.ts`, `input.ts`, `storage.ts` and `audio.ts` stay browser-specific. A port
 replaces them; decoupling them would mean inventing an abstraction with exactly
 one implementation, which is more code and no more portability.
+
+---
+
+## Appendix: the cost of `strict`
+
+Phase B's remaining item is `strict`, and it was measured rather than estimated
+by extending the real config:
+
+```
+$ tsc -p tsconfig.json --strict
+949 errors
+```
+
+| Code           | Count   | Meaning                                 |
+| -------------- | ------- | --------------------------------------- |
+| TS7006         | **616** | parameter implicitly `any`              |
+| TS2322         | 63      | type not assignable                     |
+| TS2339         | 51      | property does not exist                 |
+| TS7053         | 36      | implicit `any` from an index expression |
+| TS18047        | 36      | possibly `null` / `undefined`           |
+| TS7005, TS7034 | 61      | variable implicitly `any`               |
+| TS2345         | 27      | argument not assignable                 |
+
+**Two thirds is one mechanical category** — every function parameter that has no
+annotation, written when the file was JavaScript and never revisited. The
+remaining third is the real work: nullability.
+
+TypeScript has no per-file `strict`. `strictNullChecks` and friends are project
+settings, so the documented "ratchet per file" plan cannot be implemented that
+way; the only honest route is to drive the count down and flip the switch when
+it reaches zero. That is a multi-round effort and it is not started.
+
+The worst files are the ones with the most untyped callbacks and stubs:
+`test/audio.test.ts` (89), `src/main.ts` (74), `src/entities.ts` (67),
+`src/ui.ts` (64).
