@@ -52,6 +52,19 @@ export const DESTRUCTIVE_PATTERNS = [
         // A python one-liner rewriting a source file.
         pattern: /\bpython3?\b[^\n]*\bopen\([^)]*['"]w['"]/,
         what: 'in-line python rewriting a file'
+    },
+    {
+        // A script writing a source file itself, rather than through the
+        // anchored helper. `scripts/edit.mjs` and `scripts/lib/source-edit.mjs`
+        // exist so that a scripted edit anchors, counts and verifies; a direct
+        // write does none of those things.
+        pattern: /\bwriteFileSync\([^)]*\b(?:src|test)\//,
+        what: 'a direct write to a source file'
+    },
+    {
+        // The shell spelling of the same act.
+        pattern: />>?\s*(?:src|test)\/[\w./-]+/,
+        what: 'a shell redirection into a source file'
     }
 ];
 
