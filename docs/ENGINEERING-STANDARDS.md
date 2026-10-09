@@ -108,6 +108,7 @@ It runs, in order, and stops at the first failure:
 | Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
 | Suppressions       | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
 | Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
+| Destructive edits  | `npm run check:destructive`    | Committed tooling does not bulk-edit source                 |
 | Build              | `npm run build`                | The shipped browser artifact compiles                       |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
@@ -209,6 +210,7 @@ Rules for gaps:
 | Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
 | Style + format              | eslint, prettier                   | pre-commit, CI |
+| Destructive edits           | `scripts/check-destructive.mjs`    | pre-push, CI   |
 | Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
 | Assertion strength          | `scripts/check-assertions.mjs`     | pre-push, CI   |
 | Shortcut register           | `scripts/check-register.mjs`       | pre-push, CI   |
@@ -244,6 +246,38 @@ investigates it.
 
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
+
+### Scripted edits to source
+
+Two failures in one session, both self-inflicted, both from editing source text
+in bulk rather than at an anchor.
+
+**1. An annotator that assumed the shape of what it matched.** It inserted a type
+at a parameter's identifier and produced
+
+```ts
+update(dt: number, height: number?) {   // invalid
+```
+
+because `height` was already optional. It assumed an identifier is never
+followed by `?`.
+
+**2. A global substitution, run to clean up after the first mistake.** A
+backtick-stripping `sed` across `src/effects.ts` removed **every backtick in the
+file**, including the template literals it builds its colours from.
+
+Both were caught by `typecheck` within seconds — the gate did its job and the
+agent did not do theirs.
+
+**The rule.** A scripted edit to source must anchor on text that matches exactly
+once, refuse otherwise, verify the result after writing, and be followed by the
+full gate before anything else. Work one file at a time.
+
+**What is enforced, and what is not.** `check:destructive` refuses these patterns
+in committed scripts and hooks. It **cannot** see a shell command that was never
+committed — which is precisely where failure 2 happened. That half is
+`AGENTS.md` rule 6, and it is stated here rather than implied by a gate that
+would otherwise look like it covered the case.
 
 ### A gate that checks nothing is not a pass
 

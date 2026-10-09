@@ -59,6 +59,10 @@ const STEPS = [
     },
     { script: 'check:suppressions', proves: 'every suppression is within its declared ceiling' },
     { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' },
+    {
+        script: 'check:destructive',
+        proves: 'no committed tooling rewrites source with an unanchored substitution'
+    },
     { script: 'build', proves: 'the shipped browser artifact compiles' }
 ];
 
