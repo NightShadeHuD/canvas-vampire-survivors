@@ -32,7 +32,8 @@
         "smoke:extended": "node scripts/extended-smoke.js",
         "build": "node scripts/build.mjs",
         "typecheck": "tsc -p tsconfig.json",
-        "check:suite": "node scripts/check-suite.mjs"
+        "check:suite": "node scripts/check-suite.mjs",
+        "check:assertions": "node scripts/check-assertions.mjs"
     },
     "keywords": [
         "game",

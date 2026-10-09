@@ -34,6 +34,10 @@ const STEPS = [
         script: 'check:suite',
         proves: 'no test was skipped, left as todo, or deleted'
     },
+    {
+        script: 'check:assertions',
+        proves: 'no assertion was weakened since the base revision'
+    },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
     {

@@ -91,20 +91,21 @@ npm run verify
 
 It runs, in order, and stops at the first failure:
 
-| Step             | Command                        | Proves                                                      |
-| ---------------- | ------------------------------ | ----------------------------------------------------------- |
-| Lint             | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold |
-| Coverage         | `npm run check:coverage`       | Lint, format and test discovery actually reach every file   |
-| Typecheck        | `npm run typecheck`            | The TypeScript config is valid and the tree parses          |
-| Format           | `npm run format:check`         | Code matches the project's Prettier contract                |
-| Unit tests       | `npm test`                     | Behaviour is as specified                                   |
-| Suite mandates   | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
-| Date-hermeticity | `npm run test:clock`           | No test depends on today's date                             |
-| Baseline         | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
-| Coverage floors  | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
-| Suppressions     | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
-| Hygiene          | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
-| Build            | `npm run build`                | The shipped browser artifact compiles                       |
+| Step               | Command                        | Proves                                                      |
+| ------------------ | ------------------------------ | ----------------------------------------------------------- |
+| Lint               | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold |
+| Coverage           | `npm run check:coverage`       | Lint, format and test discovery actually reach every file   |
+| Typecheck          | `npm run typecheck`            | The TypeScript config is valid and the tree parses          |
+| Format             | `npm run format:check`         | Code matches the project's Prettier contract                |
+| Unit tests         | `npm test`                     | Behaviour is as specified                                   |
+| Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
+| Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision           |
+| Date-hermeticity   | `npm run test:clock`           | No test depends on today's date                             |
+| Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
+| Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
+| Suppressions       | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
+| Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
+| Build              | `npm run build`                | The shipped browser artifact compiles                       |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
 in `scripts/verify.mjs` must appear here, and every command listed here must
@@ -206,6 +207,7 @@ Rules for gaps:
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
 | Style + format              | eslint, prettier                   | pre-commit, CI |
 | Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
+| Assertion strength          | `scripts/check-assertions.mjs`     | pre-push, CI   |
 | TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
 | Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
 | Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
