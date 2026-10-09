@@ -1,0 +1,49 @@
+{
+    "compilerOptions": {
+        /* --- Module/target -------------------------------------------------
+         * `rewriteRelativeImportExtensions` lets a source file import another
+         * with an explicit `.ts` specifier, which Node 24 executes natively via
+         * type stripping, while tsc rewrites it to `.js` on emit so the browser
+         * gets loadable ES modules. It rewrites specifiers inside emitted `.js`
+         * sources too, which is what lets this repository migrate one file at a
+         * time without ever breaking the browser.
+         * See docs/TYPESCRIPT-MIGRATION.md. */
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "rewriteRelativeImportExtensions": true,
+
+        /* --- Module hygiene ------------------------------------------------
+         * `verbatimModuleSyntax` forces `import type` for type-only imports.
+         * That is not style: Node's type stripper works a file at a time and
+         * cannot tell a type import from a value import, so an unmarked type
+         * import becomes a runtime error.
+         *
+         * `erasableSyntaxOnly` rejects syntax Node cannot strip — enums,
+         * namespaces, parameter properties — so a file that typechecks cannot
+         * still fail at runtime. */
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "erasableSyntaxOnly": true,
+        "resolveJsonModule": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+
+        /* Node's own types, for the test files and the tooling. */
+        "types": ["node"],
+
+        /* --- Phase A --------------------------------------------------------
+         * The tree is still JavaScript. `allowJs` lets it compile and lets a
+         * converted `.ts` file sit beside unconverted ones; `checkJs` is off
+         * because checking unannotated JavaScript at this stage would produce
+         * thousands of findings that are not yet actionable. Both flip on per
+         * file as the migration proceeds. */
+        "allowJs": true,
+        "checkJs": false,
+
+        "noEmit": true
+    },
+    "include": ["src/**/*.js", "src/**/*.ts", "test/**/*.js", "test/**/*.ts"]
+}

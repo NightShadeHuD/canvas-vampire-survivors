@@ -27,6 +27,7 @@ const STEPS = [
         script: 'check:coverage',
         proves: 'lint, format and test discovery actually reach every file'
     },
+    { script: 'typecheck', proves: 'the TypeScript config is valid and the tree parses' },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
@@ -36,7 +37,8 @@ const STEPS = [
         proves: 'measured code coverage has not fallen below its recorded floors'
     },
     { script: 'check:suppressions', proves: 'every suppression is within its declared ceiling' },
-    { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' }
+    { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' },
+    { script: 'build', proves: 'the shipped browser artifact compiles' }
 ];
 
 /** Declared gaps, surfaced on every run. */

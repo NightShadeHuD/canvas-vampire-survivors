@@ -36,3 +36,6 @@ Thumbs.db
 
 # Local scratch / preserved work-in-progress (never committed)
 .wip/
+
+# Build output (scripts/build.mjs)
+dist/

@@ -7,7 +7,7 @@
  *
  *   1. HTTP 200 from the canonical Pages URL.
  *   2. The bundled HTML contains the expected <title>.
- *   3. ./src/main.js loads without a network error.
+ *   3. ./dist/main.js loads without a network error.
  *   4. The game canvas renders at least one non-zero pixel after boot.
  *   5. Clicking the in-page Start button produces a Player instance.
  *   6. ~10 seconds of "uptime" with the Start screen dismissed yields no
@@ -22,7 +22,7 @@
  * Notes:
  *   - Playwright is the only required dep (already a devDep).
  *   - We *do not* rely on `__SURV_DEBUG__` here — that hook is gated to
- *     localhost in src/main.js, so this test exercises the real prod build.
+ *     localhost in dist/main.js, so this test exercises the real prod build.
  *   - Network: a single curl to the live URL warms the cache before
  *     Playwright opens the page, sidestepping a transient 502 that GitHub
  *     Pages occasionally serves on cold paths.
@@ -128,9 +128,9 @@ async function main() {
         findings.push(`Unexpected page title: "${title}"`);
     }
     const mainJsLoaded = responses.some(
-        (r) => r.url.endsWith('/src/main.js') && r.status >= 200 && r.status < 400
+        (r) => r.url.endsWith('/dist/main.js') && r.status >= 200 && r.status < 400
     );
-    if (!mainJsLoaded) findings.push('src/main.js did not return a 2xx response.');
+    if (!mainJsLoaded) findings.push('dist/main.js did not return a 2xx response.');
 
     // 3) verify game booted
     const booted = await page.evaluate(() => !!window.__vsGame);

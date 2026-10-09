@@ -95,6 +95,7 @@ It runs, in order, and stops at the first failure:
 | ---------------- | ------------------------------ | ----------------------------------------------------------- |
 | Lint             | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold |
 | Coverage         | `npm run check:coverage`       | Lint, format and test discovery actually reach every file   |
+| Typecheck        | `npm run typecheck`            | The TypeScript config is valid and the tree parses          |
 | Format           | `npm run format:check`         | Code matches the project's Prettier contract                |
 | Unit tests       | `npm test`                     | Behaviour is as specified                                   |
 | Date-hermeticity | `npm run test:clock`           | No test depends on today's date                             |
@@ -102,12 +103,23 @@ It runs, in order, and stops at the first failure:
 | Coverage floors  | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
 | Suppressions     | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
 | Hygiene          | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
+| Build            | `npm run build`                | The shipped browser artifact compiles                       |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
 in `scripts/verify.mjs` must appear here, and every command listed here must
 exist in `package.json`. That second direction is not theoretical — this table
-previously listed a build step that has never existed. It will be added here
-when the build step is real.
+once listed a build step that did not exist, and the guard refused it until the
+step was real. It is now.
+
+### Where the browser loads from
+
+`index.html` imports `./dist/main.js`. `src/` is the source of truth and what
+the tests and coverage measure; `dist/` is what ships. `npm run build` compiles
+one to the other, and `verify:browser` builds before it drives a browser, so the
+browser gates always exercise the artifact a player actually receives.
+
+`dist/` is generated, so it is gitignored and excluded from lint — the coverage
+guard reasons about tracked source files only.
 
 `npm run verify` is the only thing that may be described as "green". A partial
 run is a partial run.
@@ -192,6 +204,7 @@ Rules for gaps:
 | Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
 | Style + format              | eslint, prettier                   | pre-commit, CI |
+| TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
 | Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
 | Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
 | Hermetic tests              | `scripts/check-clocks.mjs`         | pre-push, CI   |
