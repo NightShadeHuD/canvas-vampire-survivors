@@ -18,10 +18,13 @@ import { CONFIG, Difficulty, GameState } from './config.ts';
 import { ACHIEVEMENTS, BOSSES, ENEMIES, WAVES, WEAPONS } from './data.ts';
 import {
     Enemy,
+    EnemyProjectile,
     ExpOrb,
     FloatingText,
+    Mine,
     Particle,
     Player,
+    Projectile,
     findEnemyDef,
     registerWeaponClass
 } from './entities.ts';
@@ -138,52 +141,52 @@ export class Game {
     declare _speedrunRank: any;
     declare _tutorialBanner: any;
     declare _tutorialKeyHandler: any;
-    declare achievements: any;
-    declare audio: any;
-    declare camera: any;
-    declare canvas: any;
-    declare ctx: any;
+    declare achievements: AchievementTracker;
+    declare audio: AudioEngine;
+    declare camera: ShakeCamera;
+    declare canvas: HTMLCanvasElement;
+    declare ctx: CanvasRenderingContext2D;
     declare currentWave: any;
     declare dailyChallenge: any;
-    declare dailyMode: any;
-    declare effects: any;
-    declare enemies: any;
-    declare enemyDmgMult: any;
-    declare enemyProjectiles: any;
-    declare expOrbs: any;
-    declare floatingTexts: any;
-    declare fpsMeter: any;
-    declare gameTime: any;
-    declare haptics: any;
-    declare input: any;
+    declare dailyMode: boolean;
+    declare effects: EffectLayer;
+    declare enemies: Enemy[];
+    declare enemyDmgMult: number;
+    declare enemyProjectiles: EnemyProjectile[];
+    declare expOrbs: ExpOrb[];
+    declare floatingTexts: FloatingText[];
+    declare fpsMeter: FpsMeter;
+    declare gameTime: number;
+    declare haptics: HapticEngine;
+    declare input: InputManager;
     declare keymap: any;
-    declare kills: any;
-    declare lastTime: any;
-    declare mines: any;
-    declare particles: any;
-    declare player: any;
+    declare kills: number;
+    declare lastTime: number;
+    declare mines: Mine[];
+    declare particles: Particle[];
+    declare player: Player;
     declare pools: any;
-    declare projectiles: any;
-    declare raf: any;
-    declare replayActive: any;
+    declare projectiles: Projectile[];
+    declare raf: number | null;
+    declare replayActive: boolean;
     declare replayPlayer: any;
     declare replayRecorder: any;
     declare run: any;
-    declare save: any;
-    declare spatial: any;
-    declare speedrunMode: any;
+    declare save: Record<string, any>;
+    declare spatial: SpatialHash;
+    declare speedrunMode: boolean;
     declare speedrunRng: any;
     declare speedrunSplits: any;
     declare speedrunStart: any;
     declare stageBosses: any;
-    declare stageId: any;
+    declare stageId: string;
     declare stageMods: any;
     declare stageWaves: any;
-    declare state: any;
-    declare tutorial: any;
-    declare ui: any;
+    declare state: string;
+    declare tutorial: TutorialState;
+    declare ui: UI;
     constructor() {
-        this.canvas = document.getElementById('gameCanvas');
+        this.canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
         this.ctx = this.canvas.getContext('2d');
         this.state = GameState.MENU;
         this.lastTime = 0;
