@@ -27,7 +27,8 @@ export interface WeaponDef {
     baseDamage: number;
     baseCooldown: number;
     baseRange: number;
-    projectileCount: number;
+    /** Absent on weapons that do not fire discrete projectiles. */
+    projectileCount?: number;
     /** Level at which the weapon evolves, if it can. */
     evolveLevel?: number;
     evolveName?: string;
