@@ -15,8 +15,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Pool, resetParticle } from '../src/pool.js';
-import { SpatialHash } from '../src/spatial-hash.js';
+import { Pool, resetParticle } from '../src/pool.ts';
+import { SpatialHash } from '../src/spatial-hash.ts';
 
 // ---------------------------------------------------------------------------
 // Object pool — the GC-pressure budget

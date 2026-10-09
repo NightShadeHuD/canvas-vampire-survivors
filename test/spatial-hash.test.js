@@ -3,7 +3,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SpatialHash } from '../src/spatial-hash.js';
+import { SpatialHash } from '../src/spatial-hash.ts';
 
 // Helper: collect an iterable into an array so we can assert length + membership.
 function collect(iter) {

@@ -22,7 +22,7 @@ import {
     pickWeighted
 } from '../src/stages.js';
 import { SeededRng, _resetStorageForTests, saveSave } from '../src/storage.js';
-import { SpatialHash } from '../src/spatial-hash.js';
+import { SpatialHash } from '../src/spatial-hash.ts';
 import { dailyChallenge, dailySeed } from '../src/daily.js';
 import {
     REPLAY_VERSION,

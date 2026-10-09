@@ -56,6 +56,11 @@ function resolveVibrate(nav) {
 }
 
 export class HapticEngine {
+    settings: Record<string, any>;
+    /** Injectable navigator substitute, for tests and non-browser hosts. */
+    _navOverride: any;
+    /** Last pattern played, exposed so tests can assert on it. */
+    _lastPattern: any;
     /**
      * @param {{vibration?: boolean}} [settings]  live save.settings reference;
      *   the engine reads `.vibration` on every fire so toggling in the UI

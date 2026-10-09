@@ -20,6 +20,25 @@ const tseslint = require('typescript-eslint');
  * convention explicit — `catch (_) {}` and `catch (_e) {}` are intentional,
  * not oversights.
  */
+const UNUSED_VARS = [
+    'warn',
+    {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_'
+    }
+];
+
+/**
+ * `no-unused-vars` for both languages.
+ *
+ * The base rule does not understand TypeScript, and its mismatch is not
+ * theoretical: it reports the parameter names inside a function *type* as
+ * unused bindings, so `reset: ((obj: any, ...args: any[]) => void) | null`
+ * fails the build over two names that exist only as documentation. The
+ * typescript-eslint rule parses the same syntax correctly and keeps the
+ * identical options, so nothing is relaxed by the swap.
+ */
 const RULES = {
     'no-unused-vars': [
         'warn',
@@ -243,5 +262,22 @@ module.exports = [
             globals: SERVICE_WORKER
         },
         rules: RULES
+    },
+    // --- TypeScript ---------------------------------------------------------
+    // The base `no-unused-vars` does not understand TypeScript, and the mismatch
+    // is not theoretical: it reports the parameter names inside a function
+    // *type* as unused bindings, so
+    //     reset: ((obj: any, ...args: any[]) => void) | null
+    // fails the build over two names that exist only as documentation.
+    //
+    // This block is deliberately last so it wins for `.ts`, and deliberately
+    // narrow so `.js` keeps the base rule, which is correct there.
+    {
+        files: ['**/*.ts'],
+        plugins: { '@typescript-eslint': tseslint.plugin },
+        rules: {
+            'no-unused-vars': 'off',
+            '@typescript-eslint/no-unused-vars': UNUSED_VARS
+        }
     }
 ];

@@ -2,18 +2,18 @@
  * @module systems
  * @description Cross-cutting infrastructure used by the main loop —
  * screen-shake camera and a rolling FPS meter. The spatial-hash broad phase
- * lives in `./spatial-hash.js` and is re-exported here for backwards
+ * lives in `./spatial-hash.ts` and is re-exported here for backwards
  * compatibility with v2.x callers.
  *
- * Dependencies: `./spatial-hash.js`.
+ * Dependencies: `./spatial-hash.ts`.
  *
  * Exports:
- *   - class SpatialHash    re-export from ./spatial-hash.js
+ *   - class SpatialHash    re-export from ./spatial-hash.ts
  *   - class ShakeCamera    cumulative shake offset
  *   - class FpsMeter       60-sample rolling average
  */
 
-export { SpatialHash } from './spatial-hash.js';
+export { SpatialHash } from './spatial-hash.ts';
 
 export class ShakeCamera {
     /** Current shake magnitude. Decays at 2 units per second. */

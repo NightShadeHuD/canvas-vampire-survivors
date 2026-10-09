@@ -2,7 +2,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Pool, resetFloatingText, resetParticle, resetEnemyProjectile } from '../src/pool.js';
+import { Pool, resetFloatingText, resetParticle, resetEnemyProjectile } from '../src/pool.ts';
 
 class Box {
     constructor() {

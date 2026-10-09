@@ -28,14 +28,14 @@ import {
 import { Weapon } from './weapons.js';
 import { AudioEngine } from './audio.js';
 import { InputManager } from './input.js';
-import { HapticEngine } from './haptics.js';
+import { HapticEngine } from './haptics.ts';
 import { loadKeymap, saveKeymap } from './keymap.js';
 import { UI } from './ui.js';
 import { FpsMeter, ShakeCamera } from './systems.ts';
-import { SpatialHash } from './spatial-hash.js';
-import { Pool, resetFloatingText, resetParticle } from './pool.js';
+import { SpatialHash } from './spatial-hash.ts';
+import { Pool, resetFloatingText, resetParticle } from './pool.ts';
 import { EffectLayer } from './effects.js';
-import { AchievementTracker } from './achievements.js';
+import { AchievementTracker } from './achievements.ts';
 import {
     SeededRng,
     accumulateTotals,
@@ -59,7 +59,7 @@ import {
 import { dailyChallenge, saveDailyResult } from './daily.js';
 import { TutorialState } from './tutorial.js';
 import { ReplayPlayer, ReplayRecorder, loadReplay, saveReplay } from './replay.js';
-import { KonamiDetector } from './konami.js';
+import { KonamiDetector } from './konami.ts';
 
 registerWeaponClass(Weapon);
 

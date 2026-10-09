@@ -89,13 +89,30 @@ function trackedSourceFiles() {
 /**
  * Run the suite with Node's built-in coverage and parse the table.
  * Returns { overall: {...}, files: { 'src/x.js': {...} } }.
+ *
+ * `--test-isolation=none` is load-bearing, not a speed tweak.
+ *
+ * By default Node runs each test file in its own process and merges the
+ * per-process coverage at the end. That merge is not reproducible: the same
+ * suite, run repeatedly on an unchanged tree, reported `src/i18n.js` branches at
+ * both 90.00% and 100.00%. Each file measured alone was perfectly stable, so the
+ * nondeterminism was in the aggregation, and it moved the overall branch figure
+ * by ~0.1 points — enough to fail this gate roughly one run in four with no
+ * change to the code at all. A gate that fails at random teaches people to
+ * re-run it, and that is how a real regression gets waved through.
+ *
+ * A single process also models the product more honestly. The browser loads each
+ * module exactly once, whereas per-file isolation instantiates it once per test
+ * file and sums the branch counts. Line and function coverage agree between the
+ * two methods; only branch percentages differ, and it is the branch denominator
+ * that the duplicated instantiation distorts.
  */
 function measure() {
     let out;
     try {
         out = execFileSync(
             process.execPath,
-            ['--test', '--experimental-test-coverage', 'test/*.test.js'],
+            ['--test', '--test-isolation=none', '--experimental-test-coverage', 'test/*.test.js'],
             { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
         );
     } catch (err) {

@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { HapticEngine, VIBRATION_PATTERNS } from '../src/haptics.js';
+import { HapticEngine, VIBRATION_PATTERNS } from '../src/haptics.ts';
 import {
     DEFAULT_KEYMAP,
     KEYMAP_ACTIONS,

@@ -248,13 +248,40 @@ module no test ever loads counts as 0%, never as absent.
 
 Two calibrations keep the numbers honest rather than decorative:
 
-- Compared with a 0.05-point tolerance. Measurement here is bit-for-bit
-  deterministic — three consecutive runs produced an identical report — but CI
-  runs a different OS, and a tolerance absorbs platform wobble without opening a
-  door. A real regression moves whole percentage points.
+- Compared with a 0.05-point tolerance, because CI runs a different OS and a
+  tolerance absorbs platform wobble without opening a door. A real regression
+  moves whole percentage points.
 - Ratcheting is requested only on a gain of **1.0 point or more**. Prompting on
   every hundredth would turn the message into wallpaper, and a warning nobody
   reads is worse than no warning.
+
+#### The measurement runs in a single process
+
+`check-coverage-floor` measures with `--test-isolation=none`, and that flag is
+load-bearing rather than a speed tweak.
+
+This section previously claimed measurement was "bit-for-bit deterministic —
+three consecutive runs produced an identical report". That claim was written when
+the tree was smaller, and it was wrong. Repeating the experiment properly, with
+the suite grown to 512 tests, `src/i18n.js` branches came back at both 90.00% and
+100.00% on an unchanged tree, moving the overall branch figure by ~0.1 points and
+failing this gate roughly one run in four **with nothing changed**. Each test file
+measured alone was perfectly stable, so the nondeterminism was in Node's
+end-of-run merge of per-process coverage. A gate that fails at random teaches
+people to re-run it, and that is how a real regression gets waved through.
+
+One process also models the product more honestly. The browser loads each module
+exactly once; per-file isolation instantiates it once per test file and sums the
+branch counts. The clearest case is `src/daily.js`, which four test files import:
+per-file isolation reported 71.67% branches, one process reports 66.67%. With a
+single importing test file the two methods agree exactly, which is what proves
+the gap is duplicated instantiation rather than a test taking a different path.
+
+Changing the method re-baselines every branch figure, so it was done explicitly
+and the diff read: **line and function floors were unchanged everywhere**, seven
+branch floors rose, and one — `src/daily.js` — fell by 5 points, for the reason
+above. That is a declared change of measurement, not coverage quietly going
+missing, and it is the only circumstance in which a floor may fall.
 
 ### Git hooks
 
