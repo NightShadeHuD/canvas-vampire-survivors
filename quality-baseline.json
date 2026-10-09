@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 69.51,
-            "branches": 81.65,
-            "functions": 63.24
+            "lines": 71.58,
+            "branches": 80.83,
+            "functions": 66.15
         },
         "files": {
             "scripts/lib/suppression-scanner.mjs": {
@@ -131,9 +131,9 @@
                 "functions": 100
             },
             "src/ui.js": {
-                "lines": 37.54,
-                "branches": 60.78,
-                "functions": 36
+                "lines": 53.39,
+                "branches": 64.66,
+                "functions": 65.52
             },
             "src/weapons.js": {
                 "lines": 52.96,
