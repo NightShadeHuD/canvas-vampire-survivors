@@ -169,7 +169,16 @@ module.exports = [
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'module',
-            globals: { ...NODE_COMMON, global: 'readonly', globalThis: 'readonly' }
+            globals: {
+                ...NODE_COMMON,
+                global: 'readonly',
+                globalThis: 'readonly',
+                // Node timer/microtask globals the tests use to let a rejected
+                // promise settle without racing a real delay.
+                setImmediate: 'readonly',
+                clearImmediate: 'readonly',
+                queueMicrotask: 'readonly'
+            }
         },
         rules: RULES
     },
