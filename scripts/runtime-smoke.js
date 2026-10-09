@@ -155,7 +155,7 @@ async function main() {
     // top of the main menu and intercept clicks on `#btnStart`. Set the
     // one-time flags in localStorage and reload so the boot constructor
     // never opens those overlays in the first place. Save key matches
-    // STORAGE_KEY in src/config.js (`vs_clone_save_v2`).
+    // STORAGE_KEY in src/config.ts (`vs_clone_save_v2`).
     await page.evaluate(() => {
         try {
             const KEY = 'vs_clone_save_v2';

@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installBrowserStub } from './helpers/browser-stub.js';
 import { UI } from '../src/ui.js';
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 
 /** Build a UI against a fresh stub; always restore. */
 function withUi(fn, { now = 1000 } = {}) {

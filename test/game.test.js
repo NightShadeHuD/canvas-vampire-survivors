@@ -17,7 +17,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installBrowserStub } from './helpers/browser-stub.js';
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 
 /** Build a Game inside a fresh stubbed browser. */
 async function withGame(fn, { now = 1000 } = {}) {

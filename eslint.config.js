@@ -9,6 +9,8 @@
 
 'use strict';
 
+const tseslint = require('typescript-eslint');
+
 /**
  * Shared rule set. Defined once rather than repeated per block: with eight
  * blocks, copy-paste drift would be invisible and eslint.config.js is itself
@@ -142,8 +144,13 @@ module.exports = [
 
     // --- game runtime ------------------------------------------------------
     {
-        files: ['src/**/*.js'],
+        // `src/` is mid-migration, so one block covers both extensions. The
+        // TypeScript parser handles plain JavaScript as well, which means a
+        // directory can be part-converted without a second rule set drifting
+        // out of step with this one.
+        files: ['src/**/*.js', 'src/**/*.ts'],
         languageOptions: {
+            parser: tseslint.parser,
             ecmaVersion: 2022,
             sourceType: 'module',
             globals: BROWSER_GAME
@@ -165,8 +172,9 @@ module.exports = [
     // --- tests -------------------------------------------------------------
     {
         // Tests run under the Node `node:test` runner as ESM modules.
-        files: ['test/**/*.js'],
+        files: ['test/**/*.js', 'test/**/*.ts'],
         languageOptions: {
+            parser: tseslint.parser,
             ecmaVersion: 2022,
             sourceType: 'module',
             globals: {

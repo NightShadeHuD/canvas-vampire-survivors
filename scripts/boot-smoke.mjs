@@ -65,7 +65,7 @@ try {
  * Mark the one-time first-run overlays as already seen. On a clean profile the
  * How-to-Play overlay opens on top of the menu and intercepts clicks on
  * #btnStart, so without this the gate cannot start a run at all.
- * (Storage key matches STORAGE_KEY in src/config.js.)
+ * (Storage key matches STORAGE_KEY in src/config.ts.)
  */
 const SEED_FLAGS = () => {
     try {

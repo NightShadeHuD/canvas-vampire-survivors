@@ -28,7 +28,7 @@
  * holding the same direction) collapse to a single `[x, y, count]` triplet.
  * `expandFrames` inflates back to a flat per-frame array on load.
  *
- * Dependencies: ./config.js, ./storage.js (loadSpeedrunScores not used; we
+ * Dependencies: .ts, ./storage.js (loadSpeedrunScores not used; we
  * own a separate localStorage slot to keep the replay payload outside the
  * normal save blob).
  */

@@ -69,7 +69,8 @@ const METRICS = ['lines', 'branches', 'functions'];
 /**
  * Files that carry a coverage floor.
  *
- * Shipped product code (`src/`) and shared library logic (`scripts/lib/`) —
+ * Shipped product code (`src/`, `.js` or `.ts` while the TypeScript migration is
+ * in progress) and shared library logic (`scripts/lib/`) —
  * anything whose behaviour is expressed through importable functions.
  *
  * Deliberately excludes the CLI entry points in `scripts/` themselves. Their
@@ -81,7 +82,7 @@ const METRICS = ['lines', 'branches', 'functions'];
 function trackedSourceFiles() {
     return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
         .split('\n')
-        .filter((f) => /^src\/[^/]+\.js$/.test(f) || /^scripts\/lib\/[^/]+\.mjs$/.test(f))
+        .filter((f) => /^src\/[^/]+\.(js|ts)$/.test(f) || /^scripts\/lib\/[^/]+\.mjs$/.test(f))
         .sort();
 }
 

@@ -18,7 +18,7 @@ import {
     findEnemyDef,
     registerWeaponClass
 } from '../src/entities.js';
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 import { ENEMIES } from '../src/data.js';
 
 /** Run `fn` with Math.random pinned, restoring it afterwards. */

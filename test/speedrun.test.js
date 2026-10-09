@@ -11,7 +11,7 @@ import {
     _resetSpeedrunForTests,
     _resetStorageForTests
 } from '../src/storage.js';
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 
 test.beforeEach(() => {
     _resetStorageForTests();

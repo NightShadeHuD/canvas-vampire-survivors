@@ -15,7 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/entities.js';
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 import { PASSIVES } from '../src/data.js';
 
 /** Run `fn` with Math.random pinned, restoring it afterwards. */
