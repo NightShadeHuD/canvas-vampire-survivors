@@ -100,6 +100,7 @@ It runs, in order, and stops at the first failure:
 | Unit tests         | `npm test`                     | Behaviour is as specified                                   |
 | Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
 | Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision           |
+| Shortcut register  | `npm run check:register`       | Every shortcut is bounded, tracked and correctly cited      |
 | Date-hermeticity   | `npm run test:clock`           | No test depends on today's date                             |
 | Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
 | Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
@@ -208,6 +209,7 @@ Rules for gaps:
 | Style + format              | eslint, prettier                   | pre-commit, CI |
 | Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
 | Assertion strength          | `scripts/check-assertions.mjs`     | pre-push, CI   |
+| Shortcut register           | `scripts/check-register.mjs`       | pre-push, CI   |
 | TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
 | Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
 | Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
