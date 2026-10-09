@@ -23,6 +23,10 @@ const repoRoot = path.resolve(here, '..');
 /** Ordered gate steps. `npm` script name -> what it proves. */
 const STEPS = [
     { script: 'lint', proves: 'no undefined globals, no dead identifiers, style rules hold' },
+    {
+        script: 'check:lint-coverage',
+        proves: 'every tracked source file is actually matched by a lint config block'
+    },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     { script: 'test:clock', proves: 'no test depends on today’s date' },

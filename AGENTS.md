@@ -80,11 +80,18 @@ npm run setup                     # installs the git hooks
 | No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                     |
 | Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                 |
 | No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                      |
+| Every source file is really linted                      | `scripts/check-lint-coverage.mjs`                |
 | No test depends on today's date                         | `scripts/test-clock.mjs`                         |
 | The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
 | Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |
 | All of the above, in order, locally                     | `.githooks/pre-push` → `npm run verify`          |
 | All of the above, unbypassably                          | CI job **Verify**, required by branch protection |
+
+`check:lint-coverage` exists because ESLint prints **nothing** — no warning, exit
+0 — for a file that no config block matches, so `npm run lint` can report success
+while whole directories are never linted. That is exactly what had happened to
+`scripts/`, `service-worker.js` and `game.js`. Never trust `eslint .` on its own;
+the coverage check is what makes it meaningful.
 
 If a gate is wrong, fix the gate in a reviewed commit. **Never delete or weaken
 a gate to make a change pass.** That is the one move that turns this repository
