@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 78.07,
-            "branches": 82.57,
-            "functions": 70
+            "lines": 79.28,
+            "branches": 83.55,
+            "functions": 70.88
         },
         "files": {
             "scripts/lib/assertion-diff.mjs": {
@@ -101,9 +101,9 @@
                 "functions": 76.92
             },
             "src/entity-render.ts": {
-                "lines": 52.33,
-                "branches": 65.38,
-                "functions": 50
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
             },
             "src/game-render.ts": {
                 "lines": 100,
@@ -187,5 +187,5 @@
             }
         }
     },
-    "testCountFloor": 663
+    "testCountFloor": 713
 }
