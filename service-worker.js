@@ -7,9 +7,14 @@
  * a frame. localStorage (used by `src/storage.js`) already handles save data.
  *
  * No build step, no Workbox, no dependencies.
+ *
+ * Globals (self, caches, clients, ...) are declared in eslint.config.js.
+ * This file used to declare them with an eslint-env comment plus a global
+ * comment list — eslint-8 syntax that flat config ignores entirely. The
+ * consequence was that the file was never linted at all, and its own list was
+ * missing `clients`. Both comments are gone: the config is the single source
+ * of truth, and ESLint v10 rejects eslint-env comments outright.
  */
-/* eslint-env serviceworker */
-/* global self, caches, fetch */
 
 const CACHE = 'survivor-v2.2.0';
 const ASSETS = [

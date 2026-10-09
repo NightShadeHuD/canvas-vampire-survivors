@@ -679,10 +679,8 @@ for (const [name, body] of Object.entries(SCENES)) {
     const out = path.join(OUT, name);
     fs.writeFileSync(out, body, 'utf8');
     written++;
-    // eslint-disable-next-line no-console
     console.log(
         `wrote ${path.relative(process.cwd(), out)} (${(body.length / 1024).toFixed(1)} KB)`
     );
 }
-// eslint-disable-next-line no-console
 console.log(`\n${written} screenshot mockups generated in ${path.relative(process.cwd(), OUT)}`);

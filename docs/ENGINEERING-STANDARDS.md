@@ -91,15 +91,16 @@ npm run verify
 
 It runs, in order, and stops at the first failure:
 
-| Step             | Command                  | Proves                                                      |
-| ---------------- | ------------------------ | ----------------------------------------------------------- |
-| Lint             | `npm run lint`           | No undefined globals, no dead identifiers, style rules hold |
-| Format           | `npm run format:check`   | Code matches the project's Prettier contract                |
-| Unit tests       | `npm test`               | Behaviour is as specified                                   |
-| Date-hermeticity | `npm run test:clock`     | No test depends on today's date                             |
-| Baseline         | `npm run check:baseline` | No new failures, no unratcheted suppressions                |
-| Hygiene          | `npm run check:hygiene`  | No debuggers, no `.only`, no conflict markers, no secrets   |
-| Build            | `npm run build`          | The shipped artifact actually builds                        |
+| Step             | Command                       | Proves                                                       |
+| ---------------- | ----------------------------- | ------------------------------------------------------------ |
+| Lint             | `npm run lint`                | No undefined globals, no dead identifiers, style rules hold  |
+| Lint coverage    | `npm run check:lint-coverage` | Every source file is actually matched by a lint config block |
+| Format           | `npm run format:check`        | Code matches the project's Prettier contract                 |
+| Unit tests       | `npm test`                    | Behaviour is as specified                                    |
+| Date-hermeticity | `npm run test:clock`          | No test depends on today's date                              |
+| Baseline         | `npm run check:baseline`      | No new failures, no unratcheted suppressions                 |
+| Hygiene          | `npm run check:hygiene`       | No debuggers, no `.only`, no conflict markers, no secrets    |
+| Build            | `npm run build`               | The shipped artifact actually builds                         |
 
 `npm run verify` is the only thing that may be described as "green". A partial
 run is a partial run.
@@ -179,15 +180,39 @@ Rules for gaps:
 
 ## 6. Enforcement map
 
-| Rule                        | Mechanism                        | Runs           |
-| --------------------------- | -------------------------------- | -------------- |
-| Tests pass, no new failures | `scripts/check-baseline.mjs`     | pre-push, CI   |
-| Suppressions bounded        | `scripts/check-suppressions.mjs` | pre-commit, CI |
-| Style + format              | eslint, prettier                 | pre-commit, CI |
-| Hermetic tests              | `scripts/test-clock.mjs`         | pre-push, CI   |
-| No debug leftovers          | `scripts/check-hygiene.mjs`      | pre-commit, CI |
-| Reviewed before merge       | PR template + branch protection  | GitHub         |
-| Everything at once          | `npm run verify`                 | pre-push, CI   |
+| Rule                        | Mechanism                         | Runs           |
+| --------------------------- | --------------------------------- | -------------- |
+| Tests pass, no new failures | `scripts/check-baseline.mjs`      | pre-push, CI   |
+| Suppressions bounded        | `scripts/check-suppressions.mjs`  | pre-commit, CI |
+| Style + format              | eslint, prettier                  | pre-commit, CI |
+| Lint coverage is real       | `scripts/check-lint-coverage.mjs` | pre-push, CI   |
+| Hermetic tests              | `scripts/test-clock.mjs`          | pre-push, CI   |
+| No debug leftovers          | `scripts/check-hygiene.mjs`       | pre-commit, CI |
+| Reviewed before merge       | PR template + branch protection   | GitHub         |
+| Everything at once          | `npm run verify`                  | pre-push, CI   |
+
+### Why "lint coverage is real" is its own rule
+
+ESLint fails **completely silently** for a file that no config block matches. It
+prints nothing, warns about nothing, and exits 0. Measured on this repository:
+
+```
+$ eslint --max-warnings 0 tools/probe.js      # in-repo, no matching block
+$ echo $?
+0
+```
+
+`--max-warnings 0` cannot help: it promotes _reported_ warnings to failures, and
+an uncovered file produces no report to promote.
+
+The consequence here was that `scripts/`, `service-worker.js` and `game.js` —
+including the file that owns the production offline cache — were never linted
+once in the project's life, while `npm run lint` reported success the whole
+time. A green light wired to nothing is worse than a red one, because nobody
+investigates it.
+
+So coverage is asserted directly: every tracked source file must match at least
+one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
 
 ### Git hooks
 
