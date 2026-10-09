@@ -59,6 +59,8 @@ through and kept.
 | AC-11 | The browser artifact the build produces passes the full suite.                                      | `npm run build && node --test test/*.test.ts` against `dist/`    | `585/585` on the built output, not only on the sources                                                       | Production  | OPEN   |
 | AC-12 | A player can complete a run on a real device without a console error.                               | manual pass on a physical phone, recorded in `docs/MANUAL_QA.md` | A dated entry naming the device, the OS version and any error observed                                       | Interaction | OPEN   |
 
+| AC-13 | `strict` is fully enabled: no configuration sets `strictNullChecks` or `noImplicitAny` to `false`. | `npm run check:strict` | `0` errors from `tsc --strict`, and no explicit `false` for either flag in `tsconfig.json` | Production | OPEN |
+
 ### Why AC-11 and AC-12 are OPEN rather than quietly dropped
 
 **AC-11** was verified once, by hand, when the build pipeline landed: the suite

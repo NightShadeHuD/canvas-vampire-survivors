@@ -196,7 +196,12 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, self: Player) {
     // Garlic aura ring
     const garlic = self.weapons.find((w) => w.id === 'garlic');
     if (garlic) {
-        const range = garlic.getRange(this);
+        // `self`, not `this`: this function is a module-level function, so
+        // `this` is not the entity. The render extraction rewrote `this.`
+        // (with the dot) and missed a bare `this` passed as an argument —
+        // getRange calls player.getAreaMult(), so a player holding garlic
+        // threw a TypeError every frame it was drawn.
+        const range = garlic.getRange(self);
         const t = performance.now() / 400;
         ctx.strokeStyle = `rgba(160,255,160,${0.25 + Math.sin(t) * 0.08})`;
         ctx.lineWidth = 2;

@@ -96,6 +96,7 @@ It runs, in order, and stops at the first failure:
 | Lint               | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold |
 | Coverage           | `npm run check:coverage`       | Lint, format and test discovery actually reach every file   |
 | Typecheck          | `npm run typecheck`            | The TypeScript config is valid and the tree parses          |
+| Strict flags       | `npm run check:strict`         | Enabled strict flags have not been turned back off          |
 | Format             | `npm run format:check`         | Code matches the project's Prettier contract                |
 | Unit tests         | `npm test`                     | Behaviour is as specified                                   |
 | Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
@@ -213,6 +214,7 @@ Rules for gaps:
 | Shortcut register           | `scripts/check-register.mjs`       | pre-push, CI   |
 | Rule documents              | `scripts/check-docs.mjs`           | pre-push, CI   |
 | TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
+| Strict flags                | `scripts/check-strict.mjs`         | pre-push, CI   |
 | Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
 | Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
 | Hermetic tests              | `scripts/check-clocks.mjs`         | pre-push, CI   |

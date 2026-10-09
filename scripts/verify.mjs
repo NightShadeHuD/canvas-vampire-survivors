@@ -29,6 +29,10 @@ const STEPS = [
         proves: 'lint, format and test discovery actually reach every file'
     },
     { script: 'typecheck', proves: 'the TypeScript config is valid and the tree parses' },
+    {
+        script: 'check:strict',
+        proves: 'no strict flag this project already enabled has been turned back off'
+    },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     {
