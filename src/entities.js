@@ -5,7 +5,7 @@
  * independent (delta-time in seconds), and per-class state is owned, never
  * shared.
  *
- * Dependencies: `./config.js`, `./data.js`. The Weapon class is injected at
+ * Dependencies: .ts`, `./data.js`. The Weapon class is injected at
  * boot via `registerWeaponClass()` to break a circular import.
  *
  * Exports:
@@ -15,7 +15,7 @@
  *   - registerWeaponClass(cls) — DI for Weapon to avoid circular imports
  */
 
-import { CONFIG } from './config.js';
+import { CONFIG } from './config.ts';
 import { ENEMIES } from './data.js';
 
 export class Player {

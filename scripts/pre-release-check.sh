@@ -74,14 +74,14 @@ pass "no TODO/FIXME/placeholder markers in src/"
 # ---------------------------------------------------------------------------
 echo "==> [4/6] version parity"
 PKG_VER=$(node -e 'process.stdout.write(require("./package.json").version)')
-CFG_VER=$(grep -oE "VERSION:\s*'[0-9]+\.[0-9]+\.[0-9]+'" src/config.js | head -1 | sed -E "s/.*'([0-9.]+)'.*/\1/")
+CFG_VER=$(grep -oE "VERSION:\s*'[0-9]+\.[0-9]+\.[0-9]+'" src/config.ts | head -1 | sed -E "s/.*'([0-9.]+)'.*/\1/")
 if [[ -z "$CFG_VER" ]]; then
-    fail "could not read CONFIG.VERSION from src/config.js"
+    fail "could not read CONFIG.VERSION from src/config.ts"
 fi
 if [[ "$PKG_VER" != "$CFG_VER" ]]; then
     fail "package.json=${PKG_VER} but CONFIG.VERSION=${CFG_VER}"
 fi
-pass "version ${PKG_VER} matches src/config.js"
+pass "version ${PKG_VER} matches src/config.ts"
 
 # ---------------------------------------------------------------------------
 # 5. CHANGELOG has a non-empty entry for this version

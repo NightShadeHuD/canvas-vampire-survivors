@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 import { Player } from '../src/entities.js';
 import {
     getBackgroundFor,

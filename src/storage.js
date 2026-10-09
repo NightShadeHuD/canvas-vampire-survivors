@@ -6,7 +6,7 @@
  * accumulator. Forwards-compatible: `mergeDeep` lets us add new save fields
  * without invalidating older slots.
  *
- * Dependencies: `./config.js` (CONFIG, STORAGE_KEY).
+ * Dependencies: .ts` (CONFIG, STORAGE_KEY).
  *
  * Exports:
  *   - loadSave(), saveSave(), resetSave()
@@ -14,7 +14,7 @@
  *   - accumulateTotals(save, run)
  */
 
-import { CONFIG, SPEEDRUN_STORAGE_KEY, STORAGE_KEY } from './config.js';
+import { CONFIG, SPEEDRUN_STORAGE_KEY, STORAGE_KEY } from './config.ts';
 
 const DEFAULT_SAVE = {
     // Legacy single-slot best-of. Kept for backwards compatibility with v2.0 saves.

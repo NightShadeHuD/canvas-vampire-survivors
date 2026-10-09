@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Weapon } from '../src/weapons.js';
 import { WEAPONS } from '../src/data.js';
-import { CONFIG } from '../src/config.js';
+import { CONFIG } from '../src/config.ts';
 
 // Minimal player that satisfies every getter Weapon touches.
 function makePlayer({ crit = 0, dmgMult = 1, cdMult = 1, areaMult = 1 } = {}) {

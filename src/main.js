@@ -14,7 +14,7 @@
  *   - re-exports ACHIEVEMENTS, WAVES from data.js
  */
 
-import { CONFIG, Difficulty, GameState } from './config.js';
+import { CONFIG, Difficulty, GameState } from './config.ts';
 import { ACHIEVEMENTS, BOSSES, ENEMIES, WAVES, WEAPONS } from './data.js';
 import {
     Enemy,
