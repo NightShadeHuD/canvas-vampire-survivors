@@ -30,7 +30,7 @@ import { AudioEngine } from './audio.ts';
 import { InputManager } from './input.ts';
 import { HapticEngine } from './haptics.ts';
 import { loadKeymap, saveKeymap } from './keymap.ts';
-import { UI } from './ui.js';
+import { UI } from './ui.ts';
 import { FpsMeter, ShakeCamera } from './systems.ts';
 import { SpatialHash } from './spatial-hash.ts';
 import { Pool, resetFloatingText, resetParticle } from './pool.ts';

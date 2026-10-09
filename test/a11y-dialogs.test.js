@@ -11,10 +11,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { UI } from '../src/ui.js';
+import { UI } from '../src/ui.ts';
 import { t, setLocale } from '../src/i18n.ts';
 
-/** The dialogs ui.js populates dynamically, and the i18n key of the heading
+/** The dialogs ui.ts populates dynamically, and the i18n key of the heading
  *  each one renders. The accessible name must match that heading. */
 const DIALOG_LABEL_KEYS = {
     achievementsScreen: 'achievements',

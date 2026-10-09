@@ -271,7 +271,7 @@ function makeStubDoc() {
 test('ui.updateStageChip: writes icon + name into the chip element', async () => {
     // Stub the global document so UI._cache works.
     globalThis.document = makeStubDoc();
-    const { UI } = await import('../src/ui.js');
+    const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.updateStageChip('crypt');
     const chip = globalThis.document.getElementById('btnStageChip');
@@ -298,7 +298,7 @@ test('ui.showStreak: renders 14 calendar cells and current/best stats', async ()
         noHit: false,
         seed: 1
     });
-    const { UI } = await import('../src/ui.js');
+    const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.showStreak();
     const m = globalThis.document.getElementById('streakScreen');
@@ -314,7 +314,7 @@ test('ui.showStreak: renders 14 calendar cells and current/best stats', async ()
 
 test('ui.showHelp: lists at least 6 keyboard shortcut rows and a close button', async () => {
     globalThis.document = makeStubDoc();
-    const { UI } = await import('../src/ui.js');
+    const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.showHelp();
     const m = globalThis.document.getElementById('helpScreen');
@@ -327,7 +327,7 @@ test('ui.showHelp: lists at least 6 keyboard shortcut rows and a close button', 
 
 test('ui.showHowToPlay: renders the four onboarding paragraphs', async () => {
     globalThis.document = makeStubDoc();
-    const { UI } = await import('../src/ui.js');
+    const { UI } = await import('../src/ui.ts');
     const ui = new UI({});
     ui.showHowToPlay();
     const m = globalThis.document.getElementById('howToPlayScreen');

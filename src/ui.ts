@@ -28,6 +28,18 @@ import {
 } from './keymap.ts';
 
 export class UI {
+    /** The owning `Game`; the UI reads state off it but never drives it. */
+    declare game: any;
+    /**
+     * Cached element handles, keyed by id. Typed as HTMLElement rather than
+     * Element so `dataset`, `style` and `classList` are available without a
+     * cast at every use.
+     */
+    declare els: Record<string, HTMLElement>;
+    /** i18n key of the banner currently on screen, so it can be re-translated. */
+    declare _activeBannerKey: string | null;
+    /** Handle for the banner auto-hide timer. */
+    declare _bannerTimer: ReturnType<typeof setTimeout> | undefined;
     constructor(game) {
         this.game = game;
         this.els = {};
@@ -159,7 +171,7 @@ export class UI {
             m.style.display = 'none';
         };
         m.querySelector('#stageClose')?.addEventListener('click', close);
-        m.querySelectorAll('.stage-card').forEach((btn) =>
+        m.querySelectorAll<HTMLElement>('.stage-card').forEach((btn) =>
             btn.addEventListener('click', () => {
                 const id = btn.dataset.stage;
                 onPick && onPick(id);
@@ -372,7 +384,7 @@ export class UI {
         const close = () => {
             m.style.display = 'none';
         };
-        m.querySelectorAll('[data-replay-speed]').forEach((b) =>
+        m.querySelectorAll<HTMLElement>('[data-replay-speed]').forEach((b) =>
             b.addEventListener('click', () => {
                 const s = parseFloat(b.dataset.replaySpeed) || 1;
                 close();
@@ -460,7 +472,7 @@ export class UI {
             onClose && onClose();
         };
         m.querySelector('#lbClose')?.addEventListener('click', close);
-        const ta = m.querySelector('#lbJson');
+        const ta = m.querySelector<HTMLTextAreaElement>('#lbJson');
         m.querySelector('#lbExport')?.addEventListener('click', () => {
             if (ta) ta.value = JSON.stringify({ normal: normalScores, speedrun: speedrunScores });
         });
@@ -524,8 +536,8 @@ export class UI {
 
     updateHud(game) {
         const p = game.player;
-        this.els.hp.textContent = Math.ceil(p.hp);
-        this.els.maxHp.textContent = Math.ceil(p.maxHp);
+        this.els.hp.textContent = String(Math.ceil(p.hp));
+        this.els.maxHp.textContent = String(Math.ceil(p.maxHp));
         this.els.hpBar.style.width = Math.max(0, (p.hp / p.maxHp) * 100) + '%';
         this.els.level.textContent = p.level;
         this.els.expBar.style.width = Math.min(100, (p.exp / p.expToNext) * 100) + '%';
@@ -661,10 +673,12 @@ export class UI {
                     onPick(isMaxed ? null : up);
                 } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
                     e.preventDefault();
-                    (div.nextElementSibling || options.firstElementChild)?.focus();
+                    (div.nextElementSibling as HTMLElement | null)?.focus?.();
+                    (options.firstElementChild as HTMLElement | null)?.focus?.();
                 } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
                     e.preventDefault();
-                    (div.previousElementSibling || options.lastElementChild)?.focus();
+                    (div.previousElementSibling as HTMLElement | null)?.focus?.();
+                    (options.lastElementChild as HTMLElement | null)?.focus?.();
                 }
             });
             options.appendChild(div);
@@ -677,7 +691,7 @@ export class UI {
         }
         this.els.levelUpMenu.style.display = 'flex';
         // focus first option for a11y
-        options.querySelector('.upgrade-option')?.focus();
+        options.querySelector<HTMLElement>('.upgrade-option')?.focus();
     }
 
     hideLevelUp() {
@@ -763,7 +777,7 @@ export class UI {
         }, 3500);
     }
 
-    showSettings(settings, onChange, onClose, onReset, opts = {}) {
+    showSettings(settings, onChange, onClose, onReset, opts: Record<string, any> = {}) {
         const m = this.els.settingsMenu;
         // iter-19: vibration row is only useful on devices with the
         // navigator.vibrate API. We hide the row entirely when
@@ -1062,7 +1076,7 @@ export class UI {
                 const text = buildShareText(entry);
                 if (pre) {
                     pre.textContent = text;
-                    pre.hidden = false;
+                    (pre as HTMLElement).hidden = false;
                 }
                 try {
                     await navigator.clipboard?.writeText?.(text);

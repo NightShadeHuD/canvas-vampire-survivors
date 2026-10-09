@@ -262,7 +262,7 @@ function tileFor(value, median) {
  * @param {Object} entry         the result we just produced
  * @param {Object} [history]     loadDailyHistory() output; defaults to live
  */
-export function buildShareText(entry, history) {
+export function buildShareText(entry, history?) {
     const all = history || loadDailyHistory();
     const sameStage = Object.values(all as Record<string, DailyEntry>).filter(
         (e) => e.stage === entry.stage
