@@ -14,6 +14,8 @@
  */
 
 import type {
+    Enemy,
+    Player,
     EnemyProjectile,
     Projectile,
     OrbitShard,
@@ -166,4 +168,107 @@ export function renderFloatingText(ctx: CanvasRenderingContext2D, self: Floating
     }
     ctx.fillText(self.text, self.x, self.y);
     ctx.globalAlpha = 1;
+}
+
+export function renderPlayer(ctx: CanvasRenderingContext2D, self: Player) {
+    // Don't make the player fully disappear during i-frames: strobe alpha.
+    const strobe = self.invincible ? (Math.floor(performance.now() / 60) % 2 === 0 ? 0.4 : 1) : 1;
+    ctx.save();
+    ctx.globalAlpha = strobe;
+
+    const grad = ctx.createRadialGradient(self.x, self.y, 0, self.x, self.y, self.size * 2.2);
+    grad.addColorStop(0, 'rgba(100,200,255,0.35)');
+    grad.addColorStop(1, 'rgba(100,200,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(self.x, self.y, self.size * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#44aaff';
+    ctx.beginPath();
+    ctx.arc(self.x, self.y, self.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#cfeaff';
+    ctx.beginPath();
+    ctx.arc(self.x, self.y, self.size * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Garlic aura ring
+    const garlic = self.weapons.find((w) => w.id === 'garlic');
+    if (garlic) {
+        const range = garlic.getRange(this);
+        const t = performance.now() / 400;
+        ctx.strokeStyle = `rgba(160,255,160,${0.25 + Math.sin(t) * 0.08})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(self.x, self.y, range, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+export function renderEnemy(ctx: CanvasRenderingContext2D, self: Enemy) {
+    ctx.save();
+    // Slowed foes get a cold cast.
+    if (self.flashTimer > 0) {
+        ctx.fillStyle = '#ffffff';
+    } else if (self.slowTimer > 0) {
+        ctx.fillStyle = '#88ccff';
+    } else if (self.bomber && self.fuseArmed) {
+        // Blink red while the fuse is burning.
+        const blink = Math.floor(performance.now() / 120) % 2 === 0;
+        ctx.fillStyle = blink ? '#ffffff' : self.color;
+    } else {
+        ctx.fillStyle = self.color;
+    }
+    ctx.beginPath();
+    ctx.arc(self.x, self.y, self.size, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.arc(self.x, self.y, self.size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shield ring
+    if (self.shielded && self.shieldHp > 0) {
+        ctx.strokeStyle = 'rgba(160,200,255,0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(self.x, self.y, self.size + 4, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // HP bar
+    const pct = Math.max(0, self.hp / self.maxHp);
+    const w = self.boss ? 80 : 30;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(self.x - w / 2, self.y - self.size - 10, w, 4);
+    ctx.fillStyle = pct > 0.5 ? '#44ff44' : pct > 0.25 ? '#ffaa33' : '#ff4444';
+    ctx.fillRect(self.x - w / 2, self.y - self.size - 10, w * pct, 4);
+
+    if (self.boss) {
+        // iter-14: IceQueen wears a frosty cyan halo + a faint inner ring
+        // so she reads as "the ice variant" at a glance even from across
+        // the arena. Other bosses keep the original magenta crown.
+        if (self.type?.iceQueen) {
+            ctx.strokeStyle = 'rgba(170,220,255,0.85)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(self.x, self.y, self.size + 4, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(220,240,255,0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(self.x, self.y, self.size + 10, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            ctx.strokeStyle = '#ff33aa';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(self.x, self.y, self.size + 4, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
 }
