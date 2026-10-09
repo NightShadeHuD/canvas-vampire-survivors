@@ -44,7 +44,7 @@ const STEPS = [
     },
     {
         script: 'check:docs',
-        proves: 'rule documents have well-formed tables and resolvable citations'
+        proves: 'rule docs hold: tables, citations, acceptance criteria'
     },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
