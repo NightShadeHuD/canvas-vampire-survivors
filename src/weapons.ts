@@ -9,13 +9,13 @@
  * At `lvl === def.evolveLevel` (5) the weapon enters its shape-changing
  * evolution — see `isEvolved()` and per-type handling below.
  *
- * Dependencies: `./entities.js` (Mine, OrbitShard, Projectile).
+ * Dependencies: `./entities.ts` (Mine, OrbitShard, Projectile).
  *
  * Exports:
  *   - class Weapon
  */
 
-import { Mine, OrbitShard, Projectile } from './entities.js';
+import { Mine, OrbitShard, Projectile } from './entities.ts';
 
 /** A weapon catalogue entry. Every field here is read by `Weapon`. */
 export interface WeaponDef {
@@ -39,13 +39,13 @@ export interface WeaponDef {
 }
 
 export class Weapon {
-    def: WeaponDef;
-    id: string;
-    name: string;
-    icon: string;
-    level: number;
+    declare def: WeaponDef;
+    declare id: string;
+    declare name: string;
+    declare icon: string;
+    declare level: number;
     /** Seconds until the next shot; a fresh weapon starts ready. */
-    cooldown: number;
+    declare cooldown: number;
     /** Orbit weapons only; built lazily and rebuilt when the count changes. */
     _shards: any[] | null = null;
     constructor(def) {
@@ -368,7 +368,7 @@ export class Weapon {
             if (d < range) {
                 const dmg = this._rollCrit(player, game, baseDmg, enemy.x, enemy.y - 20, '#88ddff');
                 enemy.takeDamage(dmg);
-                // Slow is cooperative: entities.js reads `slowTimer` / `slowPct`.
+                // Slow is cooperative: entities.ts reads `slowTimer` / `slowPct`.
                 if (!enemy.slowTimer || enemy.slowTimer < slowDur) {
                     enemy.slowTimer = slowDur;
                     enemy.slowPct = slowPct;

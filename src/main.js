@@ -24,7 +24,7 @@ import {
     Player,
     findEnemyDef,
     registerWeaponClass
-} from './entities.js';
+} from './entities.ts';
 import { Weapon } from './weapons.ts';
 import { AudioEngine } from './audio.ts';
 import { InputManager } from './input.ts';

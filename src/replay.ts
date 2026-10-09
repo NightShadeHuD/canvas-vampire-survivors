@@ -134,16 +134,16 @@ export function quantize(v) {
  */
 export class ReplayRecorder {
     frames: any[] = [];
-    seed: number;
-    stage: string;
-    difficulty: string;
+    declare seed: number;
+    declare stage: string;
+    declare difficulty: string;
     /** Fixed timestep between recorded frames. */
-    dt: number;
-    finalTime: number;
-    finalKills: number;
-    finalLevel: number;
+    declare dt: number;
+    declare finalTime: number;
+    declare finalKills: number;
+    declare finalLevel: number;
     /** True once the frame cap was hit and oldest frames were dropped. */
-    _truncated: boolean;
+    declare _truncated: boolean;
     constructor({ seed, stage, difficulty, dt }) {
         this.seed = seed >>> 0;
         this.stage = stage || 'forest';
@@ -251,12 +251,12 @@ export function clearReplay() {
  * fall back to the menu.
  */
 export class ReplayPlayer {
-    blob: any;
-    frames: any[];
-    cursor: number;
+    declare blob: any;
+    declare frames: any[];
+    declare cursor: number;
     /** Playback rate multiplier. */
-    speed: number;
-    done: boolean;
+    declare speed: number;
+    declare done: boolean;
     constructor(blob, { speed = 1 } = {}) {
         if (!blob) throw new Error('[replay] cannot construct player without blob');
         this.blob = blob;

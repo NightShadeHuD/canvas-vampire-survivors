@@ -37,10 +37,10 @@ interface Drop {
 }
 
 export class ScreenFlash {
-    color: string;
-    alpha: number;
+    declare color: string;
+    declare alpha: number;
     /** Alpha units shed per second. */
-    decay: number;
+    declare decay: number;
     constructor() {
         this.color = 'rgba(255,255,255,0)';
         this.alpha = 0;
@@ -102,7 +102,7 @@ export class RingPulse {
 export class HitBursts {
     bursts: Burst[] = [];
     /** Retained-burst cap; the oldest is dropped past it. */
-    max: number;
+    declare max: number;
     constructor() {
         this.bursts = [];
         this.max = 40;
@@ -139,7 +139,7 @@ export class HitBursts {
 // so the rain reads as falling rather than freezing in place.
 export class EmojiRain {
     drops: Drop[] = [];
-    max: number;
+    declare max: number;
     glyphs: string[] = [];
     constructor() {
         this.drops = [];
@@ -211,10 +211,10 @@ export class EmojiRain {
 // gets called from the gameplay loop. This is what the Glacial Cascade
 // follow-up pulse uses instead of a wall-clock setTimeout.
 export class EffectLayer {
-    flash: ScreenFlash;
-    pulses: RingPulse;
-    hits: HitBursts;
-    emojiRain: EmojiRain;
+    declare flash: ScreenFlash;
+    declare pulses: RingPulse;
+    declare hits: HitBursts;
+    declare emojiRain: EmojiRain;
     /** Pending in-engine delays; `cancelled` suppresses the callback. */
     delays: { t: number; fn: () => void; cancelled: boolean }[] = [];
     constructor() {

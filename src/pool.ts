@@ -28,12 +28,12 @@ export class Pool {
     /** Optional in-place re-initialiser used by `release()`. */
     reset: ((obj: any, ...args: any[]) => void) | null;
     /** Hard cap on retained objects; releases beyond it are dropped. */
-    maxSize: number;
+    declare maxSize: number;
     /** Recycled instances ready to hand out. */
-    free: any[];
+    declare free: any[];
     /** Lifetime totals, exposed for tests and tuning. */
-    acquired: number;
-    created: number;
+    declare acquired: number;
+    declare created: number;
     /**
      * @param {() => any} factory          builds a brand-new object
      * @param {(obj: any, ...args: any[]) => void} [reset]   re-inits before re-use
@@ -99,7 +99,7 @@ export class Pool {
 
 // ---------------------------------------------------------------------------
 // Reset helpers for the concrete entity classes. Placed here (rather than in
-// entities.js) so the pool module is self-contained for unit testing.
+// entities.ts) so the pool module is self-contained for unit testing.
 // ---------------------------------------------------------------------------
 
 export function resetFloatingText(obj, text, x, y, color, opts: Record<string, any> = {}) {

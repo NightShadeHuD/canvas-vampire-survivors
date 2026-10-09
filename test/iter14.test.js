@@ -19,7 +19,7 @@ import { dailyChallenge, dailySeed } from '../src/daily.ts';
 import { GAMEPAD_BUTTON, InputManager, applyGamepadDeadzone } from '../src/input.ts';
 import { _resetStorageForTests, getTouchButtonScale, loadSave, resetSave } from '../src/storage.ts';
 import { BOSSES, PASSIVES, WEAPONS } from '../src/data.ts';
-import { Player } from '../src/entities.js';
+import { Player } from '../src/entities.ts';
 import { Weapon } from '../src/weapons.ts';
 
 // ---------------------------------------------------------------------------

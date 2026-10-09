@@ -1,6 +1,6 @@
-// Unit tests for the Player class in src/entities.js.
+// Unit tests for the Player class in src/entities.ts.
 //
-// entities.js was the largest coverage gap in the repository (27% lines, 25%
+// entities.ts was the largest coverage gap in the repository (27% lines, 25%
 // functions) and Player holds the game's entire balance model: passive
 // stacking, the soft caps, the level curve, and the damage formula. A bug in
 // any of it is a balance bug that no rendering test would ever catch.
@@ -14,7 +14,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Player } from '../src/entities.js';
+import { Player } from '../src/entities.ts';
 import { CONFIG } from '../src/config.ts';
 import { PASSIVES } from '../src/data.ts';
 

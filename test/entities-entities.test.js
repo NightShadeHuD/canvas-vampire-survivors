@@ -1,4 +1,4 @@
-// Unit tests for the remaining entity classes in src/entities.js:
+// Unit tests for the remaining entity classes in src/entities.ts:
 // Enemy, ExpOrb, Particle, FloatingText, and the findEnemyDef helper.
 //
 // These are the entities the game spawns by the hundred, so their per-tick
@@ -17,7 +17,7 @@ import {
     FloatingText,
     findEnemyDef,
     registerWeaponClass
-} from '../src/entities.js';
+} from '../src/entities.ts';
 import { CONFIG } from '../src/config.ts';
 import { ENEMIES } from '../src/data.ts';
 

@@ -67,19 +67,19 @@ export function applyGamepadDeadzone(v, dz = GAMEPAD_AXIS_DEADZONE) {
 }
 
 export class InputManager {
-    keymap: Record<string, any>;
+    declare keymap: Record<string, any>;
     keys: Record<string, boolean> = {};
     /** `[event, handler, target]` triples, replayed by `detach()`. */
     listeners: [string, (e: any) => void, EventTarget][] = [];
-    moveVec: { x: number; y: number };
-    aimVec: { x: number; y: number };
-    gamepadVec: { x: number; y: number };
-    touchVec: { x: number; y: number };
-    joystick: VirtualJoystick | null;
-    paused: boolean;
+    declare moveVec: { x: number; y: number };
+    declare aimVec: { x: number; y: number };
+    declare gamepadVec: { x: number; y: number };
+    declare touchVec: { x: number; y: number };
+    declare joystick: VirtualJoystick | null;
+    declare paused: boolean;
     _prevButtons: boolean[] = [];
     /** Timestamp of the last D-pad tap, for edge detection. */
-    _lastEdgeTapAt: number;
+    declare _lastEdgeTapAt: number;
     onTogglePause: (() => void) | null;
     onTouchSpecial: (() => void) | null;
     onGamepadConfirm: (() => void) | null;
@@ -338,16 +338,16 @@ function _defaultGetGamepads() {
 }
 
 class VirtualJoystick {
-    active: boolean;
-    base: HTMLElement | null;
-    knob: HTMLElement | null;
+    declare active: boolean;
+    declare base: HTMLElement | null;
+    declare knob: HTMLElement | null;
     /** Receives a normalised vector as two components, not an object. */
     cb: (x: number, y: number) => void;
     /** Touch origin, in client coordinates. */
-    cx: number;
-    cy: number;
+    declare cx: number;
+    declare cy: number;
     /** Maximum knob travel before the vector saturates. */
-    maxR: number;
+    declare maxR: number;
     /** Detaches the listeners this instance installed. */
     _cleanup: (() => void) | null;
     constructor(base, knob, cb) {

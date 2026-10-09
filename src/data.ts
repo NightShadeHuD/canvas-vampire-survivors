@@ -2,7 +2,7 @@
  * @module data
  * @description Pure-data catalogue: weapons, passives, enemies, bosses, wave
  * director timeline, achievement definitions and unlock map. Behaviour lives
- * elsewhere (`weapons.ts`, `entities.js`, `achievements.ts`); this module is
+ * elsewhere (`weapons.ts`, `entities.ts`, `achievements.ts`); this module is
  * intentionally side-effect free so it can be diffed during balancing.
  *
  * Dependencies: none.
@@ -281,7 +281,7 @@ export const PASSIVES = {
     // --- iter-14 passives -------------------------------------------------
     // The three new passives all hook into existing player stats so the level-
     // up roller pool grows without any new code path. `dodgeChance` is summed
-    // (capped at 0.6 in entities.js) and consulted before damage is applied;
+    // (capped at 0.6 in entities.ts) and consulted before damage is applied;
     // `magnetMult` is reused for Pickup Magnet+ which stacks multiplicatively
     // on the existing MAGNET passive; `damageReduction` is summed and clamped
     // to a soft 0.6 cap on the consumer side so the player can't go fully
