@@ -8,7 +8,7 @@
  * iter-14 added a real Gamepad polling loop. The browser's Gamepad API is
  * pull-based: the page only sees current state when it reads
  * `navigator.getGamepads()`. We poll in `pollGamepad()` (called once per
- * frame from main.js — drop-in safe, never throws if the API or pad is
+ * frame from main.ts — drop-in safe, never throws if the API or pad is
  * absent) and feed the left analog into a gamepad-move vector, the right
  * analog into `aimVec` (consumed by manual-aim weapons later) and synthesise
  * edge-triggered button events for menu navigation: A=select, B=cancel,
@@ -117,7 +117,7 @@ export class InputManager {
         // `getMoveVector` / `attach` keydown both pick it up. Also hold a
         // dedicated callback for "non-movement" actions (help/mute) so the
         // host can wire them without re-implementing key matching in
-        // main.js. Pause stays on `onTogglePause` for backwards compat.
+        // main.ts. Pause stays on `onTogglePause` for backwards compat.
         this.keymap = cloneKeymap(DEFAULT_KEYMAP);
         this.onActionHelp = () => {};
         this.onActionMute = () => {};

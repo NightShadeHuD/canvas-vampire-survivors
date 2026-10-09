@@ -250,7 +250,7 @@ export class EffectLayer {
     /**
      * iter-15 polish: short red flash on a critical hit. Kept very brief
      * (high decay) so the player still sees the action under it. Drives
-     * the optional `criticalFlash` setting in main.js.
+     * the optional `criticalFlash` setting in main.ts.
      */
     criticalHit() {
         this.flash.flash('255,80,80', 0.18, 6);

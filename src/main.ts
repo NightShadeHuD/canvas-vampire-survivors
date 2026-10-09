@@ -100,6 +100,78 @@ function getEnemySprite(def, size) {
 }
 
 export class Game {
+    /*
+     * Game state.
+     *
+     * Declared with `declare` so they emit nothing: TypeScript does not infer a
+     * field from assignment, and a bare declaration would emit `x;`, defining
+     * every one of these as undefined at construction. The initialisers live in
+     * `init()` and the constructor, which is where the real values come from.
+     *
+     * Typed `any` deliberately for now. This is the central state bag of the
+     * application and giving it real types is the next piece of work, not
+     * something to guess at while the port is still landing.
+     */
+    declare _bossWarnedAt: any;
+    declare _bossesSpawned: any;
+    declare _coldTickAccum: any;
+    declare _hiddenPaused: any;
+    declare _konami: any;
+    declare _lastAnnouncedWave: any;
+    declare _lastMoveVec: any;
+    declare _nextSplitIdx: any;
+    declare _pauseStartedAt: any;
+    declare _pendingLevelUps: any;
+    declare _runStartWallClock: any;
+    declare _spawnAccumulator: any;
+    declare _speedrunEntry: any;
+    declare _speedrunRank: any;
+    declare _tutorialBanner: any;
+    declare _tutorialKeyHandler: any;
+    declare achievements: any;
+    declare audio: any;
+    declare camera: any;
+    declare canvas: any;
+    declare ctx: any;
+    declare currentWave: any;
+    declare dailyChallenge: any;
+    declare dailyMode: any;
+    declare effects: any;
+    declare enemies: any;
+    declare enemyDmgMult: any;
+    declare enemyProjectiles: any;
+    declare expOrbs: any;
+    declare floatingTexts: any;
+    declare fpsMeter: any;
+    declare gameTime: any;
+    declare haptics: any;
+    declare input: any;
+    declare keymap: any;
+    declare kills: any;
+    declare lastTime: any;
+    declare mines: any;
+    declare particles: any;
+    declare player: any;
+    declare pools: any;
+    declare projectiles: any;
+    declare raf: any;
+    declare replayActive: any;
+    declare replayPlayer: any;
+    declare replayRecorder: any;
+    declare run: any;
+    declare save: any;
+    declare spatial: any;
+    declare speedrunMode: any;
+    declare speedrunRng: any;
+    declare speedrunSplits: any;
+    declare speedrunStart: any;
+    declare stageBosses: any;
+    declare stageId: any;
+    declare stageMods: any;
+    declare stageWaves: any;
+    declare state: any;
+    declare tutorial: any;
+    declare ui: any;
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
@@ -274,7 +346,7 @@ export class Game {
         window.addEventListener(
             'keydown',
             (e) => {
-                const tag = (e.target && e.target.tagName) || '';
+                const tag = (e.target as HTMLElement | null)?.tagName || '';
                 if (tag === 'INPUT' || tag === 'TEXTAREA') {
                     // Stop the input-manager's default handler from firing
                     // for typed text. We do this rather than gating inside
@@ -301,7 +373,7 @@ export class Game {
         window.addEventListener('keydown', (e) => {
             if (this.state !== GameState.MENU) return;
             // Ignore when typing into the leaderboard import textarea etc.
-            const tag = (e.target && e.target.tagName) || '';
+            const tag = (e.target as HTMLElement | null)?.tagName || '';
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
             this._konami.push(e.key);
         });
@@ -351,7 +423,7 @@ export class Game {
     _bindLeaderboardImport() {
         if (typeof window === 'undefined') return;
         window.addEventListener('vs-leaderboard-import', (ev) => {
-            const payload = ev.detail || {};
+            const payload = (ev as CustomEvent).detail || {};
             try {
                 if (Array.isArray(payload.normal)) {
                     const seen = new Set(
@@ -1609,7 +1681,7 @@ export class Game {
             this.particles.push(this.pools.particle.acquire(x, y, color));
         }
     }
-    createFloatingText(text, x, y, color, opts) {
+    createFloatingText(text, x, y, color, opts?) {
         if (this.save.settings.reducedMotion) return;
         // damageNumbers toggle (default on). Backwards-compatible: an older
         // save without the field still gets numbers because we treat
@@ -1824,8 +1896,9 @@ export class Game {
 const origGainExp = Player.prototype.gainExp;
 Player.prototype.gainExp = function (amount) {
     const ups = origGainExp.call(this, amount);
-    if (ups.length && window.__vsGame) {
-        window.__vsGame._pendingLevelUps = (window.__vsGame._pendingLevelUps || 0) + ups.length;
+    if (ups.length && (window as any).__vsGame) {
+        (window as any).__vsGame._pendingLevelUps =
+            ((window as any).__vsGame._pendingLevelUps || 0) + ups.length;
     }
     return ups;
 };
@@ -1833,7 +1906,7 @@ Player.prototype.gainExp = function (amount) {
 // Bootstrap
 export function boot() {
     const g = new Game();
-    window.__vsGame = g;
+    (window as any).__vsGame = g;
     // Dev-only debug hooks. Gated on hostname so they never fire on the
     // GitHub Pages build; the smoke harness loads from localhost so it
     // does. Used by scripts/runtime-smoke.js to fast-forward to bosses,
@@ -1845,7 +1918,7 @@ export function boot() {
             location.hostname === '127.0.0.1' ||
             location.hostname === '');
     if (isDev) {
-        window.__SURV_DEBUG__ = {
+        (window as any).__SURV_DEBUG__ = {
             /** Fast-forward simulated game time. Triggers everything that's
              * gated on `gameTime`: wave director, boss spawns, difficulty
              * scaling. Spawn accumulator follows along so a chunk of enemies

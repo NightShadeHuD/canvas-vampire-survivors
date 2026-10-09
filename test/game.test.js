@@ -1,4 +1,4 @@
-// Unit tests for src/main.js — the Game class.
+// Unit tests for src/main.ts — the Game class.
 //
 // This module is 1,887 LOC, the largest in the repository, and had 0% coverage:
 // `boot()` throws "document is not defined", so no test could get near it. The
@@ -23,7 +23,7 @@ import { CONFIG } from '../src/config.ts';
 async function withGame(fn, { now = 1000 } = {}) {
     const env = installBrowserStub({ now });
     try {
-        const { Game } = await import('../src/main.js');
+        const { Game } = await import('../src/main.ts');
         const game = new Game();
         return await fn(game, env);
     } finally {

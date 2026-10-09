@@ -3,7 +3,7 @@
  * @description A minimal, honest browser environment so `Game` can be
  * constructed and driven in Node.
  *
- * `src/main.js` is the largest module in the repository (1,887 LOC) and had 0%
+ * `src/main.ts` is the largest module in the repository (1,887 LOC) and had 0%
  * test coverage: `boot()` throws `document is not defined`, so no test could
  * get near it. That is not a reason to leave it untested — it is a reason to
  * build a stub, which is what this is.

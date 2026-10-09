@@ -72,7 +72,7 @@ export interface DailyEntry {
     won?: boolean;
 }
 
-export function dailyChallenge(dateStr) {
+export function dailyChallenge(dateStr?) {
     const date = dateStr || todayKey();
     const seed = dailySeed(date);
     // iter-14: rotation expands from 2 → 3 stages so tundra also gets daily

@@ -25,7 +25,7 @@
  *   - Output PNGs land at docs/screenshots/real-*.png — these replace the
  *     SVG mockups in README. SVG fallbacks live under docs/screenshots/svg/.
  *   - Round 10 screenshots use `window.__SURV_DEBUG__` test hooks (gated to
- *     localhost in src/main.js) — they don't ship on GitHub Pages.
+ *     localhost in src/main.ts) — they don't ship on GitHub Pages.
  */
 'use strict';
 
