@@ -19,6 +19,12 @@
  */
 
 export class SpatialHash {
+    /** Bucket edge length in world units. */
+    cell: number;
+    /** Bucket key -> objects currently in that bucket. */
+    map: Map<string, object[]>;
+    /** Number of objects inserted; bucket arrays are not counted. */
+    _size: number;
     /**
      * @param {number} cell - cell edge length in world units (px). 64 is a
      *     good default for this game: matches the biggest non-boss enemy

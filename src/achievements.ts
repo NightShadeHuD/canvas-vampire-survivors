@@ -14,6 +14,11 @@
 import { ACHIEVEMENTS, UNLOCKS } from './data.js';
 
 export class AchievementTracker {
+    save: any;
+    /** Per-run counters, reset by `resetRun()`. */
+    run: ReturnType<typeof AchievementTracker._freshRun>;
+    /** Achievements unlocked this run and awaiting a toast. */
+    queue: any[];
     constructor(save) {
         this.save = save;
         this.run = AchievementTracker._freshRun();

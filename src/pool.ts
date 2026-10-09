@@ -23,12 +23,23 @@
  */
 
 export class Pool {
+    /** Creates a blank instance of the pooled type. */
+    factory: () => any;
+    /** Optional in-place re-initialiser used by `release()`. */
+    reset: ((obj: any, ...args: any[]) => void) | null;
+    /** Hard cap on retained objects; releases beyond it are dropped. */
+    maxSize: number;
+    /** Recycled instances ready to hand out. */
+    free: any[];
+    /** Lifetime totals, exposed for tests and tuning. */
+    acquired: number;
+    created: number;
     /**
      * @param {() => any} factory          builds a brand-new object
      * @param {(obj: any, ...args: any[]) => void} [reset]   re-inits before re-use
      * @param {{ maxSize?: number, prealloc?: number }} [opts]
      */
-    constructor(factory, reset, opts = {}) {
+    constructor(factory, reset, opts: Record<string, any> = {}) {
         if (typeof factory !== 'function') {
             throw new TypeError('Pool: factory must be a function');
         }
@@ -91,7 +102,7 @@ export class Pool {
 // entities.js) so the pool module is self-contained for unit testing.
 // ---------------------------------------------------------------------------
 
-export function resetFloatingText(obj, text, x, y, color, opts = {}) {
+export function resetFloatingText(obj, text, x, y, color, opts: Record<string, any> = {}) {
     obj.text = text;
     obj.x = x;
     obj.y = y;
@@ -103,7 +114,7 @@ export function resetFloatingText(obj, text, x, y, color, opts = {}) {
     obj.crit = !!opts.crit;
 }
 
-export function resetParticle(obj, x, y, color, opts = {}) {
+export function resetParticle(obj, x, y, color, opts: Record<string, any> = {}) {
     obj.x = x;
     obj.y = y;
     obj.color = color;

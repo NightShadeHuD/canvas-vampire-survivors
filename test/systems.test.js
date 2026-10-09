@@ -195,7 +195,7 @@ test('systems/FpsMeter: a zero delta does not produce Infinity', () => {
 // ---------------------------------------------------------------------------
 
 test('systems: SpatialHash is re-exported as the same class, not a copy', async () => {
-    const direct = await import('../src/spatial-hash.js');
+    const direct = await import('../src/spatial-hash.ts');
     assert.equal(
         SpatialHash,
         direct.SpatialHash,

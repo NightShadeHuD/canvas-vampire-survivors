@@ -40,6 +40,12 @@ export function normaliseKonamiKey(k) {
 }
 
 export class KonamiDetector {
+    /** How many steps of the sequence have matched so far. */
+    _idx: number;
+    /** True once the sequence has fired, until the player backs out. */
+    _fired: boolean;
+    /** Called on the key press that completes the sequence. */
+    onUnlock: () => void;
     constructor(onUnlock = () => {}) {
         this._idx = 0;
         // Toggle so a second consecutive sequence on the same menu doesn't

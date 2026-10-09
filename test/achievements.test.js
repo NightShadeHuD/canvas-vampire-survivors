@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AchievementTracker } from '../src/achievements.js';
+import { AchievementTracker } from '../src/achievements.ts';
 import { ACHIEVEMENTS, UNLOCKS } from '../src/data.js';
 
 function makeSave() {

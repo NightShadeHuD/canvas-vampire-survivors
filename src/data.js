@@ -2,7 +2,7 @@
  * @module data
  * @description Pure-data catalogue: weapons, passives, enemies, bosses, wave
  * director timeline, achievement definitions and unlock map. Behaviour lives
- * elsewhere (`weapons.js`, `entities.js`, `achievements.js`); this module is
+ * elsewhere (`weapons.js`, `entities.js`, `achievements.ts`); this module is
  * intentionally side-effect free so it can be diffed during balancing.
  *
  * Dependencies: none.
