@@ -33,7 +33,8 @@ function makeGame() {
         audio: { shoot() {}, explosion() {} },
         projectiles: [],
         enemies: [],
-        mines: []
+        mines: [],
+        player: undefined
     };
 }
 

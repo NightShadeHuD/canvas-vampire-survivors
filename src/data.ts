@@ -1,3 +1,6 @@
+// Type-only, so it is erased and creates no runtime cycle with weapons.ts.
+import type { WeaponDef } from './weapons.ts';
+
 /**
  * @module data
  * @description Pure-data catalogue: weapons, passives, enemies, bosses, wave
@@ -22,7 +25,21 @@
 // Level scaling is uniform: damage +20% per level, cooldown ×0.92, range +10%.
 // Level 5 triggers a weapon's "evolution" flag (see weapons.ts).
 // ---------------------------------------------------------------------------
-export const WEAPONS = {
+/** An achievement definition. Reward fields are present on few entries. */
+export interface AchievementDef {
+    id: string;
+    name: string;
+    icon: string;
+    description: string;
+    hidden?: boolean;
+    /** Weapon id unlocked by earning this. */
+    weapon?: string;
+    /** Cosmetic id unlocked by earning this. */
+    cosmetic?: string;
+    [key: string]: any;
+}
+
+export const WEAPONS: Record<string, WeaponDef> = {
     WHIP: {
         id: 'whip',
         name: 'Whip',
@@ -624,7 +641,7 @@ export const WAVES = [
 // Achievements: condition evaluated at end-of-run + continuously in-game.
 // `check(ctx)` returns true when unlocked. `ctx` = { game, run }
 // ---------------------------------------------------------------------------
-export const ACHIEVEMENTS = [
+export const ACHIEVEMENTS: AchievementDef[] = [
     {
         id: 'first_blood',
         name: 'First Blood',
@@ -793,7 +810,11 @@ export const ACHIEVEMENTS = [
 // ---------------------------------------------------------------------------
 // Unlocks: achievement id → weapon id granted as starter-weapon option.
 // ---------------------------------------------------------------------------
-export const UNLOCKS = {
+/**
+ * What each achievement unlocks. An entry grants a weapon or a cosmetic, never
+ * both, so each field is optional and the consumer must check.
+ */
+export const UNLOCKS: Record<string, { weapon?: string; cosmetic?: string }> = {
     first_blood: { weapon: 'magic_wand' },
     slayer_100: { weapon: 'knife' },
     survive_5min: { weapon: 'orbit' },

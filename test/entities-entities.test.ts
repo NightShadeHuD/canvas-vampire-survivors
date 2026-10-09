@@ -225,7 +225,7 @@ test('expOrb/update: collecting grants experience, feedback, sound and a counter
     const collected = [];
     const floaters = [];
     const sounds = [];
-    const run = {};
+    const run: Record<string, any> = {};
     const orb = new ExpOrb(10, 10, 7);
     const game = {
         player: {
@@ -312,7 +312,12 @@ test('particle: defaults stay inside their documented ranges', () => {
     withRandom(0, () => {
         const low = new Particle(0, 0, '#fff');
         assert.equal(low.size, 2);
-        assert.equal(low.speed, undefined, 'speed is not stored directly');
+        // Speed is decomposed into vx/vy rather than stored. Asserting the
+        // decomposition is worth more than asserting a field is absent: with
+        // random pinned to 0 the angle is 0 and the speed is 60, so the whole
+        // vector is determined.
+        assert.equal(low.vx, 60, 'vx is cosine(0) * 60');
+        assert.equal(low.vy, 0, 'vy is sine(0) * 60');
         assert.equal(low.life, 1);
     });
     withRandom(0.999, () => {

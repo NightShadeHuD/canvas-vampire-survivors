@@ -144,7 +144,17 @@ export class ReplayRecorder {
     declare finalLevel: number;
     /** True once the frame cap was hit and oldest frames were dropped. */
     declare _truncated: boolean;
-    constructor({ seed, stage, difficulty, dt }) {
+    constructor({
+        seed,
+        stage,
+        difficulty,
+        dt
+    }: {
+        seed: any;
+        stage: any;
+        difficulty?: any;
+        dt?: any;
+    }) {
         this.seed = seed >>> 0;
         this.stage = stage || 'forest';
         this.difficulty = difficulty || 'normal';
