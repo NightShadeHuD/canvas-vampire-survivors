@@ -28,6 +28,24 @@
  * Nagging on every hundredth would make the message wallpaper, and a warning
  * nobody reads is worse than no warning.
  *
+ * IMPORTANT — a percentage can legitimately FALL while absolute coverage rises.
+ * These are percentages, so the denominator moves. When a module joins the
+ * graph for the first time, two things happen at once: its own (mostly
+ * uncovered) lines enter the overall total, and code in modules it depends on
+ * becomes reachable, growing those modules' branch counts. The first time this
+ * gate ran against real new tests, `main.js` entered the graph and:
+ *
+ *     overall   69.76% -> 67.15% lines   (1,887 newly-counted LOC, 44.78% covered)
+ *     ui.js     32.54% -> 37.54% lines   (up)
+ *     ui.js     66.67% -> 60.78% branches (down — more of it became reachable,
+ *                                          so more uncovered branches counted)
+ *
+ * Absolute coverage went up in every case. So a drop is not automatically a
+ * regression, but it is never silent either: it requires an explicit,
+ * reviewed re-baseline with the reason in the commit message. That is the
+ * point. A tolerance wide enough to absorb this would also absorb a real
+ * regression, and would be worth nothing.
+ *
  * A module that no test ever loads does not appear in the coverage report at
  * all. It is treated as 0%, not as absent, so it cannot hide.
  *
