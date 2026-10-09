@@ -5,7 +5,7 @@
  * UI state mutations always funnel through these helpers (easier to audit,
  * easier to swap renderers later).
  *
- * Dependencies: `./data.js`, .ts`, `./i18n.js`.
+ * Dependencies: `./data.js`, .ts`, `./i18n.ts`.
  *
  * Exports:
  *   - class UI               cached element references + render helpers
@@ -14,9 +14,9 @@
 
 import { ACHIEVEMENTS, PASSIVES, WEAPONS } from './data.js';
 import { CONFIG } from './config.ts';
-import { t, setLocale, availableLocales } from './i18n.js';
+import { t, setLocale, availableLocales } from './i18n.ts';
 import { getStage, listStages } from './stages.js';
-import { buildShareText, dailyStreakSummary, loadDailyHistory } from './daily.js';
+import { buildShareText, dailyStreakSummary, loadDailyHistory } from './daily.ts';
 import {
     DEFAULT_KEYMAP,
     KEYMAP_ACTIONS,
@@ -25,7 +25,7 @@ import {
     detectConflicts,
     keyLabel,
     normaliseKey
-} from './keymap.js';
+} from './keymap.ts';
 
 export class UI {
     constructor(game) {

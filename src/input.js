@@ -26,7 +26,7 @@
  *   - applyGamepadDeadzone(value, dz?)
  */
 
-import { DEFAULT_KEYMAP, cloneKeymap } from './keymap.js';
+import { DEFAULT_KEYMAP, cloneKeymap } from './keymap.ts';
 
 const JOYSTICK_DEADZONE = 0.15;
 const DOUBLE_TAP_WINDOW_MS = 260;

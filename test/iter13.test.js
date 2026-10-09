@@ -10,7 +10,7 @@ import {
     dailyStreakSummary,
     saveDailyResult,
     todayKey
-} from '../src/daily.js';
+} from '../src/daily.ts';
 import { _resetStorageForTests, loadSave, resetSave } from '../src/storage.js';
 
 // A fixed instant used as "now" wherever a test both writes and reads daily

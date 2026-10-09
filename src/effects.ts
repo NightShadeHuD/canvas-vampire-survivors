@@ -11,7 +11,36 @@
  *   - class EffectLayer  facade aggregating all three
  */
 
+/** A radial ring, used for level-up and pickup pulses. */
+interface Pulse {
+    x: number;
+    y: number;
+    color: string;
+    r: number;
+    life: number;
+}
+
+/** A short-lived impact burst. */
+interface Burst extends Pulse {}
+
+/** One falling emoji, with its own drift and spin. */
+interface Drop {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    rot: number;
+    vrot: number;
+    size: number;
+    glyph: string;
+    life: number;
+}
+
 export class ScreenFlash {
+    color: string;
+    alpha: number;
+    /** Alpha units shed per second. */
+    decay: number;
     constructor() {
         this.color = 'rgba(255,255,255,0)';
         this.alpha = 0;
@@ -40,6 +69,7 @@ export class ScreenFlash {
 
 // Ring pulse (e.g. player level-up). Emits a single growing ring per call.
 export class RingPulse {
+    pulses: Pulse[] = [];
     constructor() {
         this.pulses = [];
     }
@@ -70,6 +100,9 @@ export class RingPulse {
 
 // Hit burst: tiny ring-of-dots used when a projectile connects. Capped count.
 export class HitBursts {
+    bursts: Burst[] = [];
+    /** Retained-burst cap; the oldest is dropped past it. */
+    max: number;
     constructor() {
         this.bursts = [];
         this.max = 40;
@@ -105,6 +138,9 @@ export class HitBursts {
 // calls per frame. Each emoji has a position, gravity, and a slight x-drift
 // so the rain reads as falling rather than freezing in place.
 export class EmojiRain {
+    drops: Drop[] = [];
+    max: number;
+    glyphs: string[] = [];
     constructor() {
         this.drops = [];
         this.max = 60;
@@ -175,6 +211,12 @@ export class EmojiRain {
 // gets called from the gameplay loop. This is what the Glacial Cascade
 // follow-up pulse uses instead of a wall-clock setTimeout.
 export class EffectLayer {
+    flash: ScreenFlash;
+    pulses: RingPulse;
+    hits: HitBursts;
+    emojiRain: EmojiRain;
+    /** Pending in-engine delays; `cancelled` suppresses the callback. */
+    delays: { t: number; fn: () => void; cancelled: boolean }[] = [];
     constructor() {
         this.flash = new ScreenFlash();
         this.pulses = new RingPulse();

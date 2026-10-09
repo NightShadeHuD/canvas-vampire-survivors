@@ -23,7 +23,7 @@ import {
 } from '../src/stages.js';
 import { SeededRng, _resetStorageForTests, saveSave } from '../src/storage.js';
 import { SpatialHash } from '../src/spatial-hash.ts';
-import { dailyChallenge, dailySeed } from '../src/daily.js';
+import { dailyChallenge, dailySeed } from '../src/daily.ts';
 import {
     REPLAY_VERSION,
     ReplayPlayer,
@@ -32,7 +32,7 @@ import {
     compressFrames,
     expandFrames
 } from '../src/replay.js';
-import { availableLocales, getLocale, setLocale, t } from '../src/i18n.js';
+import { availableLocales, getLocale, setLocale, t } from '../src/i18n.ts';
 
 // ---------------------------------------------------------------------------
 // 1. Arena boundary clamp — corners must never be exceeded.

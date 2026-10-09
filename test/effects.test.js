@@ -1,9 +1,9 @@
-// Unit tests for src/effects.js — focuses on the v2.5 schedule queue, since
+// Unit tests for src/effects.ts — focuses on the v2.5 schedule queue, since
 // the visual effects (flash/pulse/hit) are exercised via the gameplay loop.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EffectLayer } from '../src/effects.js';
+import { EffectLayer } from '../src/effects.ts';
 
 test('EffectLayer.schedule: fires after the requested dt accumulates', () => {
     const fx = new EffectLayer();

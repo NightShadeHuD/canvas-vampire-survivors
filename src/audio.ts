@@ -12,6 +12,18 @@
  */
 
 export class AudioEngine {
+    settings: Record<string, any>;
+    ctx: AudioContext | null;
+    masterGain: GainNode | null;
+    sfxGain: GainNode | null;
+    musicGain: GainNode | null;
+    /** Handle for the music scheduler; null when music is stopped. */
+    musicInterval: ReturnType<typeof setInterval> | null;
+    enabled: boolean;
+    /** True once the first user gesture has resumed the context. */
+    unlocked: boolean;
+    /** Cached white-noise buffer, built lazily by `_noiseBuffer()`. */
+    _noise: AudioBuffer | null;
     constructor(settings) {
         this.settings = settings;
         this.ctx = null;
@@ -26,7 +38,7 @@ export class AudioEngine {
     init() {
         if (this.ctx) return;
         try {
-            const AC = window.AudioContext || window.webkitAudioContext;
+            const AC = window.AudioContext || (window as any).webkitAudioContext;
             if (!AC) {
                 this.enabled = false;
                 return;
@@ -83,6 +95,21 @@ export class AudioEngine {
         release = 0.05,
         sweep = 0,
         noise = false
+    }: {
+        freq?: number;
+        dur?: number;
+        /**
+         * A legal Web Audio oscillator shape. Typed as the DOM union rather
+         * than `string` deliberately: assigning anything else throws a
+         * TypeError at runtime, and every caller here already passes a valid
+         * literal, so narrowing turns a future typo into a compile error.
+         */
+        type?: OscillatorType;
+        volume?: number;
+        attack?: number;
+        release?: number;
+        sweep?: number;
+        noise?: boolean;
     }) {
         if (!this.enabled || !this.ctx || !this.unlocked) return;
         const now = this.ctx.currentTime;
