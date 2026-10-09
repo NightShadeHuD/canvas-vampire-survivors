@@ -31,7 +31,8 @@
         "smoke:live": "node scripts/smoke-live-deploy.js",
         "smoke:extended": "node scripts/extended-smoke.js",
         "build": "node scripts/build.mjs",
-        "typecheck": "tsc -p tsconfig.json"
+        "typecheck": "tsc -p tsconfig.json",
+        "check:suite": "node scripts/check-suite.mjs"
     },
     "keywords": [
         "game",

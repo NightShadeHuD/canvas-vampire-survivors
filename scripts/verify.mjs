@@ -30,6 +30,10 @@ const STEPS = [
     { script: 'typecheck', proves: 'the TypeScript config is valid and the tree parses' },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
+    {
+        script: 'check:suite',
+        proves: 'no test was skipped, left as todo, or deleted'
+    },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
     {

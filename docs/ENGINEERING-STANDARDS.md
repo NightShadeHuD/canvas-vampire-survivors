@@ -98,6 +98,7 @@ It runs, in order, and stops at the first failure:
 | Typecheck        | `npm run typecheck`            | The TypeScript config is valid and the tree parses          |
 | Format           | `npm run format:check`         | Code matches the project's Prettier contract                |
 | Unit tests       | `npm test`                     | Behaviour is as specified                                   |
+| Suite mandates   | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
 | Date-hermeticity | `npm run test:clock`           | No test depends on today's date                             |
 | Baseline         | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
 | Coverage floors  | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
@@ -204,6 +205,7 @@ Rules for gaps:
 | Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
 | Style + format              | eslint, prettier                   | pre-commit, CI |
+| Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
 | TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
 | Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
 | Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
@@ -234,6 +236,42 @@ investigates it.
 
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
+
+### Suite mandates
+
+`check:suite` reads the suite's own machine-readable report — Node's
+`--test-reporter=junit` output — rather than the console summary, and refuses
+three things:
+
+1. **Any outcome that is not Passed.**
+2. **A skipped or todo test.** This is the quietest way to a green suite, and it
+   was measured here rather than assumed. Adding one skipped test produced:
+
+    ```
+    tests 513   pass 512   fail 0   skipped 1
+    ```
+
+    and `lint`, `check:hygiene` and `check:baseline` all exited 0. Nothing in this
+    repository could see it.
+
+3. **A total below `testCountFloor`**, so _deleting_ a test fails the build while
+   _adding_ one only requires raising the floor in the same commit.
+
+The floor is deliberately a floor and not an equality. Asserting an exact count
+would make every unrelated test addition a failure, which trains people to edit
+the number without reading it. A floor can only be satisfied by tests that exist.
+
+**Why the report and not the console.** The console summary counts passes; it
+does not say _which_ test stopped running, and a count that grows by one while a
+skip appears is exactly the shape that reads as success.
+
+Adopted from the agent-scaffold method, whose own note on the parser proved
+correct here: _"the parser is the per-language branch"_. The first version of
+`scripts/lib/suite-report.mjs` assumed no `>` could appear inside an attribute
+value — which is false, and one of this repository's test names contains one
+(`… prunes old days (>14d)`). It truncated that case, lost its name, and reported
+a second skipped test that did not exist. The fix and its regression test are in
+`test/suite-report.test.ts`.
 
 ### Coverage floors
 
