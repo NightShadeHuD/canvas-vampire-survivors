@@ -29,13 +29,28 @@ import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 
-/** Tracked files, with their size in bytes. */
+/**
+ * Tracked files, with their size in bytes.
+ *
+ * Refuses an empty set. Measured: with the glob pointed at nothing this gate
+ * printed "clean — 0 tracked files checked" and exited 0, which is the same
+ * shape a real pass takes.
+ */
 function trackedFiles() {
     const out = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' });
-    return out
+    const files = out
         .split('\0')
         .filter(Boolean)
         .map((rel) => ({ rel, size: statSync(path.join(repoRoot, rel)).size }));
+    if (files.length === 0) {
+        console.error(
+            'check-hygiene: FAILED — nothing to check: 0 tracked files were found, so ' +
+                'this gate verified nothing. A gate that looks at nothing must not ' +
+                'report that it looked at everything.'
+        );
+        process.exit(1);
+    }
+    return files;
 }
 
 const TEXT_EXT = /\.(js|mjs|cjs|jsx|ts|tsx|mts|cts|json|html|css|md|yml|yaml|sh|txt)$/;
