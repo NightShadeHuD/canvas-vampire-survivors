@@ -11,7 +11,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planAnnotation, TYPE_BY_NAME } from '../scripts/lib/annotate.mjs';
+import { planAnnotation, TYPE_BY_NAME, NAMED_TYPES } from '../scripts/lib/annotate.mjs';
 
 /** Plan against a single line, with the column worked out from a marker. */
 function plan(lineWithMarker: string, name: string) {
@@ -155,4 +155,33 @@ test('annotate: a missing name is refused, not thrown on', () => {
     // pure planner that promises to refuse must not throw instead.
     assert.equal(planAnnotation({ line: 'f(x)', col: 3, name: undefined as never }).ok, false);
     assert.equal(planAnnotation({ line: 'f(x)', col: 3, name: '' }).ok, false);
+});
+
+test('annotate: a named type is emitted as the class, not as any', () => {
+    // `any` has no GDScript equivalent, so it is the one answer that does not
+    // help the port. These names map to real classes.
+    assert.equal(plan('    f(|game) {', 'game').line, '    f(game: Game) {');
+    assert.equal(plan('    f(|player) {', 'player').line, '    f(player: Player) {');
+    assert.equal(plan('    f(|enemy) {', 'enemy').line, '    f(enemy: Enemy) {');
+});
+
+test('annotate: every named type says where it is defined', () => {
+    // The annotator has to add the import, so an entry without a specifier would
+    // produce a type that does not resolve.
+    for (const [name, specifier] of Object.entries(NAMED_TYPES)) {
+        assert.match(name, /^[A-Z]/, `${name} should be a class name`);
+        assert.match(specifier, /^\.\/[\w-]+\.ts$/, `${name} has no importable specifier`);
+    }
+});
+
+test('annotate: no table entry stays as a bare any unless it says why', () => {
+    // Tightening this table is the whole exercise. `any` is still allowed for
+    // genuinely heterogeneous parameters, but the count is asserted so it cannot
+    // grow unnoticed.
+    const loose = Object.entries(TYPE_BY_NAME).filter(([, t]) => t === 'any');
+    assert.equal(
+        loose.length <= 20,
+        true,
+        `too many parameters are still 'any': ${loose.map(([n]) => n).join(', ')}`
+    );
 });

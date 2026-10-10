@@ -73,6 +73,10 @@ export const TYPE_BY_NAME = {
     ratio: 'number',
     scale: 'number',
     damage: 'number',
+    baseDamage: 'number',
+    // Comparators and arithmetic operands: `(a, b) => a - b`.
+    a: 'number',
+    b: 'number',
     hp: 'number',
     score: 'number',
     total: 'number',
@@ -98,9 +102,11 @@ export const TYPE_BY_NAME = {
     // Loose, because these genuinely are heterogeneous in this codebase. They are
     // declared as `any` rather than guessed, and they are what `strictNullChecks`
     // and the follow-up work will tighten.
-    game: 'any',
-    player: 'any',
-    enemy: 'any',
+    // Real classes, not `any`. Each was `any` in the first version of this
+    // table, which silenced the error and told a GDScript translator nothing.
+    game: 'Game',
+    player: 'Player',
+    enemy: 'Enemy',
     def: 'any',
     opts: 'any',
     options: 'any',
@@ -123,6 +129,30 @@ export const TYPE_BY_NAME = {
     // A caught value is genuinely unknown.
     err: 'unknown',
     error: 'unknown'
+};
+
+/**
+ * Types that name a class in this project, and where that class lives.
+ *
+ * WHY THIS EXISTS, AND WHY IT IS THE POINT OF THE EXERCISE
+ *
+ * A parameter left as `any` silences the error without saying anything. For a
+ * GDScript port that is the worst possible outcome: `any` has no GDScript
+ * equivalent, so the translator has to guess, and a guess is exactly what the
+ * port cannot afford. `game: Game` translates; `game: any` does not.
+ *
+ * So the loose entries in `TYPE_BY_NAME` are being replaced by the real class,
+ * and this table is what lets the annotator emit it. Every entry is a `type`
+ * import, which the compiler erases — `verbatimModuleSyntax` is on and requires
+ * the keyword, so there is no runtime cycle even where the module graph is
+ * circular, which `src/game-render.ts` already relies on.
+ */
+export const NAMED_TYPES = {
+    Game: './main.ts',
+    Player: './entities.ts',
+    Enemy: './entities.ts',
+    Weapon: './weapons.ts',
+    UI: './ui.ts'
 };
 
 /** Characters that may legally follow a parameter name and what to do about them. */
