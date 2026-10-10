@@ -1,20 +1,73 @@
-## The view: draws `Game` and feeds it input. Contains no rules.
+## The view: draws `Game`, follows the hero with a camera, and runs the screens.
 ##
-## Everything interesting lives in `game.gd`, which is why `verify_slice.gd` can
-## assert the simulation without a window. This file knows two things -- how to read
-## a direction from the keyboard, and how to draw circles.
+## Still contains no rules -- spawning, damage and i-frames all live in `game.gd`,
+## which is why `verify_slice.gd` can assert the simulation without a window.
+##
+## WHAT WAS WRONG IN THE FIRST VERSION
+##
+## The hero was invisible. The arena is 2400x1600 and the hero starts at its centre,
+## (1200, 800), while Godot's default viewport is 1152x648 -- so the camera was
+## showing the top-left corner and the hero was 48 pixels off the right edge. There
+## was no Camera2D at all. `verify_slice.gd` passed the whole time, because it
+## asserts the SIMULATION and the simulation was correct: the hero really was at
+## (1200, 800). Nothing tested whether a human could see it.
 extends Node2D
 
+enum State { MENU, PLAYING, DEAD }
+
 var game: Game
+var state := State.MENU
+
+@onready var camera: Camera2D = $Camera2D
+@onready var menu: CanvasLayer = $Menu
+@onready var hud: CanvasLayer = $HUD
+@onready var stats: Label = $HUD/Stats
 
 func _ready() -> void:
+	_start_run()
+	_show_menu(true)
+	$Menu/Start.pressed.connect(_on_start)
+
+func _on_start() -> void:
+	_show_menu(false)
+	state = State.PLAYING
+	_start_run()
+
+func _start_run() -> void:
 	game = Game.new()
+	# Aim the camera at the hero before the first frame is drawn, or the first frame
+	# is the black corner the original bug produced.
+	camera.position = Vector2(game.hero.x, game.hero.y)
+	camera.make_current()
+
+func _show_menu(visible_now: bool) -> void:
+	menu.visible = visible_now
+	hud.visible = not visible_now
 
 func _process(delta: float) -> void:
-	# `DT_CLAMP` is a real constant from the generated config: a tab regaining focus
-	# hands you a delta of several seconds, and the original clamps for that reason.
-	game.step(minf(delta, Config.DT_CLAMP), _input_dir())
+	if state == State.MENU:
+		return
+
+	if state == State.PLAYING:
+		# `DT_CLAMP` is a real constant: a tab regaining focus hands you a delta of
+		# several seconds. `minf` is the same guard the original applies.
+		game.step(minf(delta, Config.DT_CLAMP), _input_dir())
+		if game.hero.dead:
+			state = State.DEAD
+
+	var hero := game.hero
+	# The camera FOLLOWS. Without this the arena scrolls off and the hero walks out
+	# of view the moment it moves, which is the same bug wearing a different hat.
+	camera.position = camera.position.lerp(Vector2(hero.x, hero.y), 0.15)
+	stats.text = "HP %d / %d\nTime %.1fs    Kills %d\nWASD / arrows to move" % [
+		int(hero.hp), int(hero.max_hp), game.elapsed, game.kills
+	]
 	queue_redraw()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE or event.keycode == KEY_P:
+			get_tree().quit()
 
 func _input_dir() -> Vector2:
 	var d := Vector2.ZERO
@@ -29,27 +82,56 @@ func _input_dir() -> Vector2:
 	return d
 
 func _draw() -> void:
+	# The arena floor, drawn as a grid so movement is legible. The original sits on a
+	# dark backdrop with a subtle grid for the same reason.
 	draw_rect(Rect2(0, 0, Config.ARENA_WIDTH, Config.ARENA_HEIGHT), Color("141018"))
+	var grid := float(Config.GRID_SIZE)
+	var gx := 0.0
+	while gx <= float(Config.ARENA_WIDTH):
+		draw_line(Vector2(gx, 0), Vector2(gx, Config.ARENA_HEIGHT), Color(1, 1, 1, 0.03), 1.0)
+		gx += grid
+	var gy := 0.0
+	while gy <= float(Config.ARENA_HEIGHT):
+		draw_line(Vector2(0, gy), Vector2(Config.ARENA_WIDTH, gy), Color(1, 1, 1, 0.03), 1.0)
+		gy += grid
+
+	if game == null:
+		return
 
 	for foe in game.foes:
-		# The colour is the one in `src/data.ts`, not one chosen here.
-		draw_circle(Vector2(foe.x, foe.y), foe.size, Color(foe.color))
+		_draw_foe(foe)
+	if not game.hero.dead:
+		_draw_hero(game.hero)
 
-	var hero := game.hero
-	# Blink while invincible, so the i-frame rule is visible rather than inferred.
-	var hero_color := Color("6ee7ff")
-	if hero.invincible and int(game.elapsed * 20.0) % 2 == 0:
-		hero_color = Color("2a6b7a")
-	draw_circle(Vector2(hero.x, hero.y), hero.size, hero_color)
+## The hero, matching `src/entity-render.ts`: a soft glow, a solid body, a pale core,
+## and the weapon's reach as a pulsing ring.
+func _draw_hero(hero: Hero) -> void:
+	# The original strobes alpha rather than hiding the hero during i-frames. Drawn
+	# as two rings here because Godot's `draw_circle` has no gradient.
+	if hero.invincible and int(game.elapsed * 16.0) % 2 == 0:
+		draw_circle(Vector2(hero.x, hero.y), hero.size * 2.2, Color(100 / 255.0, 200 / 255.0, 1.0, 0.12))
+	else:
+		draw_circle(Vector2(hero.x, hero.y), hero.size * 2.2, Color(100 / 255.0, 200 / 255.0, 1.0, 0.35))
+	draw_circle(Vector2(hero.x, hero.y), hero.size, Color("44aaff"))
+	draw_circle(Vector2(hero.x, hero.y), hero.size * 0.55, Color("cfeaff"))
 
-	# The weapon's reach, drawn faintly -- the slice's one attack, made legible.
+	# The Garlic ring, pulsing -- `rgba(160,255,160,0.25 + sin(t) * 0.08)` in the
+	# original, reproduced with the same period.
+	var t := game.elapsed / 0.4
 	draw_arc(
-		Vector2(hero.x, hero.y),
-		float(game.weapon["baseRange"]),
-		0.0, TAU, 48, Color(1, 1, 1, 0.08), 2.0
+		Vector2(hero.x, hero.y), float(game.weapon["baseRange"]),
+		0.0, TAU, 64, Color(160 / 255.0, 1.0, 160 / 255.0, 0.25 + sin(t) * 0.08), 2.0
 	)
 
-	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(16, 28), "HP %d / %d" % [int(hero.hp), int(hero.max_hp)], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("ffffff"))
-	draw_string(font, Vector2(16, 54), "Time %.1fs    Kills %d    Foes %d" % [game.elapsed, game.kills, game.foes.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("aabbcc"))
-	draw_string(font, Vector2(16, 78), "WASD or arrows to move", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("667788"))
+## A foe, matching `src/entity-render.ts`: body in its data colour, a pale core, and
+## an HP bar once it has been hit.
+func _draw_foe(foe: Foe) -> void:
+	var p := Vector2(foe.x, foe.y)
+	draw_circle(p, foe.size, Color(foe.color))
+	draw_circle(p, foe.size * 0.5, Color(1, 1, 1, 0.25))
+
+	if foe.hp < foe.max_hp:
+		var pct := maxf(0.0, foe.hp / foe.max_hp)
+		var w := 30.0
+		draw_rect(Rect2(p.x - w / 2.0, p.y - foe.size - 8.0, w, 4.0), Color("222222"))
+		draw_rect(Rect2(p.x - w / 2.0, p.y - foe.size - 8.0, w * pct, 4.0), Color("44dd44"))

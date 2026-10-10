@@ -80,6 +80,36 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### What was broken, and what now catches it
+
+The first version shipped with **an invisible hero**. The arena is 2400x1600 and the
+hero starts at its centre, (1200, 800), while Godot\'s default viewport is 1152x648 —
+so the camera showed the top-left corner and the hero was 48 pixels off the right
+edge. **There was no `Camera2D` at all.**
+
+Every check passed anyway. `verify_slice.gd` asserts the simulation, and the
+simulation was correct: the hero really was at (1200, 800). **Nothing asked whether a
+human could see it.** A test at the wrong level passes while the game is unplayable.
+
+`verify_scene.gd` now runs at the level the bug was at — a real SceneTree, a real
+camera, a real viewport:
+
+```
+  ok   the scene HAS a camera            ok   there IS a menu
+  ok   the camera is the active one      ok   and a title  (SURVIVOR)
+  ok   the hero is INSIDE the viewport   ok   and a way to start
+  ok   the camera follows the hero       ok   it is shown first
+  ok   and actually moved                ok   START begins a run
+```
+
+### It looks like the source material now
+
+The menu is the original\'s, word for word, taken from `index.html`: **SURVIVOR**,
+_Vampire Survivors style roguelite_, and the How-to-play list. The hero is drawn the
+way `src/entity-render.ts` draws it — a soft glow, an `#44aaff` body, a `#cfeaff`
+core, and the Garlic ring pulsing at the original\'s period. Foes carry their data
+colour, a pale core and an HP bar once hit.
+
 ### Logic is separated from rendering, deliberately
 
 | Layer      | File                                       | Knows about                     |
