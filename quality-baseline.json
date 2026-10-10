@@ -227,11 +227,11 @@
     "strictCeilings": {
         "strictNullChecks": {
             "src": 0,
-            "test": 237
+            "test": 236
         },
         "noImplicitAny": {
             "src": 267,
-            "test": 373
+            "test": 366
         }
     },
     "assertionDigests": {

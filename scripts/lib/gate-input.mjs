@@ -62,7 +62,11 @@ export function notice(message) {
 /**
  * The NOTICE lines a gate printed, so a run can count what checked nothing.
  *
- * @param {string} output a step's combined stdout and stderr
+ * `undefined` is in the type because a caller may hand this whatever a spawn
+ * produced, including nothing -- and `test/gate-input.test.ts` proves that case.
+ * A test that proves robustness must not be rejected by the signature it proves.
+ *
+ * @param {string | undefined} output a step's combined stdout and stderr
  * @returns {string[]}
  */
 export function noticesIn(output) {
