@@ -12,7 +12,15 @@
  *   - t(key) → translated string
  */
 
-const STRINGS = {
+/**
+ * The translation table, indexed by locale and then by key.
+ *
+ * Typed with an index signature because that is how it is READ -- `STRINGS[loc]`
+ * with a locale from the user and `STRINGS[current][key]` with an arbitrary
+ * translation key. Without it, five TS7053 errors, all of them element access on
+ * a table whose keys are exactly what the code is looking up.
+ */
+const STRINGS: Record<string, Record<string, string>> = {
     en: {
         title: 'SURVIVOR',
         subtitle: 'Vampire Survivors style roguelite',
@@ -257,7 +265,7 @@ const STRINGS = {
 let current = 'en';
 
 // Map BCP-47-ish identifiers to <html lang> values. Only what we actually ship.
-const HTML_LANG = { en: 'en', zh: 'zh-Hans' };
+const HTML_LANG: Record<string, string> = { en: 'en', zh: 'zh-Hans' };
 
 export function setLocale(loc: string) {
     if (STRINGS[loc]) current = loc;

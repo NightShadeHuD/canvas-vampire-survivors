@@ -93,7 +93,7 @@ export function normaliseKey(rawKey: string) {
 export function cloneKeymap(
     map: Readonly<Record<string, readonly string[]>>
 ): Record<string, string[]> {
-    const out = {};
+    const out: Record<string, string[]> = {};
     for (const action of KEYMAP_ACTIONS) {
         const list = Array.isArray(map?.[action]) ? map[action] : [];
         out[action] = list.slice();
@@ -108,8 +108,10 @@ export function cloneKeymap(
  * player can never get into an unrecoverable "no keys bound" state by
  * editing localStorage by hand. Returns a fresh object.
  */
-export function sanitiseKeymap(raw): Record<string, string[]> {
-    const out = {};
+// `unknown`: the body validates with `Array.isArray(raw?.[action])`, so a caller
+// may hand it whatever localStorage held -- including nothing at all.
+export function sanitiseKeymap(raw: unknown): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
     for (const action of KEYMAP_ACTIONS) {
         const incoming = Array.isArray(raw?.[action]) ? raw[action] : null;
         if (!incoming) {
@@ -141,10 +143,10 @@ export function sanitiseKeymap(raw): Record<string, string[]> {
  *     adding a second binding to an already-bound action.
  */
 export function bindKey(
-    map,
-    action,
-    rawKey,
-    { replace = true }: Record<string, any> = {}
+    map: Readonly<Record<string, readonly string[]>>,
+    action: string,
+    rawKey: string,
+    { replace = true }: { replace?: boolean } = {}
 ): Record<string, string[]> {
     const next = cloneKeymap(map);
     const key = normaliseKey(rawKey);
