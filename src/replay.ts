@@ -45,8 +45,8 @@ export const REPLAY_MAX_FRAMES = 60 * 60 * 30;
 
 // -- minimal localStorage adapter (mirrors storage.ts, kept local so replay --
 // -- code doesn't pull in unrelated save defaults) -------------------------
-let _memoryFallback = null;
-let _usable = null;
+let _memoryFallback: string | null = null;
+let _usable: boolean | null = null;
 
 function hasLS() {
     try {
@@ -85,7 +85,7 @@ export function _resetReplayForTests() {
  * `quantize`), so we don't need an epsilon here. Returns the RLE array.
  */
 export function compressFrames(frames) {
-    const out = [];
+    const out: Array<[number, number, number]> = [];
     if (!frames || !frames.length) return out;
     let prevX = frames[0][0];
     let prevY = frames[0][1];
@@ -107,7 +107,11 @@ export function compressFrames(frames) {
 
 /** Inverse of `compressFrames`: expand RLE triplets back to a per-frame list. */
 export function expandFrames(rle) {
-    const out = [];
+    // A PAIR, not a triplet. These two buffers look alike and are not: the one
+    // above holds RLE runs of (x, y, count), this one holds expanded (x, y)
+    // frames. A blanket annotation gave both the triplet type and the compiler
+    // reported the difference immediately.
+    const out: Array<[number, number]> = [];
     if (!Array.isArray(rle)) return out;
     for (const entry of rle) {
         if (!Array.isArray(entry) || entry.length < 3) continue;
