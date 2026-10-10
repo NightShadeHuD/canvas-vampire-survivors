@@ -28,8 +28,21 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 const BASELINE = path.join(repoRoot, 'quality-baseline.json');
 
-/** Source ships; tests are contracts, and a loose contract is still a hazard. */
-const files = execFileSync('git', ['ls-files', 'src/*', 'test/*'], {
+/**
+ * SOURCE ONLY, and the reason is the metric's whole point.
+ *
+ * This measures the transform a Godot port has to perform, and only `src/` is
+ * transformed. `test/` drives the TypeScript implementation through `node --test`
+ * and TypeScript assertions; a GDScript port would use GUT and different tests
+ * entirely, so counting a test file's top-level `const` as port work is measuring
+ * something that will never be ported.
+ *
+ * It was measured BOTH WAYS first, and the evidence settled it: every ceiling
+ * raise this metric needed — three in one sitting — came from test fixtures and
+ * never from shipped code. A metric that spends its budget on work that will not
+ * happen is a metric that hides the work that will.
+ */
+const files = execFileSync('git', ['ls-files', 'src/*'], {
     cwd: repoRoot,
     encoding: 'utf8'
 })

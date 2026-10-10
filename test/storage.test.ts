@@ -28,13 +28,18 @@ test('loadSave: returns default shape when nothing persisted', () => {
     assert.ok(s.totals);
 });
 
-test('saveSave + loadSave: round-trips arbitrary state', () => {
+test('saveSave + loadSave: round-trips state', () => {
+    // `before.kills` was the original, and `kills` is NOT a save field — it lives
+    // under `totals`. The test passed only because `save` was
+    // `Record<string, any>`, so it set a property that does not exist and asserted
+    // it came back. Giving the save a real type reported it, which is the second
+    // defect the type has caught. The test now uses fields the format actually has.
     const before = loadSave();
-    before.kills = 1234;
+    before.totals.kills = 1234;
     before.settings.difficulty = 'nightmare';
     saveSave(before);
     const after = loadSave();
-    assert.equal(after.kills, 1234);
+    assert.equal(after.totals.kills, 1234);
     assert.equal(after.settings.difficulty, 'nightmare');
 });
 
@@ -72,19 +77,31 @@ test('mergeDeep: allows adding new keys (forwards-compatible)', () => {
     const a = { existing: 1 };
     const out = mergeDeep(a, { brandNew: 2 });
     assert.equal(out.existing, 1);
-    assert.equal(out.brandNew, 2);
+    // The cast is the point, not a workaround: `mergeDeep` is generic over its
+    // TARGET, so it promises the target's shape and nothing more. That a new key
+    // survives the merge is real runtime behaviour and is asserted here; that it
+    // appears in the RETURN TYPE is deliberately not promised, because the whole
+    // reason `save` can now be typed is that merges stop inventing fields.
+    assert.equal((out as Record<string, unknown>).brandNew, 2);
 });
 
 test('loadSave: deep-merges unknown keys from disk into defaults', () => {
+    // FORWARD COMPATIBILITY, and it is real: a save written by a newer build
+    // carries keys this one does not know, and `mergeDeep` must carry them
+    // through rather than dropping them. That is runtime behaviour the typed
+    // format deliberately does not promise — `SaveData` describes what THIS build
+    // writes, and the casts say so instead of widening the type to `any`, which
+    // is what let two non-existent fields hide in this file already.
     const draft = loadSave();
-    draft.customKey = 'extra';
-    draft.settings.customSetting = true;
+    const scribble = draft as unknown as Record<string, unknown>;
+    scribble.customKey = 'extra';
+    (draft.settings as unknown as Record<string, unknown>).customSetting = true;
     saveSave(draft);
-    const reloaded = loadSave();
+    const reloaded = loadSave() as unknown as Record<string, unknown>;
     assert.equal(reloaded.customKey, 'extra');
-    assert.equal(reloaded.settings.customSetting, true);
+    assert.equal((reloaded.settings as Record<string, unknown>).customSetting, true);
     // And the defaults still show up for keys the file lacked:
-    assert.equal(reloaded.settings.locale, 'en');
+    assert.equal((reloaded.settings as Record<string, unknown>).locale, 'en');
 });
 
 test('recordHighScore: sorts by timeSurvived desc, then kills', () => {
@@ -201,8 +218,10 @@ test('recordHighScore: empty save is initialized correctly', () => {
 test('saveSave: tolerates unserializable values without throwing', () => {
     const s = loadSave();
     // Circular reference. saveSave wraps in try/catch so should just warn.
-    const circ: Record<string, any> = {};
+    const circ: Record<string, unknown> = {};
     circ.self = circ;
-    s.evil = circ;
+    // `s.evil` is deliberately a field the format does not have: the test is that
+    // a circular value cannot make `saveSave` throw, whatever key it arrives on.
+    (s as unknown as Record<string, unknown>).evil = circ;
     assert.doesNotThrow(() => saveSave(s));
 });

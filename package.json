@@ -39,7 +39,8 @@
         "check:strict": "node scripts/check-strict.mjs",
         "check:destructive": "node scripts/check-destructive.mjs",
         "check:types": "node scripts/check-types.mjs",
-        "check:ports": "node scripts/check-ports.mjs"
+        "check:ports": "node scripts/check-ports.mjs",
+        "check:isolation": "node scripts/check-isolation.mjs"
     },
     "keywords": [
         "game",
@@ -72,11 +73,11 @@
     },
     "homepage": "https://github.com/NightShadeHuD/canvas-vampire-survivors#readme",
     "devDependencies": {
-        "@axe-core/playwright": "^4.11.2",
+        "@axe-core/playwright": "^4.13.0",
         "@types/node": "^26.6.5",
-        "eslint": "^9.0.0",
-        "playwright": "^1.59.1",
-        "prettier": "^3.2.0",
+        "eslint": "^10.12.0",
+        "playwright": "^1.63.0",
+        "prettier": "^3.9.9",
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.71.1"
     }

@@ -99,6 +99,7 @@ It runs, in order, and stops at the first failure:
 | Strict flags       | `npm run check:strict`         | Enabled strict flags have not been turned back off                |
 | Format             | `npm run format:check`         | Code matches the project's Prettier contract                      |
 | Unit tests         | `npm test`                     | Behaviour is as specified                                         |
+| Isolation          | `npm run check:isolation`      | The suite behaves the same under both isolation models            |
 | Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted                     |
 | Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision                 |
 | Shortcut register  | `npm run check:register`       | Every shortcut is bounded, tracked and correctly cited            |
@@ -210,6 +211,7 @@ Rules for gaps:
 | Rule                        | Mechanism                          | Runs           |
 | --------------------------- | ---------------------------------- | -------------- |
 | Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
+| Isolation                   | `scripts/check-isolation.mjs`      | pre-commit, CI |
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
 | Type coverage               | `scripts/check-types.mjs`          | pre-commit, CI |
 | Port hazards                | `scripts/check-ports.mjs`          | pre-commit, CI |
@@ -250,6 +252,28 @@ investigates it.
 
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
+
+### The two isolation models must agree
+
+Coverage is measured with `--test-isolation=none` — every test in one process —
+because Node's per-file merge was not reproducible and moved the overall branch
+figure by about 0.1 points at random. `docs/SHORTCUTS.md` row 5 records the cost
+honestly and names its trigger:
+
+> _"a test that passes under `npm test` and fails under `check:coverage-floor`, or
+> the reverse."_
+
+**Nothing was watching for that.** `check:isolation` runs the suite both ways and
+compares, per test, by name.
+
+**Per test, not by total.** Two runs can both report 792 passing while a different
+test fails in each, and a comparison of counts would call that agreement. A test
+present in one model and absent from the other is reported too, because a test
+whose existence depends on how the suite was invoked is a test with no fixed
+result.
+
+The cost is about a second, measured, which is cheap for turning a recorded worry
+into a checked fact.
 
 ### Type coverage, the port-readiness metric
 

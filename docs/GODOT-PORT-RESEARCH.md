@@ -31,7 +31,6 @@ we were treating as optional turns out not to be:
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The TypeScript port itself  | It is the port's input language, not a staging post                                                                                                                                    |
 | `strict`, and `check:types` | The converter wants explicit types. `any` has no GDScript equivalent, and "a `number` becomes a `float`" — so an untyped parameter is an ambiguity the converter cannot resolve for us |
-| `undefined` → `null`        | GDScript has **only** `null`. `strictNullChecks` is what makes that distinction visible, and it is currently deferred                                                                  |
 | The renderer decoupling     | Still correct: `entity-render.ts` and `game-render.ts` are replaced against Godot's `CanvasItem` API, and they are now 100% covered, so they are a specification rather than a guess   |
 
 ## What will not port, measured
@@ -44,7 +43,8 @@ through unnoticed. Measured across `src/` — 24 modules:
 | `?.` optional chaining             | **156** | A `null` check first; GDScript has no short-circuiting member access        |
 | `??` nullish coalescing            |  **59** | A ternary: `x !== null ? x : fallback`                                      |
 | top-level `const` / `let`          |  **44** | GDScript has no globals; constants move into a class namespace              |
-| `undefined`                        |  **31** | GDScript has only `null`                                                    |
+| `undefined` as a VALUE             |   **5** | GDScript has only `null`; `!== undefined` becomes `!= null`                 |
+| `typeof x === 'undefined'`         |  **30** | Platform detection — **deleted, not translated**                            |
 | classes beyond the first in a file |  **14** | A `.gd` file is one class; the rest become inner classes or their own files |
 | spread `...`                       |  **11** | Pass values one by one; join arrays with `gd.ops.add`                       |
 | `x in y`                           |   **8** | `array.has(x)` — see below, this one is a silent difference                 |
@@ -53,9 +53,28 @@ through unnoticed. Measured across `src/` — 24 modules:
 | default or namespace imports       |   **0** | ✅                                                                          |
 | **total**                          | **327** |                                                                             |
 
+### The `undefined` count was misleading, and the split matters
+
+The original inventory counted 31 `undefined` sites and implied 31 null-migrations.
+Measured properly, they are two different jobs:
+
+- **30 are `typeof window === 'undefined'`** — a _string_ comparison, and the way
+  this codebase asks "am I in a browser". `typeof` does not exist in GDScript and
+  there is no `window` to ask about, so **these guards are deleted along with the
+  browser module they protect.** Platform-boundary work, not null work.
+- **5 are the `undefined` value**, every one a dictionary read such as
+  `p.def.effect[key] !== undefined`. These **do** translate, mechanically: a
+  GDScript dictionary read returns `null` for a missing key, so `!== undefined`
+  becomes `!= null` and behaves identically.
+
+`check:ports` counts them as two hazards with separate reasons, because lumping
+them together made the port look like it had 31 null-migrations when 30 of them
+disappear with the platform.
+
 **These figures are now enforced rather than written down.** `npm run check:ports` measures
-them, holds two ceilings that may only fall, and runs in the gate. The counts below are
-`src/` only; the gate covers `src/` and `test/` together, which is why its total is higher.
+them, holds two ceilings that may only fall, and runs in the gate. **The gate measures `src/`
+only**, because `test/` drives the TypeScript implementation and will never be ported — a
+GDScript project would use GUT and different tests. The counts here and the gate agree.
 
 **`??` and `?.` are 215 of the 327.** They dominate the cost and they are
 entirely mechanical, which means the port's shape is known rather than hoped for.

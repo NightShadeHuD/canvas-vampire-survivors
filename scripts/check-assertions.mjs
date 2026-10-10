@@ -28,10 +28,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { compareFiles } from './lib/assertion-diff.mjs';
+import { compareFiles, judgeDigests } from './lib/assertion-diff.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -90,8 +90,65 @@ const files = listed
     .map((line) => line.trim())
     .filter(Boolean);
 
+/**
+ * THE DIGEST PASS — the hole the revision diff structurally cannot cover.
+ *
+ * `git diff base..HEAD` cannot see a weakening committed DIRECTLY to the base,
+ * because the base then contains the weakened version and there is nothing to
+ * compare against. Row 8 of `docs/SHORTCUTS.md` records that hole.
+ *
+ * A digest recorded in `quality-baseline.json` closes it: a test file whose
+ * assertions differ from the recorded digest AND which is not modified against
+ * the base arrived by that unseen path. It is a report for a human, not a
+ * verdict — a legitimate addition also changes the digest, and the answer is to
+ * re-record it.
+ */
+const allTests = execFileSync('git', ['ls-files', 'test/*.test.ts'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+})
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+const loaded = allTests
+    .filter((rel) => existsSync(path.join(repoRoot, rel)))
+    .map((rel) => ({ path: rel, text: readFileSync(path.join(repoRoot, rel), 'utf8') }));
+
+const baseline = JSON.parse(readFileSync(path.join(repoRoot, 'quality-baseline.json'), 'utf8'));
+const recorded = baseline.assertionDigests ?? {};
+const modified = new Set(files);
+
+if (process.argv.includes('--update')) {
+    const { fresh } = judgeDigests(loaded, {}, modified);
+    baseline.assertionDigests = Object.fromEntries(
+        Object.entries(fresh).sort(([a], [b]) => a.localeCompare(b))
+    );
+    // Written with the escaping the other baselines use, so the file stays
+    // byte-consistent whichever tool last touched it.
+    const escape = (t) => t.replace(/\u00a7/g, '\\u00a7').replace(/\u2014/g, '\\u2014');
+    writeFileSync(
+        path.join(repoRoot, 'quality-baseline.json'),
+        escape(JSON.stringify(baseline, null, 4)) + '\n'
+    );
+    console.log(
+        `check-assertions: recorded digests for ${Object.keys(fresh).length} test file(s).`
+    );
+    process.exit(0);
+}
+
+const digestVerdict = judgeDigests(loaded, recorded, modified);
+if (!digestVerdict.ok) {
+    console.error('check-assertions: FAILED\n');
+    for (const reason of digestVerdict.reasons) console.error(`  ${reason}\n`);
+    process.exit(1);
+}
+
 if (!files.length) {
-    console.log(`check-assertions: no modified test files against ${base}; nothing to compare.`);
+    console.log(
+        `check-assertions: no modified test files against ${base}; ` +
+            `${Object.keys(recorded).length} recorded digest(s) all match.`
+    );
     process.exit(0);
 }
 

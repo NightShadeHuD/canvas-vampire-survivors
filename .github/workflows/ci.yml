@@ -40,7 +40,7 @@ jobs:
             # migration relies on to run test/*.ts directly with no build step.
             # Node 20 cannot do this.
             - name: Setup Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v7
               with:
                   node-version: '24'
                   cache: 'npm'
