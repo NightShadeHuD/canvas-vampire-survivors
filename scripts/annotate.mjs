@@ -29,7 +29,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
-import { planAnnotation } from './lib/annotate.mjs';
+import { planAnnotation, NAMED_TYPES } from './lib/annotate.mjs';
 import { applyEdit } from './lib/source-edit.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -175,6 +175,25 @@ for (const file of targets) {
         console.error(`  ${file}: REFUSED — line count would change, which this never does`);
         totalRefused += plans.length;
         continue;
+    }
+
+    // Named types need an import. `import type` is erased by the compiler, so
+    // this adds no runtime edge — which matters because `Game` lives in
+    // `main.ts` and `entities.ts` is imported BY it, making that pair circular.
+    // `src/game-render.ts` already relies on exactly this.
+    const needed = new Set(plans.map((p) => p.type).filter((t) => Object.hasOwn(NAMED_TYPES, t)));
+    const wholeText = original.join('\n');
+    for (const t of needed) {
+        if (new RegExp(`import[^;]*\\b${t}\\b`).test(wholeText)) continue;
+        const line = `import type { ${t} } from '${NAMED_TYPES[t]}';`;
+        // After the LAST existing import, so the block stays together and this
+        // never lands inside a multi-line import.
+        let last = -1;
+        for (const [i, text] of next.entries()) {
+            if (/^import\s/.test(text) || /^}\s*from\s/.test(text)) last = i;
+        }
+        next.splice(last + 1, 0, line);
+        console.log(`  ${file}: added ${line}`);
     }
 
     const before = original.join('\n');
