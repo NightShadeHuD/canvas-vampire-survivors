@@ -131,17 +131,14 @@ export class Game {
     declare lastTime: number;
     declare mines: Mine[];
     declare particles: Particle[];
-    // `Player`, though the player genuinely does not exist in the menu.
+    // `Player | null`, and the THIRD attempt at it is the one that finishes the
+    // job. The first two cascaded -- 14 -> 33 errors, then 1 -> 30 with everything
+    // else in `src/` already clean -- and each was backed out rather than forced.
     //
-    // `Player | null` is the honest type and has been tried TWICE. Both times it
-    // cascaded hard -- 14 -> 33 errors the first time, 1 -> 30 the second, once
-    // everything else in `src/` was already clean. The declaration is one line;
-    // the THIRTY readers that assume a player is present are the work, and they
-    // are their own commit.
-    //
-    // Recorded here rather than in a report, because this is where the third
-    // attempt will start.
-    declare player: Player;
+    // This time the thirty readers are the work, done together with the
+    // declaration, because a declaration that is right and callers that are wrong
+    // is not progress.
+    declare player: Player | null;
     /** Reusable object pools, keyed by entity name. */
     declare pools: Record<string, Pool>;
     declare projectiles: Projectile[];
@@ -1004,6 +1001,7 @@ export class Game {
     }
 
     gameOver() {
+        if (!this.player) return;
         this.state = GameState.GAMEOVER;
         if (this.raf) cancelAnimationFrame(this.raf);
         this.audio.stopMusic();
@@ -1168,6 +1166,7 @@ export class Game {
     }
 
     update(dt) {
+        if (!this.player) return;
         this.gameTime += dt;
 
         const { hpMult, dmgMult, diff } = this._computeDifficultyMults();
@@ -1333,6 +1332,9 @@ export class Game {
     }
 
     _updateEnemies(dt, hpMult, dmgMult) {
+        // The same guard `_updateCamera` already uses: the player exists during
+        // a run, and stating that here is what lets the reads below be checked.
+        if (!this.player) return;
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
             e.update(dt, this);
@@ -1363,6 +1365,7 @@ export class Game {
     }
 
     _onEnemyKilled(e, hpMult, dmgMult) {
+        if (!this.player) return;
         this.kills++;
         this.createParticles(e.x, e.y, e.color, e.boss ? 40 : 8);
         this.effects.hit(e.x, e.y, this._rgbFromHex(e.color));
@@ -1412,6 +1415,7 @@ export class Game {
     }
 
     _updateProjectiles(dt) {
+        if (!this.player) return;
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const p = this.projectiles[i];
             p.update(dt, this);
@@ -1498,6 +1502,7 @@ export class Game {
     }
 
     _maybeTriggerLevelUp() {
+        if (!this.player) return;
         if (this._pendingLevelUps > 0 && this.state === GameState.PLAYING) {
             this._pendingLevelUps--;
             this.state = GameState.LEVEL_UP;
@@ -1551,6 +1556,7 @@ export class Game {
     }
 
     _applyUpgrade(choice) {
+        if (!this.player) return;
         if (choice) {
             if (choice.type === 'weapon') {
                 const existing = this.player.weapons.find((w) => w.id === choice.data.id);
@@ -1638,6 +1644,7 @@ export class Game {
     }
 
     _spawnOne(pool, hpMult, dmgMult) {
+        if (!this.player) return;
         // Speedrun + Daily both want determinism; either uses speedrunRng.
         const rng =
             (this.speedrunMode || this.dailyMode) && this.speedrunRng ? this.speedrunRng : null;
@@ -1655,6 +1662,7 @@ export class Game {
     }
 
     _spawnBoss(bossDef, hpMult, dmgMult) {
+        if (!this.player) return;
         const angle = Math.random() * Math.PI * 2;
         const d = CONFIG.SPAWN_RADIUS * 0.8;
         const x = this.player.x + Math.cos(angle) * d;
@@ -1738,6 +1746,7 @@ export class Game {
     }
 
     onBossAbility(boss) {
+        if (!this.player) return;
         if (boss.ability === 'summon') {
             const childDef = findEnemyDef('skeleton');
             for (let i = 0; i < 3; i++) {
