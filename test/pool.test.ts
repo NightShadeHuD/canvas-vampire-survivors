@@ -16,8 +16,8 @@ class Box {
 }
 
 test('Pool: requires a factory function', () => {
-    assert.throws(() => new Pool(null));
-    assert.throws(() => new Pool('not a function'));
+    assert.throws(() => new Pool(null as unknown as () => object));
+    assert.throws(() => new Pool('not a function' as unknown as () => object));
 });
 
 test('Pool: acquire creates fresh instances when empty', () => {
@@ -46,7 +46,7 @@ test('Pool: reset callback runs on every acquire', () => {
     const reset = (obj, v) => {
         obj.touched = v;
     };
-    const p = new Pool(factory, reset);
+    const p = new Pool<Record<string, number>>(factory, reset);
     const a = p.acquire(42);
     assert.equal(a.touched, 42);
     p.release(a);
@@ -56,25 +56,25 @@ test('Pool: reset callback runs on every acquire', () => {
 });
 
 test('Pool: maxSize caps the free list', () => {
-    const p = new Pool(() => ({}), null, { maxSize: 2 });
+    const p = new Pool<Record<string, number>>(() => ({}), null, { maxSize: 2 });
     const items = [p.acquire(), p.acquire(), p.acquire()];
     for (const it of items) p.release(it);
     assert.equal(p.stats().free, 2);
 });
 
 test('Pool: prealloc fills the free list upfront', () => {
-    const p = new Pool(() => ({}), null, { prealloc: 5 });
+    const p = new Pool<Record<string, number>>(() => ({}), null, { prealloc: 5 });
     assert.equal(p.stats().free, 5);
     assert.equal(p.stats().created, 5);
 });
 
 test('Pool: prealloc is capped by maxSize', () => {
-    const p = new Pool(() => ({}), null, { prealloc: 100, maxSize: 10 });
+    const p = new Pool<Record<string, number>>(() => ({}), null, { prealloc: 100, maxSize: 10 });
     assert.equal(p.stats().free, 10);
 });
 
 test('Pool: clear empties the free list but leaves the pool usable', () => {
-    const p = new Pool(() => ({}), null, { prealloc: 4 });
+    const p = new Pool<Record<string, number>>(() => ({}), null, { prealloc: 4 });
     p.clear();
     assert.equal(p.stats().free, 0);
     const a = p.acquire();
@@ -129,7 +129,7 @@ test('resetEnemyProjectile: resets life + shouldRemove on re-use', () => {
 });
 
 test('Pool end-to-end: churn without creating unbounded objects', () => {
-    const p = new Pool(() => ({}), null, { maxSize: 16, prealloc: 0 });
+    const p = new Pool<Record<string, number>>(() => ({}), null, { maxSize: 16, prealloc: 0 });
     // Acquire 32 items, release them — we should only have created up to 32
     // once, and future acquires reuse the pooled instances.
     const acquired = [];
@@ -186,7 +186,7 @@ test('Pool: reset callback argument forwarding is positional', () => {
         obj.b = b;
         obj.c = c;
     };
-    const p = new Pool(factory, reset);
+    const p = new Pool<Record<string, number>>(factory, reset);
     const o = p.acquire(1, 2, 3);
     assert.equal(o.a, 1);
     assert.equal(o.b, 2);

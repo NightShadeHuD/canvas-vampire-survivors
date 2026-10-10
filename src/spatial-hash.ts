@@ -64,7 +64,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
      * Insert a single item. The caller owns the item reference; the hash just
      * indexes it for fast neighbour lookup. Items are NOT de-duplicated.
      */
-    insert(item) {
+    insert(item: T) {
         const k = this._key(item.x, item.y);
         let bucket = this.map.get(k);
         if (!bucket) {
@@ -76,7 +76,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
     }
 
     /** Bulk-insert after a `clear()`. */
-    insertAll(items) {
+    insertAll(items: T[]) {
         this.clear();
         for (const it of items) this.insert(it);
     }
@@ -99,7 +99,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
      * of times per fire). Callers that destructure to `[...sh.queryRect()]`
      * still work because Array is iterable.
      */
-    queryRect(x, y, r) {
+    queryRect(x: number, y: number, r: number) {
         const c = this.cell;
         const x0 = Math.floor((x - r) / c);
         const x1 = Math.floor((x + r) / c);

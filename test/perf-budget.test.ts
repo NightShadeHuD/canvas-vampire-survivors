@@ -64,7 +64,7 @@ test('perf/pool: a simulated 60s run at 60fps stays within a fixed object count'
     // per-frame peak, not on how long the player survives.
     const PARTICLES_PER_FRAME = 24;
     const FRAMES = 60 * 60; // 60 seconds at 60fps
-    const pool = new Pool(() => ({}), resetParticle, { maxSize: 512 });
+    const pool = new Pool<Record<string, any>>(() => ({}), resetParticle, { maxSize: 512 });
 
     for (let frame = 0; frame < FRAMES; frame++) {
         const live = [];
@@ -80,7 +80,7 @@ test('perf/pool: a simulated 60s run at 60fps stays within a fixed object count'
 });
 
 test('perf/pool: reset is applied on every reuse, so stale state cannot leak', () => {
-    const pool = new Pool(() => ({}), resetParticle, { maxSize: 8 });
+    const pool = new Pool<Record<string, any>>(() => ({}), resetParticle, { maxSize: 8 });
     const a = pool.acquire(10, 20, '#f00', { life: 5, size: 9 });
     assert.equal(a.life, 5);
     pool.release(a);
