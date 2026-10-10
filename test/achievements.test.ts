@@ -6,13 +6,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AchievementTracker } from '../src/achievements.ts';
 import { ACHIEVEMENTS, UNLOCKS } from '../src/data.ts';
+import { makeGameStub, makePlayerStub, makeSaveStub } from './helpers/game-stub.ts';
 
 function makeSave() {
     return { achievements: {} as Record<string, number> };
 }
 
 function makeGame({ kills = 0, gameTime = 0, level = 1 } = {}) {
-    return { kills, gameTime, player: { level } };
+    return makeGameStub({ kills, gameTime, player: makePlayerStub({ level }) });
 }
 
 test('AchievementTracker: starts with an empty run block', () => {
@@ -173,11 +174,11 @@ test('AchievementTracker: speed_demon needs BOTH void_lord + sub-5min real time'
     const t = new AchievementTracker(save);
     // Only boss defeated, but no real-time window set → no unlock.
     t.run.bossesDefeated.void_lord = true;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 0, level: 1 }));
     assert.ok(!save.achievements.speed_demon);
     // With a qualifying wall-clock time it should unlock.
     t.run.realSecondsToVoidLord = 240;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 0, level: 1 }));
     assert.ok(save.achievements.speed_demon);
 });
 
@@ -185,20 +186,20 @@ test('AchievementTracker: max_all only fires at 6 maxed weapons', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.maxedWeaponCount = 5;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 0, level: 1 }));
     assert.ok(!save.achievements.max_all);
     t.run.maxedWeaponCount = 6;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 0, level: 1 }));
     assert.ok(save.achievements.max_all);
 });
 
 test('AchievementTracker: early_evolve requires the explicit flag', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
-    t.check({ kills: 0, gameTime: 100, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 100, level: 1 }));
     assert.ok(!save.achievements.early_evolve);
     t.run.evolvedBefore = { sevenMin: true };
-    t.check({ kills: 0, gameTime: 100, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 100, level: 1 }));
     assert.ok(save.achievements.early_evolve);
 });
 
@@ -207,10 +208,10 @@ test('AchievementTracker: zen_5min demands ZERO passives during the 5 min', () =
     const t = new AchievementTracker(save);
     t.run.passivesPicked = 0;
     // Less than 300s → not yet.
-    t.check({ kills: 0, gameTime: 299, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 299, level: 1 }));
     assert.ok(!save.achievements.zen_5min);
     // At 300s with 0 passives → unlock.
-    t.check({ kills: 0, gameTime: 300, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 300, level: 1 }));
     assert.ok(save.achievements.zen_5min);
 });
 
@@ -218,26 +219,40 @@ test('AchievementTracker: zen_5min fails the moment a passive was picked', () =>
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.passivesPicked = 1;
-    t.check({ kills: 0, gameTime: 600, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 600, level: 1 }));
     assert.ok(!save.achievements.zen_5min);
 });
 
 test('AchievementTracker: triple_build reads save.totals.uniqueBuilds', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 }, save: { totals: { uniqueBuilds: 2 } } });
+    t.check(
+        makeGameStub({
+            kills: 0,
+            gameTime: 0,
+            player: makePlayerStub({ level: 1 }),
+            save: makeSaveStub({ totals: { uniqueBuilds: 2 } })
+        })
+    );
     assert.ok(!save.achievements.triple_build);
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 }, save: { totals: { uniqueBuilds: 3 } } });
+    t.check(
+        makeGameStub({
+            kills: 0,
+            gameTime: 0,
+            player: makePlayerStub({ level: 1 }),
+            save: makeSaveStub({ totals: { uniqueBuilds: 3 } })
+        })
+    );
     assert.ok(save.achievements.triple_build);
 });
 
 test('AchievementTracker: no_hit_boss requires the explicit run flag', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 0, level: 1 }));
     assert.ok(!save.achievements.no_hit_boss);
     t.run.noHitBoss = true;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGame({ kills: 0, gameTime: 0, level: 1 }));
     assert.ok(save.achievements.no_hit_boss);
 });
 

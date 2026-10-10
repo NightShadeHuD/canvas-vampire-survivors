@@ -13,6 +13,7 @@ import { ACHIEVEMENTS, UNLOCKS, WEAPONS } from '../src/data.ts';
 import { EffectLayer, EmojiRain } from '../src/effects.ts';
 import { KONAMI_SEQUENCE, KonamiDetector, normaliseKonamiKey } from '../src/konami.ts';
 import { getStageModifiers } from '../src/stages.ts';
+import { makeGameStub, makePlayerStub } from './helpers/game-stub.ts';
 
 // ---------------------------------------------------------------------------
 // Konami detector — sequence matching, reset behaviour, idempotent unlock.
@@ -126,20 +127,20 @@ test('iter20 achievements: hidden trio is registered with the hidden flag', () =
 test('iter20 achievements: konami_code unlocks via run.konamiCode flag', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 0, gameTime: 0, player: makePlayerStub({ level: 1 }) }));
     assert.ok(!save.achievements.konami_code);
     t.run.konamiCode = true;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 0, gameTime: 0, player: makePlayerStub({ level: 1 }) }));
     assert.ok(save.achievements.konami_code);
 });
 
 test('iter20 achievements: speedrun_plus reads run.fastBossClear', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 0, gameTime: 0, player: makePlayerStub({ level: 1 }) }));
     assert.ok(!save.achievements.speedrun_plus);
     t.run.fastBossClear = true;
-    t.check({ kills: 0, gameTime: 0, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 0, gameTime: 0, player: makePlayerStub({ level: 1 }) }));
     assert.ok(save.achievements.speedrun_plus);
 });
 
@@ -148,10 +149,10 @@ test('iter20 achievements: pacifist_provoked needs 60s AND zero kills', () => {
     const t = new AchievementTracker(save);
     t.run.pacifistTimer = 60;
     // A single kill forfeits the achievement — the check guards on game.kills.
-    t.check({ kills: 1, gameTime: 60, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 1, gameTime: 60, player: makePlayerStub({ level: 1 }) }));
     assert.ok(!save.achievements.pacifist_provoked);
     // Zero kills + the timer crossed 60 → unlock.
-    t.check({ kills: 0, gameTime: 60, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 0, gameTime: 60, player: makePlayerStub({ level: 1 }) }));
     assert.ok(save.achievements.pacifist_provoked);
 });
 
@@ -159,7 +160,7 @@ test('iter20 achievements: pacifist_provoked stays locked at 59s', () => {
     const save = { achievements: {} as Record<string, number> };
     const t = new AchievementTracker(save);
     t.run.pacifistTimer = 59.99;
-    t.check({ kills: 0, gameTime: 60, player: { level: 1 } });
+    t.check(makeGameStub({ kills: 0, gameTime: 60, player: makePlayerStub({ level: 1 }) }));
     assert.ok(!save.achievements.pacifist_provoked);
 });
 
