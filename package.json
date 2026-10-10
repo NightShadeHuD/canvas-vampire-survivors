@@ -41,7 +41,8 @@
         "check:types": "node scripts/check-types.mjs",
         "check:ports": "node scripts/check-ports.mjs",
         "check:isolation": "node scripts/check-isolation.mjs",
-        "export:godot": "node scripts/export-godot.mjs"
+        "export:godot": "node scripts/export-godot.mjs",
+        "check:godot": "node scripts/check-godot.mjs"
     },
     "keywords": [
         "game",

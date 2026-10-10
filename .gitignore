@@ -39,3 +39,6 @@ Thumbs.db
 
 # Build output (scripts/build.mjs)
 dist/
+
+# Godot import cache -- regenerated on demand, machine-specific.
+godot/.godot/

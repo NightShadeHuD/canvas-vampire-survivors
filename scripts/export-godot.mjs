@@ -30,7 +30,7 @@
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { gdFile } from './lib/godot-data.mjs';
+import { configFile, gdFile } from './lib/godot-data.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -50,6 +50,15 @@ export async function exportGodot(outDir = OUT_DIR) {
     mkdirSync(outDir, { recursive: true });
 
     const files = [];
+
+    // CONFIG first: every other generated file, and every hand-written script, reads
+    // its tuning from here rather than repeating a number.
+    // `HERO_MAX_HP` is the hero's `baseMaxHp`, which lives on the entity rather than
+    // in CONFIG. Passed in as an extra so the slice reads it from one generated place.
+    const config = await import(path.join(repoRoot, 'src', 'config.ts'));
+    writeFileSync(path.join(outDir, 'config.gd'), configFile(config.CONFIG, { HERO_MAX_HP: 100 }));
+    files.push('config.gd');
+
     for (const name of TABLES) {
         const value = data[name];
         if (value === undefined) {
