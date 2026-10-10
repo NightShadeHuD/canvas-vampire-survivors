@@ -249,7 +249,8 @@ test('iter20 emoji rain: render walks every drop through the stub ctx', () => {
         set textAlign(_v) {},
         set textBaseline(_v) {}
     };
-    r.render(ctx);
+    // The stub implements only what render touches.
+    r.render(ctx as unknown as CanvasRenderingContext2D);
     assert.equal(fillCalls, r.drops.length);
 });
 

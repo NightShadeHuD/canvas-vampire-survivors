@@ -209,6 +209,17 @@ const measured = measure();
 
 if (update) {
     const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    // Capture what the floors WERE, so --update can report what it changed.
+    //
+    // A tool that rewrites a baseline and says only "ratcheted to current
+    // reality" is a tool whose output nobody can review. The first version of
+    // this printed the new numbers and nothing else, so a file that had been
+    // RENAMED looked identical to a file that had improved: both showed a new key
+    // at its measured value, and the one that had silently lost its history was
+    // invisible. That is the same defect `--explain` was added to the annotator
+    // for — a tool that will not tell you what it found invites you to disable it.
+    const previous = baseline.coverageFloors ?? { overall: {}, files: {} };
+    const previousFiles = previous.files ?? {};
     baseline.coverageFloors = {
         _comment:
             'Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update',
@@ -225,9 +236,45 @@ if (update) {
     writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 4)}\n`);
 
     console.log('check-coverage-floor: floors ratcheted to current reality:');
-    console.log(
-        `  overall: ` + METRICS.map((m) => `${m} ${baseline.coverageFloors.overall[m]}%`).join(', ')
-    );
+    const next = baseline.coverageFloors;
+    for (const m of METRICS) {
+        const was = previous.overall?.[m];
+        const now = next.overall[m];
+        const delta = was === undefined ? '' : ` (${now >= was ? '+' : ''}${floorOf(now - was)})`;
+        console.log(`  overall ${m}: ${was ?? '(none)'} -> ${now}%${delta}`);
+    }
+
+    // What moved, per file. A file that APPEARED is the interesting case: it is
+    // either new work or a RENAME, and a rename loses that file's recorded
+    // history, which is exactly what a ratchet must not do quietly.
+    const appeared = Object.keys(next.files).filter((f) => !(f in previousFiles));
+    const vanished = Object.keys(previousFiles).filter((f) => !(f in next.files));
+    const rose = [];
+    for (const [f, v] of Object.entries(next.files)) {
+        const was = previousFiles[f];
+        if (!was || was.lines === undefined) continue;
+        if (v.lines > was.lines) rose.push(`${f} ${was.lines} -> ${v.lines}`);
+    }
+    if (rose.length) {
+        console.log(`  ${rose.length} file(s) ratcheted up:`);
+        for (const r of rose.slice(0, 10)) console.log(`    ${r}`);
+    }
+    if (appeared.length) {
+        console.log(
+            `  ${appeared.length} file(s) newly tracked` +
+                (vanished.length ? `, ${vanished.length} VANISHED:` : ':')
+        );
+        for (const f of appeared.slice(0, 8)) console.log(`    + ${f} (${next.files[f].lines}%)`);
+    }
+    if (vanished.length) {
+        // A rename shows here. The floor for the old path is gone, so the new
+        // path starts from whatever it measures now — if it measures LOWER, the
+        // history that would have caught a regression went with it.
+        console.log(
+            `  VANISHED floors — a rename or a deletion (a ratchet must not lose these quietly):`
+        );
+        for (const f of vanished.slice(0, 8)) console.log(`    - ${f}`);
+    }
     const zero = Object.entries(baseline.coverageFloors.files).filter(([, v]) => v.lines === 0);
     if (zero.length > 0) {
         console.log(

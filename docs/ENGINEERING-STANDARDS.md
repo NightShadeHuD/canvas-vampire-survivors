@@ -91,21 +91,27 @@ npm run verify
 
 It runs, in order, and stops at the first failure:
 
-| Step               | Command                        | Proves                                                      |
-| ------------------ | ------------------------------ | ----------------------------------------------------------- |
-| Lint               | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold |
-| Coverage           | `npm run check:coverage`       | Lint, format and test discovery actually reach every file   |
-| Typecheck          | `npm run typecheck`            | The TypeScript config is valid and the tree parses          |
-| Format             | `npm run format:check`         | Code matches the project's Prettier contract                |
-| Unit tests         | `npm test`                     | Behaviour is as specified                                   |
-| Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted               |
-| Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision           |
-| Date-hermeticity   | `npm run test:clock`           | No test depends on today's date                             |
-| Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
-| Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
-| Suppressions       | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
-| Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
-| Build              | `npm run build`                | The shipped browser artifact compiles                       |
+| Step               | Command                        | Proves                                                            |
+| ------------------ | ------------------------------ | ----------------------------------------------------------------- |
+| Lint               | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold       |
+| Coverage           | `npm run check:coverage`       | Lint, format and test discovery actually reach every file         |
+| Typecheck          | `npm run typecheck`            | The TypeScript config is valid and the tree parses                |
+| Strict flags       | `npm run check:strict`         | Enabled strict flags have not been turned back off                |
+| Format             | `npm run format:check`         | Code matches the project's Prettier contract                      |
+| Unit tests         | `npm test`                     | Behaviour is as specified                                         |
+| Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted                     |
+| Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision                 |
+| Shortcut register  | `npm run check:register`       | Every shortcut is bounded, tracked and correctly cited            |
+| Rule documents     | `npm run check:docs`           | Tables, citations and acceptance criteria all hold                |
+| Date-hermeticity   | `npm run test:clock`           | No test depends on today's date                                   |
+| Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                        |
+| Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors        |
+| Suppressions       | `npm run check:suppressions`   | Every suppression is within its declared ceiling                  |
+| Type coverage      | `npm run check:types`          | The use of `any` has not grown                                    |
+| Port hazards       | `npm run check:ports`          | The Godot transform has not grown, and no SILENT hazard was added |
+| Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets         |
+| Destructive edits  | `npm run check:destructive`    | Committed tooling does not bulk-edit source                       |
+| Build              | `npm run build`                | The shipped browser artifact compiles                             |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
 in `scripts/verify.mjs` must appear here, and every command listed here must
@@ -205,10 +211,16 @@ Rules for gaps:
 | --------------------------- | ---------------------------------- | -------------- |
 | Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
+| Type coverage               | `scripts/check-types.mjs`          | pre-commit, CI |
+| Port hazards                | `scripts/check-ports.mjs`          | pre-commit, CI |
 | Style + format              | eslint, prettier                   | pre-commit, CI |
+| Destructive edits           | `scripts/check-destructive.mjs`    | pre-push, CI   |
 | Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
 | Assertion strength          | `scripts/check-assertions.mjs`     | pre-push, CI   |
+| Shortcut register           | `scripts/check-register.mjs`       | pre-push, CI   |
+| Rule documents              | `scripts/check-docs.mjs`           | pre-push, CI   |
 | TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
+| Strict flags                | `scripts/check-strict.mjs`         | pre-push, CI   |
 | Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
 | Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
 | Hermetic tests              | `scripts/check-clocks.mjs`         | pre-push, CI   |
@@ -238,6 +250,108 @@ investigates it.
 
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
+
+### Type coverage, the port-readiness metric
+
+Every other gate here measures the JavaScript game: coverage of lines, branches
+and functions, a test count, a gate count. None of them measures the thing that
+decides whether a GDScript port is a translation or a guess.
+
+**`any` has no GDScript equivalent.** `float`, `String`, `Array[Enemy]` and a
+class type all translate. `any` leaves the translator to infer intent from the
+body, and an inference is what a port cannot afford to get wrong.
+
+`check:types` measures it and holds a ceiling that may only fall:
+
+```
+check-types: 118 use(s) of `any` across 28 of 62 file(s) (ceiling 118)
+  — 57 cast, 30 record, 19 annotation, 8 array, 4 generic
+```
+
+**The forms are counted where they are types, not as a word.** A grep would also
+count `company`, and the word inside a docblock explaining why something is loose
+— and a metric people do not believe is a metric they ignore. Comment-only lines
+are skipped, because an explanation of a deliberate `any` is evidence of care
+rather than a defect.
+
+The largest group is `as any` (57). Those are the quietest: the type around them
+is real, and the cast removes the check at one point.
+
+**A ceiling is on the total, not per file.** A per-file ceiling fails the moment
+a file is renamed or split — `check:coverage-floor` already demonstrated that cost
+— while the total is what the port cares about, and an improvement in one file
+correctly offsets a regression in another.
+
+### Scripted edits to source
+
+Two failures in one session, both self-inflicted, both from editing source text
+in bulk rather than at an anchor.
+
+**1. An annotator that assumed the shape of what it matched.** It inserted a type
+at a parameter's identifier and produced
+
+```ts
+update(dt: number, height: number?) {   // invalid
+```
+
+because `height` was already optional. It assumed an identifier is never
+followed by `?`.
+
+**2. A global substitution, run to clean up after the first mistake.** A
+backtick-stripping `sed` across `src/effects.ts` removed **every backtick in the
+file**, including the template literals it builds its colours from.
+
+Both were caught by `typecheck` within seconds — the gate did its job and the
+agent did not do theirs.
+
+**The rule.** A scripted edit to source must anchor on text that matches exactly
+once, refuse otherwise, verify the result after writing, and be followed by the
+full gate before anything else. Work one file at a time.
+
+**The safe path.** `AGENTS.md` rule 6 is a prohibition, and a prohibition with no
+alternative is a rule that gets worked around. So the alternative exists:
+
+- `scripts/edit.mjs` — a CLI that anchors, counts, replaces and reads back.
+- `scripts/lib/source-edit.mjs` — the same as a library, split into `planEdit`
+  (pure, testable without a filesystem) and `applyEdit` (which verifies its own
+  write).
+
+It refuses an anchor matching zero times or the wrong number of times, and after
+writing it reads the file back and compares against the plan. It deliberately
+does **not** parse the language or judge the change — that belongs to `typecheck`
+and the suite.
+
+_Building it found a bug in itself:_ an early version also asserted the anchor
+was gone from the result, which refuses a good edit whose **replacement contains
+the anchor** — appending to the line it matched. A tool that refuses correct work
+is a tool people stop using, which is the failure this whole mechanism exists to
+prevent. The check was removed and the case pinned by a test.
+
+**What is enforced, and what is not.** `check:destructive` refuses these patterns
+in committed scripts and hooks. It **cannot** see a shell command that was never
+committed — which is precisely where failure 2 happened. That half is
+`AGENTS.md` rule 6, and it is stated here rather than implied by a gate that
+would otherwise look like it covered the case.
+
+### A gate that checks nothing is not a pass
+
+Two states look identical from the outside and must never be conflated:
+
+- **Nothing to check** — the scan set is empty because a glob is wrong or the
+  tree moved. That is a **failure**. Measured: with its glob pointed at nothing,
+  `check:hygiene` printed `clean — 0 tracked files checked` and `check:docs`
+  printed `0 document(s) ... resolve`, **both exit 0**. Neither had looked at
+  anything, and both reported success in exactly the shape a real pass takes.
+  Every scanning gate now refuses an empty set.
+- **Nothing to check yet** — a project with no shortcut register has genuinely
+  declared no shortcuts. That is a **notice**, printed with a `NOTICE:` prefix
+  and counted by `verify`, so a run ends with either
+  `all 15 gates passed, and every one checked something` or a list of the gates
+  that checked nothing and the rule each does not yet apply to.
+
+Adopted from the agent-scaffold method, whose closing line is the model:
+_"ALL 12 GATES PASSED (3 skipped as unconfigured — each is a rule this project
+does not yet check)."_
 
 ### Suite mandates
 

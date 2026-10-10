@@ -8,7 +8,7 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The six non-negotiables
+## The seven non-negotiables
 
 ### 1. A red baseline stops everything
 
@@ -46,7 +46,53 @@ defect. "Done except X, which is untested" is useful; "done" is not.
 Read the diff as if someone else wrote it. Check style, production readiness,
 and that tests exist and pass. Then commit.
 
-### 6. Apple is the benchmark
+### 6. Never edit source text with a blunt instrument
+
+**Do not run `sed -i`, `perl -pi`, or any global substitution across a source
+file. Do not rewrite a file with a one-line script.** Every scripted edit to
+source must:
+
+1. **anchor on text that matches exactly once**, and refuse if it matches zero
+   or more than one;
+2. **verify the result after writing** — read the file back and assert the
+   intended text is present;
+3. **be followed by `npm run verify`** before anything else happens.
+
+Two failures in one session, both self-inflicted, both from ignoring this:
+
+- An annotator inserted a type at a parameter's identifier and produced
+  `update(dt: number, height: number?)` — invalid syntax — because it assumed the
+  identifier was never already followed by `?`.
+- A global substitution stripping backticks, run across `src/effects.ts` to
+  clean up after the first mistake, **removed every backtick in the file** —
+  including the template literals it builds its colours from:
+  ``ctx.strokeStyle = `rgba(160,255,160,${...})`;``
+
+Both were caught by `typecheck` within seconds. That is the gate doing its job
+and the agent not doing theirs.
+
+**The rule for a bulk change is: do it per-position, in a script that checks its
+own work, one file at a time, with the full gate between files.**
+
+**Use the helper. It is what makes this rule possible to follow.**
+
+```bash
+node scripts/edit.mjs src/foo.ts --anchor 'exact old text' --replace 'new text'
+node scripts/edit.mjs src/foo.ts --anchor-file a.txt --replace-file b.txt  # multi-line
+node scripts/edit.mjs src/foo.ts --anchor 'x' --replace 'y' --dry-run
+```
+
+It refuses an anchor that matches zero times or the wrong number of times, and
+**after writing it reads the file back** to confirm the change is really there.
+`scripts/lib/source-edit.mjs` is the same thing as a library for scripts, with
+`planEdit` (pure, no writes) and `applyEdit`.
+
+`npm run check:destructive` refuses `sed -i`/`perl -i`, shell redirection into a
+source file, and direct `writeFileSync('src/...')` in committed tooling — but it
+**cannot see a shell command that was never committed**, which is exactly where
+the second failure happened. That half is on you.
+
+### 7. Apple is the benchmark
 
 How it looks, how smoothly it runs, how optimised the code is, how smooth the
 interface is, how easy it is to use — we settle for nothing less. Perceived
@@ -85,6 +131,7 @@ npm run setup                     # installs the git hooks
 | No test depends on today's date                         | `scripts/check-clocks.mjs`                       |
 | The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
 | Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |
+| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                  |
 | All of the above, in order, locally                     | `.githooks/pre-push` → `npm run verify`          |
 | All of the above, unbypassably                          | CI job **Verify**, required by branch protection |
 
@@ -165,8 +212,23 @@ Pass `-R NightShadeHuD/canvas-vampire-survivors` on any scripted `gh` command as
 well. Belt and braces — the rename protects interactive use, the flag protects
 automation.
 
-**GitHub Pages is not enabled on this repository**, so the
-`Deploy to GitHub Pages` workflow cannot complete until it is. The workflow
-itself is correct and gated on the full verify job; it is disabled so that a
-permanent red X cannot mask real failures. Re-enable it with
-`gh workflow enable "Deploy to GitHub Pages"` once Pages is switched on.
+**GitHub Pages is ENABLED, and the game is playable at**
+<https://nightshadehud.github.io/canvas-vampire-survivors/>.
+
+This was previously recorded here as _not enabled_, with the deploy workflow disabled so a
+permanent red X could not mask real failures. Both were corrected once the workflow was
+verified to gate on the full `Verify` job before deploying:
+
+```bash
+gh api --method POST repos/NightShadeHuD/canvas-vampire-survivors/pages -f build_type=workflow
+gh workflow enable "Deploy to GitHub Pages"
+```
+
+First deploy verified end to end: the workflow ran `Verify`, built `dist/`, assembled `_site`
+and deployed; every asset returned 200; and a headless browser confirmed the deployed game
+starts a run, advances its clock and reports **0 page errors**.
+
+**`__SURV_DEBUG__` is deliberately absent on the deployed site.** It is gated on
+`location.hostname` being `localhost`, `127.0.0.1` or empty, so the debug hooks that
+`scripts/boot-smoke.mjs` drives exist locally and not in production. That is intended, and it
+means boot smoke cannot verify the live site — it is verified by observation instead.

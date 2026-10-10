@@ -15,10 +15,13 @@ import {
     ExpOrb,
     Particle,
     FloatingText,
+    Player,
     findEnemyDef,
     registerWeaponClass
 } from '../src/entities.ts';
-import { renderFloatingText, renderParticle } from '../src/entity-render.ts';
+import { renderFloatingText, renderParticle, renderPlayer } from '../src/entity-render.ts';
+import { Weapon } from '../src/weapons.ts';
+import { WEAPONS } from '../src/data.ts';
 import { CONFIG } from '../src/config.ts';
 import { ENEMIES } from '../src/data.ts';
 
@@ -425,4 +428,49 @@ test('registerWeaponClass: is a documented no-op kept for backwards compatibilit
     assert.equal(registerWeaponClass.length, 1);
     assert.doesNotThrow(() => registerWeaponClass(class {}));
     assert.equal(registerWeaponClass(class {}), undefined);
+});
+
+test('entities/render: a player holding garlic draws without throwing', () => {
+    // Regression. The render extraction rewrote `this.` to `self.` and missed a
+    // BARE `this` passed as an argument:
+    //
+    //     const range = garlic.getRange(this);
+    //
+    // At module scope `this` is undefined, and getRange calls
+    // player.getAreaMult() — so drawing a player with garlic equipped threw
+    // `TypeError: Cannot read properties of undefined (reading 'getAreaMult')`
+    // every frame. Boot smoke never equipped garlic, so nothing caught it.
+    //
+    // `noImplicitThis` found it, which is the argument for the stricter flags
+    // rather than an argument for reading more carefully.
+    const player = new Player(0, 0);
+    const garlic = Object.values(WEAPONS).find((def) => def.id === 'garlic');
+    assert.ok(garlic, 'the catalogue must still contain garlic, or this proves nothing');
+    player.weapons.push(new Weapon(garlic));
+
+    // The stub implements only what renderPlayer's garlic branch touches.
+    const gradient = { addColorStop: () => {} };
+    const stub = {
+        save: () => {},
+        restore: () => {},
+        beginPath: () => {},
+        arc: () => {},
+        stroke: () => {},
+        fill: () => {},
+        translate: () => {},
+        rotate: () => {},
+        fillRect: () => {},
+        fillText: () => {},
+        measureText: () => ({ width: 0 }),
+        createRadialGradient: () => gradient,
+        createLinearGradient: () => gradient,
+        strokeStyle: '',
+        fillStyle: '',
+        lineWidth: 0,
+        globalAlpha: 1,
+        shadowBlur: 0,
+        shadowColor: ''
+    };
+
+    assert.doesNotThrow(() => renderPlayer(stub as unknown as CanvasRenderingContext2D, player));
 });
