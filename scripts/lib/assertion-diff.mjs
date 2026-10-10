@@ -333,12 +333,26 @@ export function judgeDigests(files, recorded, modifiedAgainstBase) {
         if (was === digest) continue;
         // The digest moved. If the base diff already sees this file, the existing
         // comparison is the authority and this adds nothing.
-        if (modifiedAgainstBase.has(file.path)) continue;
+        // A stale digest is reported WHETHER OR NOT the base diff sees the file.
+        //
+        // The first version skipped a file the diff already covered, on the
+        // reasoning that the revision comparison was the authority. That reasoning
+        // was wrong in the way that matters: on a pull request the file IS
+        // modified, so the skip applied, CI passed, and `main` went red the moment
+        // it merged -- base then equalled the tree and the stale digest fired. A
+        // check that cannot fail before the merge is not a check.
+        //
+        // Reporting always means a change to test assertions must carry `--update`
+        // in the same commit. Deliberate friction: it is the confirmation step,
+        // and it is what makes the digest current rather than merely present.
+        void modifiedAgainstBase;
         reasons.push(
-            `${file.path}: the assertion digest changed but the file is NOT modified ` +
-                `against the base, so the change arrived by a path the revision diff ` +
-                `cannot see — a commit made directly to the base, or one already ` +
-                'merged. Review it, then re-record with `npm run check:assertions --update`.'
+            `${file.path}: the assertion digest changed from the recorded one, and the ` +
+                'base is not carrying the new value. Either a weakening reached the base ' +
+                'by a path the revision diff cannot see, or assertions changed without ' +
+                're-recording. Review the change, then run ' +
+                '`npm run check:assertions --update` — it belongs in the same commit, ' +
+                'which is what keeps the digest current rather than merely present.'
         );
     }
     return { ok: reasons.length === 0, reasons, fresh };
