@@ -36,6 +36,10 @@ const STEPS = [
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     {
+        script: 'check:isolation',
+        proves: 'the suite agrees under per-file isolation and a single process'
+    },
+    {
         script: 'check:suite',
         proves: 'no test was skipped, left as todo, or deleted'
     },
