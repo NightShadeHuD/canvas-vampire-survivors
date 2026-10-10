@@ -346,3 +346,34 @@ test('game/effects: shake delegates to the camera and does not accumulate', asyn
         assert.equal(game.camera.intensity, 5, 'a weaker shake must not reduce the current one');
     });
 });
+
+test('save: ensureFlags creates flags on a save that predates them', async () => {
+    // A save written before `flags` existed has none. `ensureFlags` is what the
+    // six call sites use instead of `this.save.flags = this.save.flags || {}`,
+    // which produced a union with `{}` and was the reason `save` could not be
+    // typed at all.
+    await withGame((game) => {
+        delete (game.save as { flags?: unknown }).flags;
+        assert.equal(game.save.flags, undefined, 'precondition: an old save has no flags');
+
+        game.ensureFlags();
+
+        assert.ok(game.save.flags, 'it must create them');
+        assert.equal(game.save.flags.howToSeen, false);
+        assert.equal(game.save.flags.pwaPromptSeen, false);
+        assert.equal(game.save.flags.tutorialDone, false);
+    });
+});
+
+test('save: ensureFlags leaves existing flags alone', async () => {
+    // The other arm, and the one that matters for a player: a returning player's
+    // "already seen the tutorial" flag must survive.
+    await withGame((game) => {
+        game.ensureFlags();
+        game.save.flags.tutorialDone = true;
+
+        game.ensureFlags();
+
+        assert.equal(game.save.flags.tutorialDone, true, 'it must not reset what is there');
+    });
+});
