@@ -27,7 +27,7 @@ const PINNED_NOW = new Date(Date.UTC(2026, 3, 25, 12, 0));
 // ---------------------------------------------------------------------------
 test('streak: empty history yields current=0, best=0, 14 missed days', () => {
     _resetDailyForTests();
-    const s = dailyStreakSummary({}, new Date(Date.UTC(2026, 3, 25)));
+    const s = dailyStreakSummary([], new Date(Date.UTC(2026, 3, 25)));
     assert.equal(s.current, 0);
     assert.equal(s.best, 0);
     assert.equal(s.days.length, 14);
