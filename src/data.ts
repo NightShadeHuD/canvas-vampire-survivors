@@ -742,7 +742,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
         name: 'High Roller',
         icon: '📈',
         description: 'Reach hero level 20.',
-        check: (c) => c.game.player?.level >= 20
+        check: (c) => (c.game.player ? c.game.player.level : 0) >= 20
     },
     // --- v2.4 additions ---------------------------------------------------
     {
