@@ -13,14 +13,14 @@ function collect(iter) {
 }
 
 test('SpatialHash: starts empty', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     assert.equal(h.size, 0);
     assert.equal(h.occupiedCellCount(), 0);
     assert.equal(collect(h.queryRect(0, 0, 1000)).length, 0);
 });
 
 test('SpatialHash: insert/size bookkeeping', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 10, y: 10, name: 'a' });
     h.insert({ x: 20, y: 20, name: 'b' });
     h.insert({ x: 500, y: 500, name: 'c' });
@@ -29,7 +29,7 @@ test('SpatialHash: insert/size bookkeeping', () => {
 });
 
 test('SpatialHash: clear() empties the index', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 0, y: 0 });
     h.insert({ x: 100, y: 100 });
     assert.equal(h.size, 2);
@@ -39,7 +39,7 @@ test('SpatialHash: clear() empties the index', () => {
 });
 
 test('SpatialHash: insertAll replaces previous contents', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 999, y: 999 });
     h.insertAll([
         { x: 0, y: 0 },
@@ -49,7 +49,7 @@ test('SpatialHash: insertAll replaces previous contents', () => {
 });
 
 test('SpatialHash: queryRect returns items inside the square', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     const items = [
         { x: 0, y: 0, id: 0 },
         { x: 10, y: 10, id: 1 },
@@ -65,7 +65,7 @@ test('SpatialHash: queryRect may include cell neighbours beyond radius (caller f
     // The contract says queryRect returns "maybe" matches — we test that
     // items in a neighbouring cell but outside radius ARE yielded, so
     // callers know they must do the exact distance check themselves.
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 0, y: 0 });
     h.insert({ x: 70, y: 0 }); // different cell, 70px away
     const hits = collect(h.queryRect(0, 0, 10));
@@ -75,7 +75,7 @@ test('SpatialHash: queryRect may include cell neighbours beyond radius (caller f
 });
 
 test('SpatialHash: queryRect with zero radius still works on exact cell', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 5, y: 5, v: 'hit' });
     const out = collect(h.queryRect(5, 5, 0));
     assert.equal(out.length, 1);
@@ -83,7 +83,7 @@ test('SpatialHash: queryRect with zero radius still works on exact cell', () => 
 });
 
 test('SpatialHash: findNearest returns closest by Euclidean distance', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     const items = [
         { x: 40, y: 0, id: 'far' },
         { x: 10, y: 0, id: 'close' },
@@ -95,19 +95,19 @@ test('SpatialHash: findNearest returns closest by Euclidean distance', () => {
 });
 
 test('SpatialHash: findNearest returns null when nothing in range', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 1000, y: 1000 });
     assert.equal(h.findNearest(0, 0, 100), null);
 });
 
 test('SpatialHash: findNearestEnemy is an alias for findNearest', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 10, y: 0, id: 'a' });
     assert.strictEqual(h.findNearestEnemy(0, 0, 500), h.findNearest(0, 0, 500));
 });
 
 test('SpatialHash: insertEnemies (legacy alias) clears then inserts', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 0, y: 0, legacy: 'stale' });
     h.insertEnemies([{ x: 10, y: 10, v: 'fresh' }]);
     const all = collect(h.queryRect(0, 0, 1000));
@@ -116,7 +116,7 @@ test('SpatialHash: insertEnemies (legacy alias) clears then inserts', () => {
 });
 
 test('SpatialHash: negative coordinates bucket correctly', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: -10, y: -10, id: 'neg' });
     h.insert({ x: 10, y: 10, id: 'pos' });
     const near = collect(h.queryRect(-5, -5, 20));
@@ -124,7 +124,7 @@ test('SpatialHash: negative coordinates bucket correctly', () => {
 });
 
 test('SpatialHash: many items + many queries (smoke perf check)', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     const items = [];
     for (let i = 0; i < 500; i++) {
         items.push({ x: Math.random() * 2000, y: Math.random() * 2000, id: i });
@@ -142,7 +142,7 @@ test('SpatialHash: many items + many queries (smoke perf check)', () => {
 });
 
 test('SpatialHash: cell-size 1 still works for fractional coords', () => {
-    const h = new SpatialHash(1);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(1);
     h.insert({ x: 0.25, y: 0.75 });
     h.insert({ x: 1.5, y: 1.5 });
     assert.equal(h.size, 2);
@@ -151,7 +151,7 @@ test('SpatialHash: cell-size 1 still works for fractional coords', () => {
 });
 
 test('SpatialHash: queryRect with huge radius scans everything', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     const items = [];
     for (let i = 0; i < 50; i++) {
         items.push({ x: i * 10, y: i * 10 });
@@ -162,20 +162,20 @@ test('SpatialHash: queryRect with huge radius scans everything', () => {
 });
 
 test('SpatialHash: identical coordinates stack in the same cell', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     for (let i = 0; i < 10; i++) h.insert({ x: 5, y: 5, id: i });
     assert.equal(h.size, 10);
     assert.equal(h.occupiedCellCount(), 1);
 });
 
 test('SpatialHash: findNearest with zero range returns null', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 1, y: 1 });
     assert.equal(h.findNearest(0, 0, 0), null);
 });
 
 test('SpatialHash: findNearest returns closest even when multiple share a cell', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: 0.1, y: 0, id: 'c' });
     h.insert({ x: 0.2, y: 0, id: 'far' });
     h.insert({ x: 0.05, y: 0, id: 'closest' });
@@ -183,7 +183,7 @@ test('SpatialHash: findNearest returns closest even when multiple share a cell',
 });
 
 test('SpatialHash: large negative AND positive coordinates work together', () => {
-    const h = new SpatialHash(64);
+    const h = new SpatialHash<{ x: number; y: number; id: string }>(64);
     h.insert({ x: -5000, y: -5000, id: 'a' });
     h.insert({ x: 5000, y: 5000, id: 'b' });
     assert.equal(h.occupiedCellCount(), 2);
