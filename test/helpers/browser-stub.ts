@@ -93,7 +93,12 @@ export function makeElement(id = '') {
         blur() {},
         click() {},
         remove() {},
-        getContext: () => null,
+        // A REAL canvas returns a 2D context, and this stub used to return null.
+        // That was not faithful to the platform, and it forced `main.ts` to cast
+        // the result instead of checking it -- a cast that hid a genuine
+        // nullability the compiler was right about. A no-op context is both more
+        // honest and enough for anything that only draws.
+        getContext: () => makeStubContext(),
         width: 1200,
         height: 800,
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 1200, height: 800 })
@@ -124,6 +129,45 @@ export function makeElement(id = '') {
  * @param {{ now?: number }} [opts]
  * @returns {{ restore: () => void, clock: { now: () => number, set: (t:number)=>void, advance: (ms:number)=>void }, elements: Map<string, object>, raf: { pending: number, requested: number, cancelled: number } }}
  */
+/** A canvas that accepts draw calls and records nothing. */
+function makeStubContext() {
+    const gradient = { addColorStop: () => {} };
+    return {
+        save: () => {},
+        restore: () => {},
+        beginPath: () => {},
+        closePath: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        arc: () => {},
+        fill: () => {},
+        stroke: () => {},
+        fillRect: () => {},
+        clearRect: () => {},
+        strokeRect: () => {},
+        fillText: () => {},
+        strokeText: () => {},
+        drawImage: () => {},
+        translate: () => {},
+        rotate: () => {},
+        scale: () => {},
+        setTransform: () => {},
+        createRadialGradient: () => gradient,
+        createLinearGradient: () => gradient,
+        measureText: () => ({ width: 0 }),
+        strokeStyle: '',
+        fillStyle: '',
+        lineWidth: 0,
+        globalAlpha: 1,
+        font: '',
+        textAlign: 'center',
+        textBaseline: 'middle',
+        shadowBlur: 0,
+        shadowColor: '',
+        canvas: { width: 1200, height: 800 }
+    };
+}
+
 export function installBrowserStub({ now = 1000 } = {}) {
     const real = {
         document: Object.getOwnPropertyDescriptor(globalThis, 'document'),
