@@ -214,10 +214,24 @@ test('assertion-digest: an empty file has a stable digest', () => {
     assert.equal(assertionDigest(''), assertionDigest(''));
 });
 
-test('assertion-digest/judge: a file the base diff already covers is not reported', () => {
-    // If the revision comparison can see it, that comparison is the authority and
-    // this adds nothing. Reporting it here would double-report every weakening.
+test('assertion-digest/judge: a stale digest fails EVEN when the base diff sees the file', () => {
+    // The regression, and it cost a red main. The first version skipped a file the
+    // revision diff already covered, on the reasoning that the diff was the
+    // authority. On a pull request the file IS modified, so the skip applied, CI
+    // passed, and `main` went red the instant it merged -- base then equalled the
+    // tree and the stale digest fired.
+    //
+    // A check that cannot fail before the merge is not a check.
     const files = [{ path: 'test/a.test.ts', text: A_WEAKENED }];
+    const recorded = { 'test/a.test.ts': assertionDigest(A) };
+    const verdict = judgeDigests(files, recorded, new Set(['test/a.test.ts']));
+    assert.equal(verdict.ok, false, 'the merge must not be the first place this fails');
+    assert.match(verdict.reasons[0], /--update/);
+});
+
+test('assertion-digest/judge: a CURRENT digest passes however the file got here', () => {
+    // The other arm: recorded and current agree, so nothing is reported.
+    const files = [{ path: 'test/a.test.ts', text: A }];
     const recorded = { 'test/a.test.ts': assertionDigest(A) };
     const verdict = judgeDigests(files, recorded, new Set(['test/a.test.ts']));
     assert.equal(verdict.ok, true);
@@ -230,7 +244,7 @@ test('assertion-digest/judge: a changed digest the base diff CANNOT see is repor
     const recorded = { 'test/a.test.ts': assertionDigest(A) };
     const verdict = judgeDigests(files, recorded, new Set());
     assert.equal(verdict.ok, false);
-    assert.match(verdict.reasons[0], /cannot see/);
+    assert.match(verdict.reasons[0], /the base is not carrying the new value/);
     assert.match(verdict.reasons[0], /--update/, 'it must say how to resolve it');
 });
 
