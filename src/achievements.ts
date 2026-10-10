@@ -11,6 +11,7 @@
  *   - class AchievementTracker
  */
 
+import type { AchievementDef } from './data.ts';
 import { ACHIEVEMENTS, UNLOCKS } from './data.ts';
 
 /** Per-run counters used by the achievement checks. */
@@ -75,7 +76,7 @@ export class AchievementTracker {
 
     check(game) {
         const ctx = { game, run: this.run };
-        const newly = [];
+        const newly: AchievementDef[] = [];
         for (const ach of ACHIEVEMENTS) {
             if (this.save.achievements[ach.id]) continue;
             try {

@@ -113,7 +113,7 @@ function hasLocalStorage() {
 }
 
 // Evaluate lazily so Node-side tests can import this module without a DOM.
-let _usable = null;
+let _usable: boolean | null = null;
 function usableLS() {
     if (_usable === null) _usable = hasLocalStorage();
     return _usable;
@@ -304,7 +304,7 @@ export function loadSpeedrunScores() {
     }
 }
 
-let _speedrunMemory = null;
+let _speedrunMemory: string | null = null;
 
 export function saveSpeedrunScores(scores) {
     try {
