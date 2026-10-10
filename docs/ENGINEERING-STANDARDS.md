@@ -107,6 +107,7 @@ It runs, in order, and stops at the first failure:
 | Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                  |
 | Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors  |
 | Suppressions       | `npm run check:suppressions`   | Every suppression is within its declared ceiling            |
+| Type coverage      | `npm run check:types`          | The use of `any` has not grown                              |
 | Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets   |
 | Destructive edits  | `npm run check:destructive`    | Committed tooling does not bulk-edit source                 |
 | Build              | `npm run build`                | The shipped browser artifact compiles                       |
@@ -209,6 +210,7 @@ Rules for gaps:
 | --------------------------- | ---------------------------------- | -------------- |
 | Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
 | Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
+| Type coverage               | `scripts/check-types.mjs`          | pre-commit, CI |
 | Style + format              | eslint, prettier                   | pre-commit, CI |
 | Destructive edits           | `scripts/check-destructive.mjs`    | pre-push, CI   |
 | Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
@@ -246,6 +248,37 @@ investigates it.
 
 So coverage is asserted directly: every tracked source file must match at least
 one `files:` block, checked with `path.matchesGlob` (minimatch semantics).
+
+### Type coverage, the port-readiness metric
+
+Every other gate here measures the JavaScript game: coverage of lines, branches
+and functions, a test count, a gate count. None of them measures the thing that
+decides whether a GDScript port is a translation or a guess.
+
+**`any` has no GDScript equivalent.** `float`, `String`, `Array[Enemy]` and a
+class type all translate. `any` leaves the translator to infer intent from the
+body, and an inference is what a port cannot afford to get wrong.
+
+`check:types` measures it and holds a ceiling that may only fall:
+
+```
+check-types: 118 use(s) of `any` across 28 of 62 file(s) (ceiling 118)
+  — 57 cast, 30 record, 19 annotation, 8 array, 4 generic
+```
+
+**The forms are counted where they are types, not as a word.** A grep would also
+count `company`, and the word inside a docblock explaining why something is loose
+— and a metric people do not believe is a metric they ignore. Comment-only lines
+are skipped, because an explanation of a deliberate `any` is evidence of care
+rather than a defect.
+
+The largest group is `as any` (57). Those are the quietest: the type around them
+is real, and the cast removes the check at one point.
+
+**A ceiling is on the total, not per file.** A per-file ceiling fails the moment
+a file is renamed or split — `check:coverage-floor` already demonstrated that cost
+— while the total is what the port cares about, and an improvement in one file
+correctly offsets a regression in another.
 
 ### Scripted edits to source
 
