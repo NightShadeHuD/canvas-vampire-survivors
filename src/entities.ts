@@ -19,6 +19,7 @@
 
 import { CONFIG } from './config.ts';
 import { ENEMIES } from './data.ts';
+import type { Game } from './main.ts';
 
 export class Player {
     declare x: number;
@@ -40,7 +41,7 @@ export class Player {
     declare invincibleTimer: number;
     /** Seconds since the player was last hit; drives the no-hit award. */
     declare unhitTimer: number;
-    constructor(x, y) {
+    constructor(x: number, y: number) {
         this.x = x;
         this.y = y;
         this.size = CONFIG.PLAYER_SIZE;
@@ -58,7 +59,7 @@ export class Player {
         this.unhitTimer = 0; // seconds since last damage taken
     }
 
-    update(dt, game) {
+    update(dt: number, game: Game) {
         // Movement ---------------------------------------------------------
         const v = game.input.getMoveVector();
         // iter-14: stage modifier (e.g. tundra applies 0.9 here for icy
@@ -104,14 +105,14 @@ export class Player {
         }
     }
 
-    addPassive(def) {
+    addPassive(def: any) {
         this.passives[def.id] ??= { def, count: 0 };
         if (this.passives[def.id].count >= CONFIG.PASSIVE_MAX_STACK) return;
         this.passives[def.id].count++;
         this.recalculateStats();
     }
 
-    _passiveSum(key) {
+    _passiveSum(key: string) {
         let total = 0;
         for (const id in this.passives) {
             const p = this.passives[id];
@@ -120,7 +121,7 @@ export class Player {
         return total;
     }
 
-    _passiveMult(key) {
+    _passiveMult(key: string) {
         let mult = 1;
         for (const id in this.passives) {
             const p = this.passives[id];
@@ -189,7 +190,7 @@ export class Player {
         return Math.min(0.6, this._passiveSum('damageReduction'));
     }
 
-    gainExp(amount) {
+    gainExp(amount: number) {
         this.exp += amount * this.getExpMult();
         const levelUps: number[] = [];
         while (this.exp >= this.expToNext) {
@@ -202,7 +203,7 @@ export class Player {
         return levelUps;
     }
 
-    takeDamage(damage, game?) {
+    takeDamage(damage: number, game?: Game) {
         if (this.invincible || this.dead) return;
         // iter-14: dodge fires *before* armor / damageReduction so a dodged
         // hit also doesn't burn an invincibility window — feels like the hit
@@ -230,7 +231,7 @@ export class Player {
         }
     }
 
-    heal(amount) {
+    heal(amount: number) {
         this.hp = Math.min(this.hp + amount, this.maxHp);
     }
 }
@@ -311,7 +312,7 @@ export class Enemy {
     declare slowPct: number;
     declare slowTimer: number;
     declare splitter: boolean;
-    constructor(x, y, type, hpMult, dmgMult) {
+    constructor(x: number, y: number, type, hpMult: number, dmgMult: number) {
         this.x = x;
         this.y = y;
         this.type = type;
@@ -354,7 +355,11 @@ export class Enemy {
         this.isClone = false;
     }
 
-    update(dt, game) {
+    update(dt: number, game: Game) {
+        // `Game.player` is `Player | null` -- it does not exist in the menu. These
+        // methods run mid-run, and saying so is what lets the reads below be checked.
+        // The same guard `main.ts` got when the field was widened in round 8.
+        if (!game.player) return;
         const dx = game.player.x - this.x;
         const dy = game.player.y - this.y;
         const d = Math.hypot(dx, dy);
@@ -487,7 +492,7 @@ export class Enemy {
         }
     }
 
-    takeDamage(damage) {
+    takeDamage(damage: number) {
         let dmg = damage;
         if (this.shielded && this.shieldHp > 0) {
             const reduction = this.type.damageReduction ?? 0.5;
@@ -515,7 +520,7 @@ export class EnemyProjectile {
     declare life: number;
     declare size: number;
     declare shouldRemove: boolean;
-    constructor(x, y, angle, speed, damage) {
+    constructor(x: number, y: number, angle: number, speed: number, damage: number) {
         this.x = x;
         this.y = y;
         this.vx = Math.cos(angle) * speed;
@@ -525,7 +530,7 @@ export class EnemyProjectile {
         this.size = 6;
         this.shouldRemove = false;
     }
-    update(dt, game) {
+    update(dt: number, game: Game) {
         this.x += this.vx * dt;
         this.y += this.vy * dt;
         this.life -= dt;
@@ -534,6 +539,7 @@ export class EnemyProjectile {
             return;
         }
         const p = game.player;
+        if (!p) return;
         const d = Math.hypot(this.x - p.x, this.y - p.y);
         if (d < p.size + this.size) {
             if (!p.invincible) {
@@ -577,7 +583,15 @@ export class Projectile {
     /** Distance travelled so far; compared against `maxDist`. */
     declare travelDist: number;
     declare homing: boolean;
-    constructor(x, y, angle, def, damage, level, player) {
+    constructor(
+        x: number,
+        y: number,
+        angle: number,
+        def: any,
+        damage: number,
+        level: number,
+        player: Player
+    ) {
         this.x = x;
         this.y = y;
         this.startX = x;
@@ -604,7 +618,11 @@ export class Projectile {
         this.id = def.id;
     }
 
-    update(dt, game) {
+    update(dt: number, game: Game) {
+        // `Game.player` is `Player | null` -- it does not exist in the menu. These
+        // methods run mid-run, and saying so is what lets the reads below be checked.
+        // The same guard `main.ts` got when the field was widened in round 8.
+        if (!game.player) return;
         if (this.homing && this.hitEnemies.size === 0) {
             const target = game.spatial.findNearestEnemy(this.x, this.y, 9999);
             if (target) {
@@ -650,7 +668,7 @@ export class Projectile {
         }
     }
 
-    _onEnd(game) {
+    _onEnd(game: Game) {
         if (this.explode) {
             game.audio.explosion();
             // iter-16 perf: probe the spatial hash for the blast cells. The
@@ -684,7 +702,7 @@ export class OrbitShard {
     declare radius: number;
     declare total: number;
     declare weapon: any;
-    constructor(weapon, index, total, radius, damage) {
+    constructor(weapon, index: number, total: number, radius: number, damage: number) {
         this.weapon = weapon;
         this.index = index;
         this.total = total;
@@ -695,7 +713,7 @@ export class OrbitShard {
         this.x = 0;
         this.y = 0;
     }
-    update(dt, player, game) {
+    update(dt: number, player: Player, game: Game) {
         this.angle += dt * 2.4; // rad/sec
         this.x = player.x + Math.cos(this.angle) * this.radius;
         this.y = player.y + Math.sin(this.angle) * this.radius;
@@ -733,7 +751,7 @@ export class Mine {
     /** Blast radius. */
     declare radius: number;
     declare shouldRemove: boolean;
-    constructor(x, y, radius, damage, fuse) {
+    constructor(x: number, y: number, radius: number, damage: number, fuse: number) {
         this.x = x;
         this.y = y;
         this.radius = radius;
@@ -742,7 +760,7 @@ export class Mine {
         this.maxFuse = fuse;
         this.shouldRemove = false;
     }
-    update(dt, game) {
+    update(dt: number, game: Game) {
         this.fuse -= dt;
         if (this.fuse <= 0) {
             // iter-16 perf: spatial probe instead of game.enemies walk.
@@ -784,7 +802,7 @@ export class ExpOrb {
     declare shouldRemove: boolean;
     declare size: number;
     declare value: number;
-    constructor(x, y, value) {
+    constructor(x: number, y: number, value: number) {
         this.x = x;
         this.y = y;
         this.value = value;
@@ -794,13 +812,14 @@ export class ExpOrb {
         this.life = CONFIG.EXP_ORB_LIFETIME;
     }
 
-    update(dt, game) {
+    update(dt: number, game: Game) {
         this.life -= dt;
         if (this.life <= 0) {
             this.shouldRemove = true;
             return;
         }
         const p = game.player;
+        if (!p) return;
         const dx = p.x - this.x;
         const dy = p.y - this.y;
         const d = Math.hypot(dx, dy);
@@ -835,7 +854,7 @@ export class Particle {
     declare friction: number;
     declare life: number;
     declare size: number;
-    constructor(x, y, color, opts: Record<string, any> = {}) {
+    constructor(x: number, y: number, color: string, opts: Record<string, any> = {}) {
         this.x = x;
         this.y = y;
         this.color = color;
@@ -848,7 +867,7 @@ export class Particle {
         this.vy = Math.sin(a) * s;
         this.friction = opts.friction ?? 0.2;
     }
-    update(dt) {
+    update(dt: number) {
         this.x += this.vx * dt;
         this.y += this.vy * dt;
         this.vx *= Math.pow(this.friction, dt);
@@ -879,7 +898,7 @@ export class FloatingText {
      * keyword or a number, so the type is both.
      */
     declare weight: string | number;
-    constructor(text, x, y, color, opts: Record<string, any> = {}) {
+    constructor(text: string, x: number, y: number, color: string, opts: Record<string, any> = {}) {
         this.text = text;
         this.x = x;
         this.y = y;
@@ -890,14 +909,14 @@ export class FloatingText {
         this.weight = opts.weight ?? 'bold';
         this.crit = !!opts.crit;
     }
-    update(dt) {
+    update(dt: number) {
         this.y += this.vy * dt;
         this.life -= 1.2 * dt;
     }
 }
 
 // Helper: look up an enemy definition by id string.
-export function findEnemyDef(id) {
+export function findEnemyDef(id: string) {
     for (const def of Object.values(ENEMIES)) {
         if (def.id === id) return def;
     }
