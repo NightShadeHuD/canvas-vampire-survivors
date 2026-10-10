@@ -28,6 +28,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 const BASELINE = path.join(repoRoot, 'quality-baseline.json');
 
+/**
+ * Files that DEFINE these hazards rather than suffer from them.
+ *
+ * `test/port-hazards.test.ts` is the only one, and it is exempt for the reason
+ * `check-destructive` exempts its own rule table: it tests the tool that COUNTS
+ * hazards, so its fixtures are hazards. Declared by path rather than inferred,
+ * because the alternative is what actually happened — every test added to make
+ * the metric trustworthy raised the metric, and the ceiling had to be raised
+ * three times in one sitting for a reason nobody could review.
+ */
+const DEFINES_THE_HAZARDS = new Set(['test/port-hazards.test.ts']);
+
 /** Source ships; tests are contracts, and a loose contract is still a hazard. */
 const files = execFileSync('git', ['ls-files', 'src/*', 'test/*'], {
     cwd: repoRoot,
@@ -48,7 +60,9 @@ if (files.length === 0) {
 }
 
 const measured = measurePorts(
-    files.map((rel) => ({ path: rel, text: readFileSync(path.join(repoRoot, rel), 'utf8') }))
+    files
+        .filter((rel) => !DEFINES_THE_HAZARDS.has(rel))
+        .map((rel) => ({ path: rel, text: readFileSync(path.join(repoRoot, rel), 'utf8') }))
 );
 
 const baseline = JSON.parse(readFileSync(BASELINE, 'utf8'));
