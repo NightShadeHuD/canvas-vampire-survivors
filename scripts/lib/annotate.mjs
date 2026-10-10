@@ -74,9 +74,18 @@ export const TYPE_BY_NAME = {
     scale: 'number',
     damage: 'number',
     baseDamage: 'number',
-    // Comparators and arithmetic operands: `(a, b) => a - b`.
-    a: 'number',
-    b: 'number',
+    // `a` and `b` are DELIBERATELY ABSENT.
+    //
+    // They were briefly `number`, on the reasoning that they are arithmetic
+    // operands. `--explain` showed what that cost: in `weapons.ts` they are the
+    // operands of a comparator over ENEMIES —
+    //
+    //     (a: number, b: number) => number   is not assignable to
+    //     (a: Enemy, b: Enemy) => number
+    //
+    // — and annotating them as numbers turned two working lines into six errors.
+    // A single-letter name carries no type, so this table refuses it and the
+    // caller supplies the answer at the site, which is the only place that knows.
     hp: 'number',
     score: 'number',
     total: 'number',
