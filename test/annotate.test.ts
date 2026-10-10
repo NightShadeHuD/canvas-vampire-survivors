@@ -11,6 +11,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { planAnnotation, TYPE_BY_NAME, NAMED_TYPES } from '../scripts/lib/annotate.mjs';
 
 /** Plan against a single line, with the column worked out from a marker. */
@@ -184,4 +185,25 @@ test('annotate: no table entry stays as a bare any unless it says why', () => {
         true,
         `too many parameters are still 'any': ${loose.map(([n]) => n).join(', ')}`
     );
+});
+
+test('annotate: a context-dependent single letter is refused, not guessed', () => {
+    // `a` and `b` were briefly `number` on the reasoning that they are arithmetic
+    // operands. In `weapons.ts` they are the operands of a comparator over
+    // ENEMIES, and annotating them as numbers turned two working lines into six
+    // errors. A single-letter name carries no type, so the table refuses it.
+    for (const name of ['a', 'b']) {
+        const result = plan(`    sort((|${name}) => 0) {`, name);
+        assert.equal(result.ok, false, `${name} must be refused`);
+        assert.match(result.reason ?? '', /no type known/);
+    }
+});
+
+test('annotate: --explain exists so a cascade can be inspected without editing the tool', () => {
+    // The guard reverts correctly but says only "0 -> 76". Finding out WHY used
+    // to mean disabling the guard by hand, which is the hack that was reached for
+    // the first time it happened. The tool now answers it itself.
+    const cli = readFileSync(new URL('../scripts/annotate.mjs', import.meta.url), 'utf8');
+    assert.match(cli, /--explain/);
+    assert.match(cli, /EXPLAIN/);
 });

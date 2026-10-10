@@ -37,6 +37,11 @@ const repoRoot = path.resolve(here, '..');
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+// `--explain` answers the question the guard raises but cannot answer: "reverted,
+// error count 0 -> 76" tells you THAT it cascaded and nothing about WHY. Without
+// this, inspecting a cascade means editing this file to disable the guard, which
+// is exactly the hack that was reached for the first time it happened.
+const explain = args.includes('--explain');
 const targets = args.filter((a) => !a.startsWith('--'));
 
 if (targets.length === 0) {
@@ -55,6 +60,26 @@ function projectErrorCount() {
         return (out.match(/error TS/g) ?? []).length;
     } catch (err) {
         return (`${err.stdout ?? ''}${err.stderr ?? ''}`.match(/error TS/g) ?? []).length;
+    }
+}
+
+/** The project's diagnostics, as strings, for reporting a cascade. */
+function projectErrors() {
+    try {
+        const out = execFileSync(
+            path.join(repoRoot, 'node_modules', '.bin', 'tsc'),
+            ['-p', path.join(repoRoot, 'tsconfig.json')],
+            { cwd: repoRoot, encoding: 'utf8' }
+        );
+        return out
+            .split('\n')
+            .filter((l) => l.includes('error TS'))
+            .map((l) => l.trim());
+    } catch (err) {
+        return `${err.stdout ?? ''}${err.stderr ?? ''}`
+            .split('\n')
+            .filter((l) => l.includes('error TS'))
+            .map((l) => l.trim());
     }
 }
 
@@ -107,6 +132,7 @@ for (const file of targets) {
     // Plan everything FIRST, against the original text, so a refusal stops the
     // file before anything is written.
     const errorsBefore = projectErrorCount();
+    const baselineErrors = explain ? new Set(projectErrors()) : new Set();
     const original = readFileSync(path.join(repoRoot, file), 'utf8').split('\n');
     const plans = [];
     const refusals = [];
@@ -239,6 +265,17 @@ for (const file of targets) {
     // So: measure the project's error count before and after. If it went UP,
     // put the file back and say so. A wrong annotation is then a non-event.
     const errorsAfter = projectErrorCount();
+    if (explain && errorsAfter > errorsBefore) {
+        const detail = projectErrors();
+        console.log(
+            `\n  ${file}: EXPLAIN — ${plans.length} annotation(s) raised errors ` +
+                `${errorsBefore} -> ${errorsAfter}. The new ones are:\n`
+        );
+        const fresh = detail.filter((d) => !baselineErrors.has(d));
+        for (const line of fresh.slice(0, 25)) console.log(`    ${line}`);
+        if (fresh.length > 25) console.log(`    ... and ${fresh.length - 25} more`);
+        console.log('');
+    }
     if (errorsAfter > errorsBefore) {
         const undo = applyEdit({
             path: path.join(repoRoot, file),
