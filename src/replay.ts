@@ -84,7 +84,7 @@ export function _resetReplayForTests() {
  * match exactly (we already store inputs at 2-decimal precision via
  * `quantize`), so we don't need an epsilon here. Returns the RLE array.
  */
-export function compressFrames(frames) {
+export function compressFrames(frames: Array<[number, number]>) {
     const out: Array<[number, number, number]> = [];
     if (!frames || !frames.length) return out;
     let prevX = frames[0][0];
@@ -106,7 +106,7 @@ export function compressFrames(frames) {
 }
 
 /** Inverse of `compressFrames`: expand RLE triplets back to a per-frame list. */
-export function expandFrames(rle) {
+export function expandFrames(rle: Array<[number, number, number]>) {
     // A PAIR, not a triplet. These two buffers look alike and are not: the one
     // above holds RLE runs of (x, y, count), this one holds expanded (x, y)
     // frames. A blanket annotation gave both the triplet type and the compiler
@@ -126,7 +126,7 @@ export function expandFrames(rle) {
  * micro-jitter on a virtual joystick (or analog stick) doesn't blow up the
  * RLE compression. Values within 0.01 collapse to the same bucket.
  */
-export function quantize(v) {
+export function quantize(v: number) {
     if (!Number.isFinite(v)) return 0;
     return Math.round(v * 100) / 100;
 }
@@ -285,7 +285,7 @@ export class ReplayPlayer {
         return [1, 2, 4];
     }
 
-    static clampSpeed(s) {
+    static clampSpeed(s: number) {
         const n = Number(s) || 1;
         const opts = ReplayPlayer.SPEEDS;
         let best = opts[0];
@@ -300,7 +300,7 @@ export class ReplayPlayer {
         return best;
     }
 
-    setSpeed(s) {
+    setSpeed(s: number) {
         this.speed = ReplayPlayer.clampSpeed(s);
     }
 

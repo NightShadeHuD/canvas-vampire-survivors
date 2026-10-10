@@ -168,7 +168,7 @@ export const STAGES: Readonly<Record<string, StageDef>> = Object.freeze({
 const DEFAULT_STAGE_ID = 'forest';
 
 /** @returns {StageDef} */
-export function getStage(id) {
+export function getStage(id: string) {
     if (!id) return STAGES.FOREST;
     for (const s of Object.values(STAGES)) {
         if (s.id === id) return s;
@@ -202,7 +202,7 @@ const DEFAULT_MODIFIERS = Object.freeze({
  * @param {string} id
  * @returns {{playerSpeedMult:number, enemyHpMult:number, coldTickInterval:number, coldTickDamage:number, warmthSourceEnabled:boolean}}
  */
-export function getStageModifiers(id) {
+export function getStageModifiers(id: string) {
     const stage = getStage(id);
     return { ...DEFAULT_MODIFIERS, ...(stage.modifiers || {}) };
 }
@@ -213,7 +213,7 @@ export function getStageModifiers(id) {
  * intact — only the `pool` array is mutated, and only on the copy.
  * @returns {Array}
  */
-export function getWavesFor(id) {
+export function getWavesFor(id: string) {
     const stage = getStage(id);
     const extra = stage.extraEnemies || [];
     return WAVES.map((w) => {
@@ -236,7 +236,7 @@ export function getWavesFor(id) {
  * 10-minute mark.
  * @returns {Array<{id:string, spawnAt:number, def:object}>}
  */
-export function getBossesFor(id) {
+export function getBossesFor(id: string) {
     const stage = getStage(id);
     const offsets = stage.bossOffsets || {};
     const overrides = stage.bossOverrides || {};
@@ -293,7 +293,7 @@ export function getBossesFor(id) {
 }
 
 /** Background palette helper; the renderer reads this once per frame. */
-export function getBackgroundFor(id) {
+export function getBackgroundFor(id: string) {
     const s = getStage(id);
     return s.background;
 }
@@ -307,7 +307,7 @@ export function getBackgroundFor(id) {
  * @param {() => number} rnd  random source [0, 1)
  * @returns {string}
  */
-export function pickWeighted(pool, stageId, rnd = Math.random) {
+export function pickWeighted(pool: string[], stageId: string, rnd: () => number = Math.random) {
     if (!pool.length) return null;
     const stage = getStage(stageId);
     const weights = stage.poolOverrides || {};
