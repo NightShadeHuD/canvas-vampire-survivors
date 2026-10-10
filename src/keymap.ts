@@ -114,7 +114,7 @@ export function sanitiseKeymap(raw): Record<string, string[]> {
             out[action] = DEFAULT_KEYMAP[action].slice();
             continue;
         }
-        const cleaned = [];
+        const cleaned: string[] = [];
         for (const k of incoming) {
             const n = normaliseKey(k);
             if (n && !cleaned.includes(n)) cleaned.push(n);
@@ -172,14 +172,18 @@ export function bindKey(
  * the map is clean.
  */
 export function detectConflicts(map) {
-    const owners = new Map(); // key → Set<action>
+    const owners = new Map<string, Set<string>>(); // key → Set<action>
     for (const action of KEYMAP_ACTIONS) {
         for (const k of map?.[action] || []) {
-            if (!owners.has(k)) owners.set(k, new Set());
-            owners.get(k).add(action);
+            let bucket = owners.get(k);
+            if (!bucket) {
+                bucket = new Set();
+                owners.set(k, bucket);
+            }
+            bucket.add(action);
         }
     }
-    const out = [];
+    const out: Array<{ key: string; actions: string[] }> = [];
     for (const [key, actions] of owners) {
         if (actions.size > 1) {
             out.push({ key, actions: Array.from(actions).sort() });
@@ -244,7 +248,7 @@ export function keyLabel(rawKey) {
 // Persistence. Memory fallback so Node tests and sandboxed iframes don't
 // throw when localStorage is unavailable.
 // ---------------------------------------------------------------------------
-let _memory = null;
+let _memory: string | null = null;
 
 function hasLS() {
     try {

@@ -191,7 +191,7 @@ export class Player {
 
     gainExp(amount) {
         this.exp += amount * this.getExpMult();
-        const levelUps = [];
+        const levelUps: number[] = [];
         while (this.exp >= this.expToNext) {
             this.exp -= this.expToNext;
             this.level++;

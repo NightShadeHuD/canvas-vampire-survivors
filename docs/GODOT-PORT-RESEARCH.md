@@ -53,6 +53,27 @@ through unnoticed. Measured across `src/` — 24 modules:
 | default or namespace imports       |   **0** | ✅                                                                          |
 | **total**                          | **327** |                                                                             |
 
+### The strict work and the port work interact
+
+Worth knowing before either is finished: **making the code null-safe for TypeScript
+ADDS sites the Godot port must rewrite.**
+
+`Number.isFinite(height)` does not narrow `number | undefined`, so the fix under
+`strictNullChecks` is an explicit check:
+
+```ts
+const h = height !== undefined && Number.isFinite(height) && height > 0 ? height : 800;
+```
+
+That `undefined` is a port hazard, because GDScript has only `null`. So a round
+spent on strictness can raise the port-hazard count, and `check:ports` will say so
+— which is the gate working, not the gate misfiring.
+
+The two are still worth doing together: a null check that is explicit is _easier_
+to port than an implicit one, because the converter has something to translate. But
+the counts move in opposite directions for a while, and neither number should be
+read alone.
+
 ### The `undefined` count was misleading, and the split matters
 
 The original inventory counted 31 `undefined` sites and implied 31 null-migrations.
