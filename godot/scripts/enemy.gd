@@ -17,14 +17,21 @@ var color: String
 var def_id: String
 var dead := false
 
-func _init(def: Dictionary, start_x: float, start_y: float) -> void:
+## `hp_mult` and `dmg_mult` are the difficulty curve, applied AT SPAWN.
+##
+## This is what the original does and it is the whole reason the game gets hard:
+## `timeDiff = 1 + floor(gameTime / 60) * 0.3`, so a foe spawned at minute three has
+## 1.9x the health of one spawned at the start. Without it the first weapon holds
+## forever and the hero is immortal -- measured, not assumed: 600 seconds of being
+## swarmed cost exactly zero health before this existed.
+func _init(def: Dictionary, start_x: float, start_y: float, hp_mult := 1.0, dmg_mult := 1.0) -> void:
 	def_id = def["id"]
 	x = start_x
 	y = start_y
-	max_hp = def["hp"]
+	max_hp = float(def["hp"]) * hp_mult
 	hp = max_hp
 	speed = def["speed"]
-	damage = def["damage"]
+	damage = float(def["damage"]) * dmg_mult
 	size = def["size"]
 	exp_value = def["exp"]
 	color = def["color"]
