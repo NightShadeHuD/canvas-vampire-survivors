@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "_comment": "Machine-readable engineering baseline. Read by scripts/check-baseline.mjs and scripts/check-suppressions.mjs. Rules: docs/ENGINEERING-STANDARDS.md §1.1, §1.2, §5. Never raise a ceiling without a declaredGaps entry in the same commit.",
+    "_comment": "Machine-readable engineering baseline. Read by scripts/check-baseline.mjs and scripts/check-suppressions.mjs. Rules: docs/ENGINEERING-STANDARDS.md \u00a71.1, \u00a71.2, \u00a75. Never raise a ceiling without a declaredGaps entry in the same commit.",
     "knownFailingTests": [],
     "suppressionCeilings": {
         "ts-nocheck": 0,
@@ -18,11 +18,11 @@
     },
     "declaredGaps": [],
     "coverageFloors": {
-        "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
+        "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 80,
-            "branches": 83.78,
-            "functions": 71.18
+            "lines": 80.39,
+            "branches": 83.84,
+            "functions": 71.43
         },
         "files": {
             "scripts/lib/annotate.mjs": {
@@ -43,6 +43,11 @@
             "scripts/lib/gate-input.mjs": {
                 "lines": 100,
                 "branches": 100,
+                "functions": 100
+            },
+            "scripts/lib/port-hazards.mjs": {
+                "lines": 100,
+                "branches": 86.49,
                 "functions": 100
             },
             "scripts/lib/rule-docs.mjs": {
@@ -197,7 +202,12 @@
             }
         }
     },
-    "testCountFloor": 755,
+    "testCountFloor": 774,
     "anyCeiling": 131,
-    "_anyCeilingNote": "Raised 118 -> 137 to admit test/type-coverage.test.ts, whose FIXTURES are necessarily full of `any` — it tests the tool that counts them. Every one of the 19 added uses is a string literal fixture, not a type in shipped code. The ceiling may still only fall from here; this is a declared, bounded exception rather than a drift."
+    "_anyCeilingNote": "Raised 118 -> 137 to admit test/type-coverage.test.ts, whose FIXTURES are necessarily full of `any` \u2014 it tests the tool that counts them. Every one of the 19 added uses is a string literal fixture, not a type in shipped code. The ceiling may still only fall from here; this is a declared, bounded exception rather than a drift.",
+    "portCeilings": {
+        "error": 554,
+        "silent": 68
+    },
+    "_portCeilingsNote": "Both ceilings admit test/port-hazards.test.ts, whose FIXTURES are necessarily full of hazards \u2014 it tests the tool that counts them, and every fixture is a string literal rather than code that ships. That file contributes 9 of the 68 silent hazards, which is the entire rise from 59. An earlier version of this note claimed 'zero in fixtures were added'; that was wrong, and the gate is what said so. Both ceilings may still only fall from here, and a rise in the SILENT total from shipped code remains the thing worth stopping."
 }
