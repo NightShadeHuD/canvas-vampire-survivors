@@ -50,6 +50,55 @@ ported and the **conditions** are not. Each needs a hand-written `func` in GDScr
 The generated file holds `null` where each belongs, so nothing looks finished that
 is not.
 
+## The vertical slice — playable
+
+```bash
+npm run check:godot        # regenerates, imports, and runs both checks below
+godot --path godot         # or open the project and play it
+```
+
+`godot/scenes/main.tscn` opens to a playable slice: **WASD or arrows** to move, foes
+walk in from off-screen, Garlic damages what comes close, the hero blinks through
+i-frames, and HP / time / kills are drawn in the corner.
+
+```
+  ok   hero moves right when asked  (x 1200.0 -> 1680.0)
+  ok   a diagonal is not faster than a straight line  (240.0 vs 240.0)
+  ok   foes spawn  (4 after 2s)
+  ok   foe closes on the hero  (680.0 -> 625.0)
+  ok   the weapon kills  (11 kills in 10s)
+  ok   a hit costs hp  (hp = 90.0)
+  ok   a hit grants i-frames  (invincible = true)
+  ok   a hit during i-frames is free  (hp = 90.0)
+  ok   a hit past i-frames lands  (hp = 80.0)
+  ok   hero stops at the right edge  (x = 2380.0)
+verify_slice: PASS
+```
+
+**A scene that loads is not a game that runs**, which is why every one of those is
+asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, foes
+spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
+headless in under a second.
+
+### Logic is separated from rendering, deliberately
+
+| Layer      | File                                       | Knows about                     |
+| ---------- | ------------------------------------------ | ------------------------------- |
+| Simulation | `scripts/game.gd`, `player.gd`, `enemy.gd` | nothing but numbers             |
+| View       | `scripts/main.gd`                          | `_draw`, `Input`, the SceneTree |
+
+`Game` is a `RefCounted` that never touches `_draw` or `_process`, so `verify_slice.gd`
+steps thousands of frames without a window. The original decoupled its logic from the
+DOM for the same reason, and it pays off identically here.
+
+### A test bug worth recording
+
+The diagonal check first reported `240.0 vs 594.4` — a real-looking failure. The
+movement was correct; **the test had hardcoded the hero's start as `ARENA_HEIGHT / 2`
+= 400 when the arena is 1600 tall and the start is 800.** It now reads the start
+position instead of writing it down. A test that assumes a value it could read fails
+on the truth and blames the code.
+
 ## What is NOT ported
 
 Everything else. `src/` is 9,885 lines across 24 files; the data layer is ~850 of

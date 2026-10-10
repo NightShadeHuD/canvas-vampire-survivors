@@ -93,6 +93,32 @@ export function toGd(value, at, report) {
  * @param {string} source - The TypeScript file this came from.
  * @param {{skipped: Array<{at: string, why: string}>}} report
  */
+/**
+ * `config.gd` needs a different `class_name` and holds a single Dictionary, so it
+ * gets its own tiny writer rather than a special case inside `gdFile`.
+ */
+export function configFile(value, extra = {}) {
+    // Each key becomes its OWN `const`, not a field of one Dictionary. `Config.SPEED`
+    // reads as a constant; `Config.CONFIG["SPEED"]` reads as a lookup, and GDScript
+    // cannot check the second one at parse time -- a typo becomes a runtime null.
+    const report = { skipped: [] };
+    const lines = Object.entries({ ...value, ...extra }).map(
+        ([k, v]) => `const ${k} := ${toGd(v, k, report)}`
+    );
+    return `# GENERATED FILE -- DO NOT EDIT BY HAND.
+#
+# Source of truth: src/config.ts
+# Regenerate with:  npm run export:godot
+#
+# Every key is its own \`const\` so the compiler can check a use site. A single
+# Dictionary would make every typo a runtime null instead of a parse error.
+extends RefCounted
+class_name Config
+
+${lines.join('\n')}
+`;
+}
+
 export function gdFile(constName, value, source, report) {
     if (!IDENT.test(constName)) throw new Error(`not a GDScript identifier: ${constName}`);
     return `# GENERATED FILE -- DO NOT EDIT BY HAND.
