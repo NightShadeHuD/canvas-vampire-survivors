@@ -68,7 +68,11 @@ export class AudioEngine {
     }
 
     applyVolumes() {
-        if (!this.ctx) return;
+        // All FOUR, not just `ctx`. They are assigned together in `init()` and
+        // used together here, but they are separate fields -- so a guard on one
+        // narrows none of the others, which is exactly what the compiler said
+        // nine times in this file.
+        if (!this.ctx || !this.masterGain || !this.sfxGain || !this.musicGain) return;
         const s = this.settings;
         // iter-13: a global `muted` flag (toggled by the M hotkey) zeroes the
         // master gain without overwriting masterVolume so unmute restores
@@ -111,7 +115,9 @@ export class AudioEngine {
         sweep?: number;
         noise?: boolean;
     }) {
-        if (!this.enabled || !this.ctx || !this.unlocked) return;
+        // `sfxGain` too: the node below connects into it, and a guard on `ctx`
+        // narrows only `ctx`.
+        if (!this.enabled || !this.ctx || !this.sfxGain || !this.unlocked) return;
         const now = this.ctx.currentTime;
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(0, now);
@@ -138,6 +144,9 @@ export class AudioEngine {
     }
 
     _noiseBuffer() {
+        // A buffer cannot be built without a context, and the caller already
+        // handles a null buffer.
+        if (!this.ctx) return null;
         if (this._noise) return this._noise;
         const len = this.ctx.sampleRate * 0.4;
         const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -194,9 +203,16 @@ export class AudioEngine {
     // Procedural music: arpeggiated minor progression. Four bars of 8 steps.
     // Chord roots walk i - VI - III - VII (A minor relative: A, F, C, G).
     startMusic() {
-        if (!this.enabled || !this.ctx || this.musicInterval) return;
+        // `musicGain` too: the oscillators below connect into it, and a guard on
+        // `ctx` narrows only `ctx`.
+        if (!this.enabled || !this.ctx || !this.musicGain || this.musicInterval) return;
         if (this.settings.musicEnabled === false) return;
         this.unlock();
+        // Captured into a LOCAL before the interval closure below. Narrowing on
+        // `this.musicGain` does not survive into a callback: it is a mutable
+        // property, so TypeScript cannot promise it is still non-null when the
+        // callback runs. A local is a value the closure owns.
+        const musicGain = this.musicGain;
         const rootHz = 220; // A3
         const minorArp = [0, 3, 7, 12, 7, 3]; // semitones
         const progression = [0, -4, -9, -2]; // i, VI, iii, VII in semitones from root
@@ -217,7 +233,7 @@ export class AudioEngine {
             gain.gain.setValueAtTime(0.0001, now);
             gain.gain.linearRampToValueAtTime(0.06, now + 0.02);
             gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
-            osc.connect(gain).connect(this.musicGain);
+            osc.connect(gain).connect(musicGain);
             osc.start(now);
             osc.stop(now + 0.34);
 
@@ -230,7 +246,7 @@ export class AudioEngine {
                 bgain.gain.setValueAtTime(0.0001, now);
                 bgain.gain.linearRampToValueAtTime(0.04, now + 0.03);
                 bgain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
-                bass.connect(bgain).connect(this.musicGain);
+                bass.connect(bgain).connect(musicGain);
                 bass.start(now);
                 bass.stop(now + 0.62);
             }
