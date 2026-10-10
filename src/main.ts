@@ -131,6 +131,16 @@ export class Game {
     declare lastTime: number;
     declare mines: Mine[];
     declare particles: Particle[];
+    // `Player`, though the player genuinely does not exist in the menu.
+    //
+    // `Player | null` is the honest type and has been tried TWICE. Both times it
+    // cascaded hard -- 14 -> 33 errors the first time, 1 -> 30 the second, once
+    // everything else in `src/` was already clean. The declaration is one line;
+    // the THIRTY readers that assume a player is present are the work, and they
+    // are their own commit.
+    //
+    // Recorded here rather than in a report, because this is where the third
+    // attempt will start.
     declare player: Player;
     /** Reusable object pools, keyed by entity name. */
     declare pools: Record<string, Pool>;
@@ -175,7 +185,15 @@ export class Game {
 
     constructor() {
         this.canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
-        this.ctx = this.canvas.getContext('2d');
+        // `getContext` returns `| null`. A canvas without a 2D context cannot run
+        // this game at all, so failing loudly here is better than a null
+        // dereference three frames later. This was tried once before and REVERTED
+        // because it broke 22 tests -- `test/helpers/browser-stub.ts` gave its
+        // canvases `getContext: () => null`, which is not what a browser does. The
+        // stub was the defect, and it now provides a context.
+        const context2d = this.canvas.getContext('2d');
+        if (!context2d) throw new Error('gameCanvas has no 2D context');
+        this.ctx = context2d;
         this.state = GameState.MENU;
         this.lastTime = 0;
         this.gameTime = 0;
@@ -534,7 +552,12 @@ export class Game {
     _wirePwaPrompt() {
         if (typeof window === 'undefined') return;
         if (this.save?.flags?.pwaPromptSeen) return;
-        let deferred = null;
+        // The install prompt is a browser event carrying two non-standard members,
+        // and it genuinely arrives later -- so `| null` is honest rather than
+        // defensive. The members are optional because a browser that does not
+        // implement the prompt protocol never sets them.
+        let deferred: (Event & { prompt?: () => void; userChoice?: Promise<unknown> }) | null =
+            null;
         const banner = document.getElementById('pwaInstallPrompt');
         const installBtn = document.getElementById('pwaInstallBtn');
         const dismissBtn = document.getElementById('pwaInstallDismiss');
@@ -610,7 +633,9 @@ export class Game {
             this.state = GameState.MENU;
             this.ui.hidePause();
             this.ui.showStart();
-            cancelAnimationFrame(this.raf);
+            // `raf` is `number | null`. A truthiness check is portable: the id is
+            // never 0 in practice, and cancelling 0 is a no-op anyway.
+            if (this.raf) cancelAnimationFrame(this.raf);
             this.audio.stopMusic();
         });
     }
@@ -935,7 +960,7 @@ export class Game {
         this.replayActive = false;
         this.replayPlayer = null;
         this.state = GameState.MENU;
-        cancelAnimationFrame(this.raf);
+        if (this.raf) cancelAnimationFrame(this.raf);
         this.audio.stopMusic();
         this.ui.hideGameOver();
         this.ui.showStart();
@@ -980,7 +1005,7 @@ export class Game {
 
     gameOver() {
         this.state = GameState.GAMEOVER;
-        cancelAnimationFrame(this.raf);
+        if (this.raf) cancelAnimationFrame(this.raf);
         this.audio.stopMusic();
         this.audio.death();
         // iter-19: long death-knell pattern. Fired once at the moment of
