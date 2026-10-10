@@ -30,7 +30,7 @@ const DAILY_KEEP_DAYS = 14;
  * This is intentionally not crypto — daily challenges don't need it, and we
  * want the same JS source to produce the same number on every browser.
  */
-export function cyrb53(str, seed = 0) {
+export function cyrb53(str: string, seed = 0) {
     let h1 = 0xdeadbeef ^ seed;
     let h2 = 0x41c6ce57 ^ seed;
     for (let i = 0; i < str.length; i++) {
@@ -52,7 +52,7 @@ export function todayKey(now = new Date()) {
 }
 
 /** Fold the date into a 32-bit seed suitable for SeededRng. */
-export function dailySeed(dateStr) {
+export function dailySeed(dateStr: string) {
     // Mask to 32 bits — SeededRng coerces with >>> 0 anyway, this just makes
     // the test asserts cleaner.
     return cyrb53(dateStr, 0xd417) & 0xffffffff;
@@ -70,9 +70,15 @@ export interface DailyEntry {
     timeSurvived: number;
     kills?: number;
     won?: boolean;
+    /** The day's challenge seed. Absent on entries written before it was stored. */
+    seed?: number;
+    /** Carried from the run's result by `saveDailyResult`, and shown on the tile. */
+    level?: number;
+    /** Whether the day was played at all, as opposed to merely listed. */
+    played?: boolean;
 }
 
-export function dailyChallenge(dateStr?) {
+export function dailyChallenge(dateStr?: string) {
     const date = dateStr || todayKey();
     const seed = dailySeed(date);
     // iter-14: rotation expands from 2 → 3 stages so tundra also gets daily
@@ -238,7 +244,7 @@ export function dailyStreakSummary(history, now = new Date()) {
 }
 
 /** Add one UTC day to a 'YYYY-MM-DD' string. */
-function nextDayKey(key) {
+function nextDayKey(key: string) {
     const [y, m, d] = key.split('-').map(Number);
     const dt = new Date(Date.UTC(y, m - 1, d) + 86400 * 1000);
     return todayKey(dt);
@@ -251,7 +257,7 @@ function nextDayKey(key) {
 // 🟫 = below, ⬛ = far below. This keeps the share fully offline and
 // deterministic from the user's own history.
 // ---------------------------------------------------------------------------
-function tileFor(value, median) {
+function tileFor(value: number, median: number) {
     if (median <= 0) return value > 0 ? '🟩' : '⬛';
     const r = value / median;
     if (r >= 1.5) return '🟩';
