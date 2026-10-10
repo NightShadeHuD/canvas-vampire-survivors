@@ -171,7 +171,7 @@ export class ReplayRecorder {
     }
 
     /** Returns true if the frame was recorded, false if the cap was hit. */
-    record(moveVec) {
+    record(moveVec: { x: number; y: number } | null) {
         if (this.frames.length >= REPLAY_MAX_FRAMES) {
             this._truncated = true;
             return false;
@@ -185,7 +185,7 @@ export class ReplayRecorder {
     }
 
     /** Snapshot final-run statistics into the recorder. */
-    finalize({ kills, time, level }) {
+    finalize({ kills, time, level }: { kills?: number; time?: number; level?: number }) {
         this.finalKills = kills | 0;
         this.finalTime = +time || 0;
         this.finalLevel = level | 0 || 1;
@@ -213,6 +213,30 @@ export class ReplayRecorder {
  * single slot (we deliberately keep only the *last* run to avoid storage
  * growth — see CHANGELOG iter-15 notes). Returns true on success.
  */
+/**
+ * A recorded run, as `finalize` builds it and `saveReplay` stores it.
+ *
+ * `blob` was guessed to be a STRING -- the name suggests one -- and the compiler
+ * rejected it at three call sites in one run. Eighth wrong shape in this work, and
+ * the same rule answers it: name the type the values HAVE.
+ */
+export interface ReplayBlob {
+    version: number;
+    savedAt: number;
+    seed: number;
+    stage: string;
+    difficulty: string;
+    dt: number;
+    frames: Array<[number, number, number]>;
+    finalKills: number;
+    finalTime: number;
+    finalLevel: number;
+    truncated: boolean;
+}
+
+// `blob: ReplayBlob` is the honest type and CASCADES: three test fixtures build a
+// MINIMAL blob on purpose, to exercise clearReplay and the corrupt-data paths.
+// Typing them is part of the test-fixture job, not a rider on this commit.
 export function saveReplay(blob) {
     try {
         const data = JSON.stringify(blob);
@@ -271,7 +295,7 @@ export class ReplayPlayer {
     /** Playback rate multiplier. */
     declare speed: number;
     declare done: boolean;
-    constructor(blob, { speed = 1 } = {}) {
+    constructor(blob, { speed = 1 }: { speed?: number } = {}) {
         if (!blob) throw new Error('[replay] cannot construct player without blob');
         this.blob = blob;
         this.frames = expandFrames(blob.frames);

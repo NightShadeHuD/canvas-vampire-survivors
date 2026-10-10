@@ -230,7 +230,7 @@ export function recordHighScore(save, entry) {
 }
 
 /** Stage-scoped leaderboard read; falls back to [] for unknown stages. */
-export function getStageHighScores(save, stageId) {
+export function getStageHighScores(save: SaveData, stageId: string) {
     if (!save || !save.stageHighScores) return [];
     return Array.isArray(save.stageHighScores[stageId]) ? save.stageHighScores[stageId] : [];
 }
@@ -247,7 +247,10 @@ export function getTouchButtonScale(save) {
     return Math.min(1.4, Math.max(0.8, v));
 }
 
-export function accumulateTotals(save, run) {
+export function accumulateTotals(
+    save,
+    run: { kills?: number; gameTime?: number; bossKills?: number }
+) {
     save.totals ??= { kills: 0, timePlayed: 0, runs: 0, bossKills: 0 };
     save.totals.kills += run.kills || 0;
     save.totals.timePlayed += run.gameTime || 0;
@@ -255,7 +258,7 @@ export function accumulateTotals(save, run) {
     save.totals.bossKills += run.bossKills || 0;
 }
 
-export function structuredCloneCompat(obj) {
+export function structuredCloneCompat<T>(obj: T): T {
     if (typeof structuredClone === 'function') return structuredClone(obj);
     return JSON.parse(JSON.stringify(obj));
 }
