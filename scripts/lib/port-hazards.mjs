@@ -59,11 +59,26 @@ export const PORT_HAZARDS = [
         why: 'GDScript has no variables outside a class; move constants into the class'
     },
     {
-        id: 'undefined',
-        label: '`undefined`',
+        id: 'typeof-guard',
+        label: "`typeof x === 'undefined'` platform guard",
         kind: 'error',
-        pattern: /\bundefined\b/g,
-        why: 'GDScript has only null; write null and type the parameter as `T | null`'
+        // A STRING comparison, not a use of the undefined value. `typeof window`
+        // is how this codebase asks "am I in a browser", and in GDScript there is
+        // no window to ask about — the module guarding itself is replaced
+        // wholesale. Counted separately from the value below because the two need
+        // opposite treatment, and lumping them together made the port look like it
+        // had 68 null-migrations when most of it was browser detection.
+        pattern: /typeof\s+[\w.]+\s*[!=]==\s*['"]undefined['"]/g,
+        why: 'typeof does not exist in GDScript; these guards vanish with the browser module they protect'
+    },
+    {
+        id: 'undefined',
+        label: '`undefined` as a VALUE',
+        kind: 'error',
+        // The lookbehind excludes `typeof x === 'undefined'`, which is a string
+        // and belongs above.
+        pattern: /(?<!['"])\bundefined\b(?!['"])/g,
+        why: 'GDScript has only null; write null, and type optional parameters as `T | null = null`'
     },
     {
         id: 'extra-class-per-file',
@@ -141,6 +156,17 @@ export function measureFile(text) {
         for (const line of lines) {
             if (COMMENT_ONLY.test(line)) continue;
             const code = line.replace(/\/\/.*$/, '');
+            if (hazard.id === 'undefined') {
+                // Count each bare `undefined` whose prefix is not a typeof
+                // comparison, which the guard hazard above already owns.
+                for (const match of code.matchAll(/\bundefined\b/g)) {
+                    const before = code.slice(0, match.index);
+                    if (/typeof\s+[\w.]+\s*[!=]==\s*['"]?$/.test(before)) continue;
+                    if (/['"]$/.test(before)) continue;
+                    n += 1;
+                }
+                continue;
+            }
             if (hazard.id !== 'in-operator') {
                 n += (code.match(hazard.pattern) ?? []).length;
                 continue;

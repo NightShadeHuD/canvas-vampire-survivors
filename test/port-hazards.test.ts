@@ -11,6 +11,7 @@
 //
 // Runs in Node, no DOM, no filesystem.
 
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -166,4 +167,71 @@ test('port-hazards: every hazard states why it is one', () => {
         assert.equal(hazard.why.length > 20, true, `${hazard.id} needs a real reason`);
         assert.equal(typeof hazard.label, 'string');
     }
+});
+
+test('port-hazards: a typeof platform guard is not counted as a value use', () => {
+    // The split that matters. `typeof window === 'undefined'` is a STRING
+    // comparison asking "am I in a browser", and in GDScript there is no window
+    // to ask about — the module guarding itself is replaced wholesale. Counting
+    // it as a null-migration made the port look like it had 68 of those when most
+    // of it was browser detection.
+    assert.equal(count('typeof-guard', "if (typeof window === 'undefined') return;"), 1);
+    assert.equal(count('undefined', "if (typeof window === 'undefined') return;"), 0);
+});
+
+test('port-hazards: the double-quoted spelling is the same guard', () => {
+    assert.equal(count('typeof-guard', 'if (typeof document === "undefined") return;'), 1);
+    assert.equal(count('undefined', 'if (typeof document === "undefined") return;'), 0);
+});
+
+test('port-hazards: a real value comparison is the value hazard', () => {
+    // This one IS a null-migration: GDScript returns null for a missing key, so
+    // `!== undefined` becomes `!= null` and behaves identically.
+    assert.equal(count('undefined', 'if (effect[key] !== undefined) total += 1;'), 1);
+    assert.equal(count('typeof-guard', 'if (effect[key] !== undefined) total += 1;'), 0);
+});
+
+test('port-hazards: the two are separate ids with separate reasons', () => {
+    const guard = PORT_HAZARDS.find((h) => h.id === 'typeof-guard');
+    const value = PORT_HAZARDS.find((h) => h.id === 'undefined');
+    assert.ok(guard && value, 'both must exist');
+    assert.notEqual(guard.why, value.why, 'they need different treatments, so different reasons');
+    assert.match(value.why, /null/, 'the value one is a null migration');
+});
+
+test('port-hazards: undefined inside a string is not a value use', () => {
+    // A string literal `'undefined'` on its own is not the value. This is the
+    // branch that keeps `x === 'undefined'` from being counted twice, once as a
+    // guard and once as a value.
+    assert.equal(count('undefined', "const s = 'undefined';"), 0);
+    assert.equal(count('undefined', 'const s = "undefined";'), 0);
+});
+
+test('port-hazards: a value use inside a string is still a value use', () => {
+    // The other arm: `undefined` followed by a non-quote character counts.
+    assert.equal(count('undefined', 'return undefined;'), 1);
+    assert.equal(count('undefined', 'function f(x = undefined) {}'), 1);
+});
+
+test('port-hazards: the guard and the value are counted once each, not both', () => {
+    // Together, so the double-count cannot creep back.
+    const text = [
+        "if (typeof window === 'undefined') return null;",
+        'if (effect[key] !== undefined) total += 1;'
+    ].join('\n');
+    const counts = measureFile(text);
+    assert.equal(counts['typeof-guard'], 1);
+    assert.equal(counts.undefined, 1);
+});
+
+test('port-hazards: the gate exempts exactly its own fixtures, and nothing else', () => {
+    // Every test added to make this metric trustworthy raised the metric, so the
+    // ceiling was raised three times in one sitting for a reason nobody could
+    // review. The exemption is declared and asserted instead — the same pattern
+    // `check-destructive` uses for its own rule table.
+    const cli = readFileSync(new URL('../scripts/check-ports.mjs', import.meta.url), 'utf8');
+    const declared = cli.match(/DEFINES_THE_HAZARDS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
+    assert.match(declared, /test\/port-hazards\.test\.ts/, 'its own fixtures must be exempt');
+    // And only that file: an exemption that grows is a metric that shrinks.
+    assert.equal(declared.split(',').filter((s) => s.trim()).length, 1);
 });
