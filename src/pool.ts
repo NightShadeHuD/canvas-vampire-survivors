@@ -30,6 +30,11 @@
  * kind of object in and out of a free list. The generic is what the class already
  * was in practice; this says it.
  */
+// The three reset functions below name the entities they reset. `import type` is
+// erased, so the dependency on entities.ts costs nothing at runtime and the cycle
+// it would otherwise create never exists.
+import type { EnemyProjectile, FloatingText, Particle } from './entities.ts';
+
 export class Pool<T extends object> {
     /** Creates a blank instance of the pooled type. */
     factory: () => any;
@@ -114,7 +119,20 @@ export class Pool<T extends object> {
 // entities.ts) so the pool module is self-contained for unit testing.
 // ---------------------------------------------------------------------------
 
-export function resetFloatingText(obj, text, x, y, color, opts: Record<string, any> = {}) {
+export function resetFloatingText(
+    obj: FloatingText,
+    text: string,
+    x: number,
+    y: number,
+    color: string,
+    opts: {
+        life?: number;
+        vy?: number;
+        size?: number;
+        weight?: string | number;
+        crit?: boolean;
+    } = {}
+) {
     obj.text = text;
     obj.x = x;
     obj.y = y;
@@ -126,7 +144,20 @@ export function resetFloatingText(obj, text, x, y, color, opts: Record<string, a
     obj.crit = !!opts.crit;
 }
 
-export function resetParticle(obj, x, y, color, opts: Record<string, any> = {}) {
+export function resetParticle(
+    obj: Particle,
+    x: number,
+    y: number,
+    color: string,
+    opts: {
+        size?: number;
+        life?: number;
+        decay?: number;
+        angle?: number;
+        speed?: number;
+        friction?: number;
+    } = {}
+) {
     obj.x = x;
     obj.y = y;
     obj.color = color;
@@ -140,7 +171,14 @@ export function resetParticle(obj, x, y, color, opts: Record<string, any> = {}) 
     obj.friction = opts.friction ?? 0.2;
 }
 
-export function resetEnemyProjectile(obj, x, y, angle, speed, damage) {
+export function resetEnemyProjectile(
+    obj: EnemyProjectile,
+    x: number,
+    y: number,
+    angle: number,
+    speed: number,
+    damage: number
+) {
     obj.x = x;
     obj.y = y;
     obj.vx = Math.cos(angle) * speed;
