@@ -147,7 +147,7 @@ export class TutorialState {
     }
 
     /** Per-frame tick. `dt` in seconds; `moveVec` is the player's input. */
-    tick(dt, moveVec) {
+    tick(dt: number, moveVec: { x: number; y: number } | null) {
         if (!this.active) return;
         const step = this.currentStep;
         if (!step) return;

@@ -49,7 +49,7 @@ export const VIBRATION_PATTERNS = Object.freeze({
  * so tests can swap `navigator` between calls.
  * @param {object} nav  navigator-like object (defaults to globalThis.navigator)
  */
-function resolveVibrate(nav) {
+function resolveVibrate(nav: { vibrate?: (p: number | number[]) => unknown } | null) {
     if (!nav) return null;
     if (typeof nav.vibrate !== 'function') return null;
     return nav.vibrate.bind(nav);
@@ -70,7 +70,10 @@ export class HapticEngine {
      *   reach for `globalThis.navigator` lazily so the engine imports cleanly
      *   in Node-side tests with no DOM at all.
      */
-    constructor(settings = {}, navOverride = null) {
+    constructor(
+        settings: { vibration?: boolean } = {},
+        navOverride: { vibrate?: (p: number | number[]) => unknown } | null = null
+    ) {
         this.settings = settings;
         this._navOverride = navOverride;
         this._lastPattern = null; // exposed for tests
@@ -102,7 +105,7 @@ export class HapticEngine {
      * @param {keyof VIBRATION_PATTERNS} name
      * @returns {boolean}
      */
-    vibrate(name) {
+    vibrate(name: keyof typeof VIBRATION_PATTERNS) {
         const pattern = VIBRATION_PATTERNS[name];
         if (!pattern) return false;
         this._lastPattern = pattern;

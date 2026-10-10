@@ -35,7 +35,10 @@ export class AchievementTracker {
     declare run: AchievementRun;
     /** Achievements unlocked this run and awaiting a toast. */
     declare queue: any[];
-    constructor(save) {
+    // Only the achievements map is used, so that is what the parameter asks for.
+    // `SaveData` was tried first and cascaded to 66 errors -- every test fixture
+    // is a PARTIAL save, which is a legitimate thing for a unit test to build.
+    constructor(save: { achievements: Record<string, number> }) {
         this.save = save;
         this.run = AchievementTracker._freshRun();
         this.queue = [];
@@ -66,7 +69,7 @@ export class AchievementTracker {
         this.run = AchievementTracker._freshRun();
     }
 
-    onBossDefeated(bossId) {
+    onBossDefeated(bossId: string) {
         this.run.bossesDefeated[bossId] = true;
     }
 
@@ -74,6 +77,10 @@ export class AchievementTracker {
         this.run.maxedWeapon = true;
     }
 
+    // `game` stays untyped for now: `AchievementContext.game` IS `Game`, so the
+    // `check` callbacks want the real thing, and five test fixtures build PARTIAL
+    // games ({ kills, gameTime, player: { level } }). Typing it here and casting
+    // those fixtures is one job, and it is the next one -- not a rider on this.
     check(game) {
         const ctx = { game, run: this.run };
         const newly: AchievementDef[] = [];
