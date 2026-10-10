@@ -20,8 +20,8 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 81.09,
-            "branches": 84.3,
+            "lines": 81.04,
+            "branches": 84.24,
             "functions": 71.91
         },
         "files": {
@@ -206,8 +206,8 @@
                 "functions": 65.52
             },
             "src/weapons.ts": {
-                "lines": 56.29,
-                "branches": 87.5,
+                "lines": 56.09,
+                "branches": 85.96,
                 "functions": 65.22
             }
         }

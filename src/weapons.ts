@@ -15,6 +15,7 @@
  *   - class Weapon
  */
 
+import type { Enemy } from './entities.ts';
 import { Mine, OrbitShard, Projectile } from './entities.ts';
 
 /** A weapon catalogue entry. Every field here is read by `Weapon`. */
@@ -72,7 +73,12 @@ export class Weapon {
         // to refresh damage state. Everything else fires on its cooldown.
         if (this.def.type === 'orbit') {
             this._ensureShards(player);
-            for (const s of this._shards) s.update(dt, player, game);
+            // `_shards` is `any[] | null`; `_ensureShards` above is what fills it,
+            // so a check here is honest rather than defensive. Written as an `if`
+            // rather than `?? []` because the nullish operator does not exist in
+            // GDScript, and `check:ports` refuses each one.
+            const shards = this._shards;
+            if (shards) for (const s of shards) s.update(dt, player, game);
             return;
         }
         this.cooldown -= dt;
@@ -123,7 +129,13 @@ export class Weapon {
 
     getOrbitShardCount(player) {
         // Each 2 weapon levels adds a shard; evolved doubles and mirrors.
-        let n = this.def.projectileCount + Math.floor((this.level - 1) / 2);
+        // A TERNARY, not `??` or `||`. The field is genuinely optional -- absent on
+        // weapons that do not fire discrete projectiles -- so a default is needed,
+        // and the GDScript caveats recommend a ternary precisely here: `||` returns
+        // one of its operands in TypeScript and a bool in GDScript, and `??` does not
+        // exist there at all.
+        const base = this.def.projectileCount;
+        let n = (base ? base : 0) + Math.floor((this.level - 1) / 2);
         if (this.isEvolved()) n = n * 2;
         // Extra shard for every 2 cooldown passives (just a fun passive synergy).
         const extra = Math.floor((player.passives?.cooldown?.count || 0) / 2);
@@ -212,7 +224,8 @@ export class Weapon {
     }
 
     _fireProjectile(player, game) {
-        let count = this.def.projectileCount + Math.floor((this.level - 1) / 2);
+        const baseCount = this.def.projectileCount;
+        let count = (baseCount ? baseCount : 0) + Math.floor((this.level - 1) / 2);
         if (this.isEvolved() && this.id === 'knife') count = Math.max(count, 5);
         if (this.isEvolved() && this.id === 'magic_wand') count += 2;
         const spreadDeg = count > 1 ? (this.isEvolved() ? 24 : 14) : 0;
@@ -244,7 +257,11 @@ export class Weapon {
         const candIter = game?.spatial
             ? game.spatial.queryRect(player.x, player.y, range)
             : game.enemies;
-        const targets = [];
+        // `Enemy[]`, not `never[]`. The candidates come from either the spatial
+        // hash or `game.enemies`, and an empty literal gets no contextual type
+        // from either -- so every use of an element below was reading `.x`, `.y`
+        // and `.takeDamage` off a value the compiler had been told cannot exist.
+        const targets: Enemy[] = [];
         for (const e of candIter) {
             if (Math.hypot(e.x - player.x, e.y - player.y) < range) targets.push(e);
         }
@@ -253,7 +270,11 @@ export class Weapon {
         const strikes = evolved ? Math.min(3, targets.length) : 1;
         const picked = new Set();
         for (let i = 0; i < strikes; i++) {
-            let target = null;
+            // `Enemy | null`, not `null`. An untyped `null` narrows to `never` after
+            // the `if (!target) break` guard, so everything below read `.x`, `.y` and
+            // `.takeDamage` off an impossible value -- six errors from one missing
+            // annotation.
+            let target: Enemy | null = null;
             while (picked.size < targets.length) {
                 const cand = targets[Math.floor(Math.random() * targets.length)];
                 if (!picked.has(cand)) {
@@ -272,7 +293,9 @@ export class Weapon {
                 const chained = new Set([current]);
                 const chainCount = evolved ? this.def.chainCount + 2 : this.def.chainCount;
                 for (let c = 0; c < chainCount; c++) {
-                    let nearest = null,
+                    // `Enemy | null`, for the same reason as `target` above: an
+                    // untyped `null` narrows to `never` past the guard below.
+                    let nearest: Enemy | null = null,
                         minD = Infinity;
                     // iter-16 perf: Lightning chain hops within 180 px, so
                     // a per-hop spatial probe of the same radius is the
@@ -413,7 +436,7 @@ export class Weapon {
         const baseDmg = this.getDamage(player);
         const steal = this.def.lifestealPct ?? 0.25;
         const targetCount = this.isEvolved() ? 2 : 1;
-        const targets = [];
+        const targets: Enemy[] = [];
         // Pick nearest N enemies within range.
         const nearby = game.enemies
             .filter((e) => Math.hypot(e.x - player.x, e.y - player.y) < range)
