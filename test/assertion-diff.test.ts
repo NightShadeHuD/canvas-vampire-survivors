@@ -11,7 +11,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertions, literalsIn, compareFiles } from '../scripts/lib/assertion-diff.mjs';
+import {
+    assertions,
+    literalsIn,
+    compareFiles,
+    assertionDigest,
+    judgeDigests
+} from '../scripts/lib/assertion-diff.mjs';
 
 /** Wrap statements in a minimal test so fixtures read like real files. */
 const file = (...statements) => `test('x', () => {\n${statements.join('\n')}\n});\n`;
@@ -168,4 +174,78 @@ test('assertion-diff: strength is not judged, only stated weakenings are', () =>
         file('assert.match(ui.els.time.textContent, /01:07/);')
     );
     assert.deepEqual(findings, [], 'equal -> match is not a weakening this can state');
+});
+
+// ---------------------------------------------------------------------------
+// assertion digests — the hole the revision diff cannot see
+// ---------------------------------------------------------------------------
+
+const A = 'test("x", () => { assert.equal(a, 1); });';
+const A_DIFFERENT_VALUE = 'test("x", () => { assert.equal(a, 2); });';
+const A_WEAKENED = 'test("x", () => { assert.ok(a); });';
+
+test('assertion-digest: a changed expected value does NOT change the digest', () => {
+    // The digest answers "did the STRENGTH change". A new expected value is a
+    // different question, the revision diff already answers it, and folding it in
+    // here would make the digest fire on every legitimate test edit — which is how
+    // a check becomes noise.
+    assert.equal(assertionDigest(A), assertionDigest(A_DIFFERENT_VALUE));
+});
+
+test('assertion-digest: a weakened assertion DOES change the digest', () => {
+    assert.notEqual(assertionDigest(A), assertionDigest(A_WEAKENED));
+});
+
+test('assertion-digest: reordering tests does not change the digest', () => {
+    const two =
+        'test("a", () => { assert.equal(x, 1); });\ntest("b", () => { assert.equal(y, 2); });';
+    const swapped =
+        'test("b", () => { assert.equal(y, 2); });\ntest("a", () => { assert.equal(x, 1); });';
+    assert.equal(assertionDigest(two), assertionDigest(swapped), 'order is not strength');
+});
+
+test('assertion-digest: deleting an assertion changes the digest', () => {
+    const two = 'test("a", () => { assert.equal(x, 1); assert.equal(y, 2); });';
+    const one = 'test("a", () => { assert.equal(x, 1); });';
+    assert.notEqual(assertionDigest(two), assertionDigest(one));
+});
+
+test('assertion-digest: an empty file has a stable digest', () => {
+    assert.equal(assertionDigest(''), assertionDigest(''));
+});
+
+test('assertion-digest/judge: a file the base diff already covers is not reported', () => {
+    // If the revision comparison can see it, that comparison is the authority and
+    // this adds nothing. Reporting it here would double-report every weakening.
+    const files = [{ path: 'test/a.test.ts', text: A_WEAKENED }];
+    const recorded = { 'test/a.test.ts': assertionDigest(A) };
+    const verdict = judgeDigests(files, recorded, new Set(['test/a.test.ts']));
+    assert.equal(verdict.ok, true);
+});
+
+test('assertion-digest/judge: a changed digest the base diff CANNOT see is reported', () => {
+    // The hole row 8 records: a weakening committed straight to base, where the
+    // base then contains the weakened version and there is nothing to diff.
+    const files = [{ path: 'test/a.test.ts', text: A_WEAKENED }];
+    const recorded = { 'test/a.test.ts': assertionDigest(A) };
+    const verdict = judgeDigests(files, recorded, new Set());
+    assert.equal(verdict.ok, false);
+    assert.match(verdict.reasons[0], /cannot see/);
+    assert.match(verdict.reasons[0], /--update/, 'it must say how to resolve it');
+});
+
+test('assertion-digest/judge: an unrecorded file is not reported', () => {
+    // A new file has no recorded strength to have lost.
+    const verdict = judgeDigests([{ path: 'test/new.test.ts', text: A }], {}, new Set());
+    assert.equal(verdict.ok, true);
+});
+
+test('assertion-digest/judge: it returns fresh digests for every file', () => {
+    const files = [
+        { path: 'test/a.test.ts', text: A },
+        { path: 'test/b.test.ts', text: A_WEAKENED }
+    ];
+    const { fresh } = judgeDigests(files, {}, new Set());
+    assert.deepEqual(Object.keys(fresh), ['test/a.test.ts', 'test/b.test.ts']);
+    assert.equal(fresh['test/a.test.ts'], assertionDigest(A));
 });
