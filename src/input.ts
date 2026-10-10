@@ -80,14 +80,22 @@ export class InputManager {
     _prevButtons: boolean[] = [];
     /** Timestamp of the last D-pad tap, for edge detection. */
     declare _lastEdgeTapAt: number;
-    onTogglePause: (() => void) | null;
-    onTouchSpecial: (() => void) | null;
-    onGamepadConfirm: (() => void) | null;
-    onGamepadCancel: (() => void) | null;
-    onGamepadCyclePrev: (() => void) | null;
-    onGamepadCycleNext: (() => void) | null;
-    onActionMute: (() => void) | null;
-    onActionHelp: (() => void) | null;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onTogglePause: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onTouchSpecial: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onGamepadConfirm: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onGamepadCancel: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onGamepadCyclePrev: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onGamepadCycleNext: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onActionMute: () => void;
+    /** Assigned in the constructor, so never null. The `| null` that used to be here was a claim this class never honoured. */
+    onActionHelp: () => void;
     constructor() {
         this.keys = Object.create(null);
         this.moveVec = { x: 0, y: 0 };
@@ -236,7 +244,7 @@ export class InputManager {
     pollGamepad(getPads = _defaultGetGamepads) {
         const pads = getPads();
         if (!pads) return;
-        let pad = null;
+        let pad: Gamepad | null = null;
         for (const p of pads) {
             if (p) {
                 pad = p;
@@ -339,8 +347,12 @@ function _defaultGetGamepads() {
 
 class VirtualJoystick {
     declare active: boolean;
-    declare base: HTMLElement | null;
-    declare knob: HTMLElement | null;
+    // Both elements are REQUIRED constructor parameters and are assigned there,
+    // so `| null` was a claim this class never honoured -- the same defect as the
+    // eight callbacks above, and it reported the same way: an invocation on a
+    // value the type said might be null.
+    declare base: HTMLElement;
+    declare knob: HTMLElement;
     /** Receives a normalised vector as two components, not an object. */
     cb: (x: number, y: number) => void;
     /** Touch origin, in client coordinates. */
