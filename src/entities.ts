@@ -869,8 +869,16 @@ export class FloatingText {
     declare size: number;
     /** Initial upward velocity; decays over the text's lifetime. */
     declare vy: number;
-    /** Drift applied while rising. */
-    declare weight: number;
+    /**
+     * CSS font weight, interpolated straight into the font shorthand at
+     * `entity-render.ts`: `` `${self.weight} ${sz}px system-ui, sans-serif` ``.
+     *
+     * Declared `number` until the strict work found it, and that was WRONG -- both
+     * this class and `resetFloatingText` default it to the STRING `'bold'`, which
+     * is the value that actually reaches the canvas. A CSS font weight is either a
+     * keyword or a number, so the type is both.
+     */
+    declare weight: string | number;
     constructor(text, x, y, color, opts: Record<string, any> = {}) {
         this.text = text;
         this.x = x;

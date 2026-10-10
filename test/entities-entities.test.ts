@@ -474,3 +474,47 @@ test('entities/render: a player holding garlic draws without throwing', () => {
 
     assert.doesNotThrow(() => renderPlayer(stub as unknown as CanvasRenderingContext2D, player));
 });
+
+test('FloatingText: weight reaches the canvas as the string the renderer is given', () => {
+    // Pins the SEAM, and says plainly what it does not prove.
+    //
+    // `weight` was declared `number` while both this class and `resetFloatingText`
+    // default it to the string 'bold'. That was a real bug and it is fixed above,
+    // but **this test does not catch it and neither does typecheck** -- measured,
+    // not assumed: restoring the wrong declaration leaves BOTH at zero failures,
+    // because `opts` is `Record<string, any>` and `any ?? 'bold'` is `any`, which
+    // satisfies whatever the field claims.
+    //
+    // What it does pin is the seam that matters at port time: the value that
+    // actually reaches `ctx.font`. The declaration fix is what makes the field
+    // correct for the day `opts` stops being `any` -- which is the remaining
+    // noImplicitAny work, not a bug in this file.
+    const t = new FloatingText('x', 0, 0, '#fff');
+    assert.equal(t.weight, 'bold', 'the default is a CSS keyword, not a number');
+
+    const drawn = [];
+    const stub = {
+        save() {},
+        restore() {},
+        measureText: () => ({ width: 10 }),
+        fillText: () => {},
+        set font(v) {
+            drawn.push(v);
+        },
+        get font() {
+            return drawn[drawn.length - 1];
+        },
+        fillStyle: '',
+        globalAlpha: 1,
+        textAlign: 'center',
+        textBaseline: 'middle',
+        shadowBlur: 0,
+        shadowColor: ''
+    };
+    renderFloatingText(stub as unknown as CanvasRenderingContext2D, t);
+    assert.match(drawn[0], /^bold /, 'the keyword must survive into the font shorthand');
+
+    // A numeric weight is equally valid CSS, which is why the type is both.
+    const numeric = new FloatingText('x', 0, 0, '#fff', { weight: 700 });
+    assert.equal(numeric.weight, 700);
+});
