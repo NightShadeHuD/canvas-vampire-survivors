@@ -441,3 +441,31 @@ test('game-render/sprites: the sprite is cached, so the second enemy reuses it',
         doc.restore();
     }
 });
+
+test('game-render/sprites: a canvas refusing a 2D context falls back instead of throwing', () => {
+    // A canvas may refuse `getContext('2d')`, and the type says so. Before the
+    // guard this threw on `c.fillStyle`; now the renderer returns null and the
+    // caller takes the same fallback path it already uses when `document` is
+    // absent. Found by `strictNullChecks`, which is the argument for the flag:
+    // the nullability was real and nothing had been checking for it.
+    const previous = (globalThis as Record<string, unknown>).document;
+    (globalThis as Record<string, unknown>).document = {
+        createElement: () => ({ width: 0, height: 0, getContext: () => null })
+    };
+    try {
+        const r = recorder();
+        assert.doesNotThrow(() =>
+            renderEnemies(
+                r.ctx,
+                fakeGame({
+                    enemies: [enemy({ type: { id: 'refuses-context', color: '#f00' } })]
+                }) as never
+            )
+        );
+        assert.equal(r.named('drawImage').length, 0, 'no sprite was blitted');
+        assert.equal(r.named('arc').length > 0, true, 'the enemy was drawn the slow way instead');
+    } finally {
+        if (previous === undefined) delete (globalThis as Record<string, unknown>).document;
+        else (globalThis as Record<string, unknown>).document = previous;
+    }
+});

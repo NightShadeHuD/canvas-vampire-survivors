@@ -135,6 +135,11 @@ function getEnemySprite(def, size) {
     const ox = d / 2;
     const oy = d / 2;
     const c = off.getContext('2d');
+    // A canvas can refuse a 2D context, and the type says so. Before this guard
+    // the code would have thrown on `c.fillStyle`; returning null instead means
+    // the caller falls back to `renderEnemy`, which is the same path already used
+    // when `document` is absent. Nothing is drawn worse and nothing crashes.
+    if (!c) return null;
     c.fillStyle = def.color || '#ff4444';
     c.beginPath();
     c.arc(ox, oy, size, 0, Math.PI * 2);
