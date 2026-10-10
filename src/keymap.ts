@@ -80,7 +80,7 @@ export const DEFAULT_KEYMAP: Readonly<Record<string, readonly string[]>> = Objec
  * @param {string} rawKey
  * @returns {string}
  */
-export function normaliseKey(rawKey) {
+export function normaliseKey(rawKey: string) {
     if (typeof rawKey !== 'string' || rawKey.length === 0) return '';
     return rawKey.toLowerCase();
 }
@@ -90,7 +90,9 @@ export function normaliseKey(rawKey) {
  * subsequent edits don't mutate the frozen default) and before persistence
  * (so the saved blob is a stable JSON snapshot).
  */
-export function cloneKeymap(map): Record<string, string[]> {
+export function cloneKeymap(
+    map: Readonly<Record<string, readonly string[]>>
+): Record<string, string[]> {
     const out = {};
     for (const action of KEYMAP_ACTIONS) {
         const list = Array.isArray(map?.[action]) ? map[action] : [];
@@ -171,7 +173,7 @@ export function bindKey(
  * of `{ key, actions }` records, one per offending key. Empty array means
  * the map is clean.
  */
-export function detectConflicts(map) {
+export function detectConflicts(map: Readonly<Record<string, readonly string[]>>) {
     const owners = new Map<string, Set<string>>(); // key → Set<action>
     for (const action of KEYMAP_ACTIONS) {
         for (const k of map?.[action] || []) {
@@ -197,7 +199,7 @@ export function detectConflicts(map) {
  * matching action in `KEYMAP_ACTIONS` order so the UI behaviour is
  * deterministic even if the map is dirty (multiple owners).
  */
-export function actionForKey(map, rawKey) {
+export function actionForKey(map: Readonly<Record<string, readonly string[]>>, rawKey: string) {
     const key = normaliseKey(rawKey);
     if (!key) return null;
     for (const action of KEYMAP_ACTIONS) {
@@ -211,7 +213,7 @@ export function actionForKey(map, rawKey) {
  * single letters, expand `arrowxx` to a Unicode arrow, and map a few
  * common control keys to readable labels.
  */
-export function keyLabel(rawKey) {
+export function keyLabel(rawKey: string) {
     const k = normaliseKey(rawKey);
     if (!k) return '';
     switch (k) {
@@ -270,7 +272,7 @@ export function loadKeymap(): Record<string, string[]> {
     }
 }
 
-export function saveKeymap(map) {
+export function saveKeymap(map: Readonly<Record<string, readonly string[]>>) {
     const safe = sanitiseKeymap(map);
     let serialised;
     try {
