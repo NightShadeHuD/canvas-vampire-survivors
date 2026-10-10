@@ -16,6 +16,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Weapon } from '../src/weapons.ts';
 import { WEAPONS } from '../src/data.ts';
+import { makePlayerStub } from './helpers/game-stub.ts';
+import type { Game } from '../src/main.ts';
 
 /** A weapon definition with every field the class reads. */
 function makeDef(overrides = {}) {
@@ -33,15 +35,17 @@ function makeDef(overrides = {}) {
 }
 
 /** A player exposing only what Weapon reads. */
-function makePlayer(overrides = {}) {
-    return {
+function makePlayer(overrides: object = {}) {
+    // A partial `Player`, declared once through the shared stub. A unit test about
+    // a weapon curve needs five members, not a thirty-field entity.
+    return makePlayerStub({
         getDamageMult: () => 1,
         getCritChance: () => 0,
         getCooldownMult: () => 1,
         getAreaMult: () => 1,
         passives: {},
         ...overrides
-    };
+    });
 }
 
 /** Run `fn` with Math.random pinned, restoring it afterwards. */
@@ -57,11 +61,17 @@ function withRandom(value, fn) {
 
 /** A game bag that records floating text and can be spied on. */
 function makeGame() {
-    const floaters = [];
-    return {
+    // A partial `Game` holding only what a weapon calls: the floating-text sink.
+    // `any[][]` rather than `unknown[][]`: the assertions read into an element and
+    // then into one of ITS fields (`floaters[0][4].crit`), which `unknown` forbids.
+    const floaters: any[][] = [];
+    // Typed as the double AND the one extra field the assertions read, so the test
+    // can check what it captured without a cast at every assertion.
+    const game = {
         floaters,
-        createFloatingText: (...args) => floaters.push(args)
+        createFloatingText: (...args: unknown[]) => floaters.push(args)
     };
+    return game as unknown as Game & { floaters: any[][] };
 }
 
 // ---------------------------------------------------------------------------

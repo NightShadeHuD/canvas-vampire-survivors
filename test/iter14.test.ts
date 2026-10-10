@@ -21,7 +21,7 @@ import { _resetStorageForTests, getTouchButtonScale, loadSave, resetSave } from 
 import { BOSSES, PASSIVES, WEAPONS } from '../src/data.ts';
 import { Player } from '../src/entities.ts';
 import { Weapon } from '../src/weapons.ts';
-import { makeGameStub } from './helpers/game-stub.ts';
+import { makeGameStub, makePlayerStub } from './helpers/game-stub.ts';
 
 // ---------------------------------------------------------------------------
 // Tundra stage
@@ -265,13 +265,13 @@ test('iter14 passives: dodge prevents damage entirely when it triggers', () => {
 // ---------------------------------------------------------------------------
 test('iter14 weapons: evolved Twin Arc cooldown shorter than the base curve', () => {
     const w = new Weapon(WEAPONS.BOOMERANG);
-    const fakePlayer = {
+    const fakePlayer = makePlayerStub({
         getDamageMult: () => 1,
         getCooldownMult: () => 1,
         getAreaMult: () => 1,
         getCritChance: () => 0,
         passives: {}
-    };
+    });
     w.level = 4;
     const before = w.getCooldown(fakePlayer);
     w.level = 5; // crosses evolution threshold
@@ -281,7 +281,7 @@ test('iter14 weapons: evolved Twin Arc cooldown shorter than the base curve', ()
 
 test('iter14 weapons: evolved Orbiter damage multiplied by evolveDamageMult', () => {
     const w = new Weapon(WEAPONS.ORBIT);
-    const fakePlayer = { getDamageMult: () => 1, passives: {} };
+    const fakePlayer = makePlayerStub({ getDamageMult: () => 1, passives: {} });
     w.level = 4;
     const before = w.getDamage(fakePlayer);
     w.level = 5;
