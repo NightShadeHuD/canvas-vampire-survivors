@@ -10,6 +10,12 @@ class_name Game
 
 var hero: Hero
 var foes: Array[Foe] = []
+var orbs: Array[Orb] = []
+## Levels gained but not yet spent on a pick. The run PAUSES while this is non-zero,
+## which is what makes a level-up a decision rather than a notification.
+var pending_picks := 0
+## Set by the view when it has an offer on screen, so the sim does not run on.
+var awaiting_pick := false
 ## Seconds until the next spawn / the next weapon tick.
 var spawn_timer := 0.0
 var attack_timer := 0.0
@@ -24,6 +30,9 @@ var foe_def: Dictionary
 func _init(spawn_interval: float = 0.8) -> void:
 	hero = Hero.new(Config.ARENA_WIDTH / 2.0, Config.ARENA_HEIGHT / 2.0)
 	weapon = Weapons.WEAPONS["GARLIC"]
+	# Every survivor run starts with one weapon. Which one is a real choice in the
+	# original; the slice gives Garlic, matching the first version of this port.
+	hero.add_weapon(weapon)
 	foe_def = Enemies.ENEMIES["BAT"]
 	_spawn_interval = spawn_interval
 	current_wave = wave_for(0.0)
@@ -97,6 +106,7 @@ func step(delta: float, move_dir: Vector2) -> void:
 			if sqrt(dx * dx + dy * dy) < foe.size + hero.size:
 				hero.take_damage(foe.damage)
 
+	_update_orbs(delta)
 	_remove_dead()
 
 ## Spawn on a ring outside the view, so foes walk IN rather than appearing beside the
@@ -112,19 +122,41 @@ func _spawn_foe() -> void:
 ## The slice's one weapon: a damaging aura around the hero, which is what GARLIC is.
 ## `baseRange` and `baseDamage` are the real values from the generated table.
 func _attack() -> void:
-	for foe in foes:
-		if foe.dead:
-			continue
-		var dx := foe.x - hero.x
-		var dy := foe.y - hero.y
-		if sqrt(dx * dx + dy * dy) <= weapon["baseRange"]:
-			foe.take_damage(weapon["baseDamage"])
+	# Every weapon the hero holds fires on its own cooldown. A weapon picked at
+	# level-up changes this loop and nothing else, which is the point of keeping
+	# `weapons` on the hero rather than a single `weapon` field.
+	for w in hero.weapons:
+		var def: Dictionary = w["def"]
+		var reach := float(def["baseRange"])
+		var dmg := float(def["baseDamage"])
+		for foe in foes:
+			if foe.dead:
+				continue
+			var dx := foe.x - hero.x
+			var dy := foe.y - hero.y
+			if sqrt(dx * dx + dy * dy) <= reach:
+				foe.take_damage(dmg)
+
+## Collection. The orb decides whether it was taken; this banks it and counts the
+## levels, because a single big orb can grant more than one.
+func _update_orbs(delta: float) -> void:
+	var kept: Array[Orb] = []
+	for orb in orbs:
+		orb.update(delta, hero)
+		if orb.collected:
+			pending_picks += hero.gain_exp(float(orb.value))
+		elif not orb.expired:
+			kept.append(orb)
+	orbs = kept
 
 func _remove_dead() -> void:
 	var survivors: Array[Foe] = []
 	for foe in foes:
 		if foe.dead:
 			kills += 1
+			# Every kill drops its experience where it fell. `exp_value` comes from
+			# the enemy table, so a golem is worth more than a bat by data, not code.
+			orbs.append(Orb.new(foe.x, foe.y, foe.exp_value))
 		else:
 			survivors.append(foe)
 	foes = survivors

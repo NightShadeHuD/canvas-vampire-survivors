@@ -67,6 +67,38 @@ func _init() -> void:
 	)
 	_check(main.game.foes.size() >= 0, "the scene survived the whole run", "no crash in 90s of play")
 
+	# The level-up pause, exercised through the SCENE rather than a fresh Game.
+	# Without this the play test would pass whether or not the pause worked, because
+	# everything above drives its own instances.
+	var scene_hit_levelup := false
+	var frozen_for := 0
+	var elapsed_at_pause := 0.0
+	var was_levelup := false
+	var stalled := false
+	for i in 60 * 120:
+		main._process(FRAME)
+		var now_levelup: bool = main.state == main.State.LEVEL_UP
+		if now_levelup:
+			# Each SEPARATE offer freezes the clock at whatever it was when the offer
+			# appeared. Comparing against a single baseline would flag the legitimate
+			# resume after a pick as a failure -- which the first version of this test
+			# did, and it looked exactly like a broken pause.
+			if not was_levelup:
+				scene_hit_levelup = true
+				elapsed_at_pause = main.game.elapsed
+				frozen_for = 0
+			elif not is_equal_approx(main.game.elapsed, elapsed_at_pause):
+				stalled = true
+				break
+			frozen_for += 1
+			if frozen_for > 30:
+				main._on_pick(0)
+		was_levelup = now_levelup
+	_check(scene_hit_levelup, "the scene reaches a level-up", "state = LEVEL_UP")
+	_check(frozen_for > 0 and not stalled, "and the run PAUSES for it", "%d frames frozen" % frozen_for)
+	_check(main.game.hero.level > 1, "the hero levelled", "level %d" % main.game.hero.level)
+	_check(main.game.hero.weapons.size() >= 1, "and holds a weapon", "%d" % main.game.hero.weapons.size())
+
 	main.queue_free()
 	print("verify_play: ", "PASS" if ok else "FAIL")
 	quit(0 if ok else 1)
