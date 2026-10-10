@@ -25,10 +25,43 @@ func _init(spawn_interval: float = 0.8) -> void:
 	hero = Hero.new(Config.ARENA_WIDTH / 2.0, Config.ARENA_HEIGHT / 2.0)
 	weapon = Weapons.WEAPONS["GARLIC"]
 	foe_def = Enemies.ENEMIES["BAT"]
-	spawn_interval = spawn_interval
 	_spawn_interval = spawn_interval
+	current_wave = wave_for(0.0)
 
 var _spawn_interval: float
+## The difficulty curve, from the original's `_computeDifficultyMults`.
+var diff: Dictionary = Difficulty.NORMAL
+var current_wave: Dictionary
+
+## `timeDiff = 1 + floor(gameTime / 60) * 0.3`. Enemies gain 30% health every minute,
+## which is what eventually outruns any weapon -- and the reason a hero alone with
+## Garlic cannot survive forever.
+func hp_mult() -> float:
+	return float(diff["hpMult"]) * (1.0 + floor(elapsed / 60.0) * 0.3)
+
+func dmg_mult() -> float:
+	return float(diff["dmgMult"]) * (1.0 + floor(elapsed / 60.0) * 0.3)
+
+## The wave whose time range covers `elapsed`. The last wave has no upper bound, so
+## this always returns something -- there is no "no wave" state to fall through.
+func wave_for(t: float) -> Dictionary:
+	for w in Waves.WAVES:
+		if t >= float(w["from"]) and (w["to"] == null or t < float(w["to"])):
+			return w
+	return Waves.WAVES.back()
+
+## The definition for an id from a wave pool.
+##
+## Looked up by the def's OWN `id` field, not by the dictionary key. The pool holds
+## `"bat"` and `ENEMIES` is keyed `"BAT"`, and matching on a key would have been a
+## guess about casing that happens to be wrong -- `src/data.ts` carries an explicit
+## `id` on every def precisely so nothing has to infer one.
+func _foe_def(foe_id: String) -> Dictionary:
+	for def in Enemies.ENEMIES.values():
+		if def["id"] == foe_id:
+			return def
+	push_warning("no enemy def for id '%s'" % foe_id)
+	return Enemies.ENEMIES.values()[0]
 
 ## Step the whole simulation. Order matters and is the original's: move, spawn,
 ## attack, resolve, then clean up.
@@ -38,9 +71,15 @@ func step(delta: float, move_dir: Vector2) -> void:
 	hero.move(move_dir, delta)
 	hero.clamp_to(Config.ARENA_WIDTH, Config.ARENA_HEIGHT)
 
+	# The wave is recomputed every step because it changes with TIME, and a slice that
+	# picked it once would spawn opening-wave foes for ten minutes.
+	current_wave = wave_for(elapsed)
 	spawn_timer -= delta
 	if spawn_timer <= 0.0 and foes.size() < Config.MAX_ENEMIES:
-		spawn_timer = _spawn_interval
+		# Faster later, and faster still on a harder difficulty -- `spawnMult` is a
+		# real field of both the wave and the difficulty row.
+		var mult := float(current_wave["spawnMult"]) * float(diff["spawnMult"])
+		spawn_timer = _spawn_interval / maxf(mult, 0.05)
 		_spawn_foe()
 
 	attack_timer -= delta
@@ -65,7 +104,10 @@ func step(delta: float, move_dir: Vector2) -> void:
 func _spawn_foe() -> void:
 	var angle := randf() * TAU
 	var r := Config.SPAWN_RADIUS
-	foes.append(Foe.new(foe_def, hero.x + cos(angle) * r, hero.y + sin(angle) * r))
+	# The wave picks WHICH foe; the curve decides how tough it is.
+	var pool: Array = current_wave["pool"]
+	var def: Dictionary = _foe_def(pool[randi() % pool.size()])
+	foes.append(Foe.new(def, hero.x + cos(angle) * r, hero.y + sin(angle) * r, hp_mult(), dmg_mult()))
 
 ## The slice's one weapon: a damaging aura around the hero, which is what GARLIC is.
 ## `baseRange` and `baseDamage` are the real values from the generated table.

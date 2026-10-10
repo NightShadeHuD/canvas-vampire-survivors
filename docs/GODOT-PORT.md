@@ -80,6 +80,53 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### The hero was immortal, and the test that found it
+
+`verify_play.gd` plays the SCENE for ninety seconds — real `_process`, real `_draw`,
+real camera, driven input — and it found this:
+
+```
+  FAIL a stationary hero eventually dies  (hp = 100.0 at 600s)
+```
+
+**Six hundred seconds of being swarmed cost exactly zero health.** Not a code bug:
+a position placed five pixels from the hero dealt its ten damage correctly. The foes
+were simply dying 8 pixels short of contact, every time — Garlic reaches 110px and
+contact needs 32, and a bat could not cross the last stretch before it died.
+
+THE MECHANIC THAT WAS MISSING
+
+The original gets hard through one line in `main.ts`:
+
+```js
+const timeDiff = 1 + Math.floor(this.gameTime / 60) * 0.3;
+```
+
+**Enemies gain 30% health every minute**, and damage with it. A foe spawned at minute
+three has 1.9x the health of one spawned at the start, so the weapon that holds at
+zero seconds is overwhelmed by minute four. My slice had the enemy table and none of
+the curve, so nothing ever outran Garlic.
+
+That is now ported, along with the waves it scales with:
+
+| Ported                                            | From                                   |
+| ------------------------------------------------- | -------------------------------------- |
+| `timeDiff` — 30% per minute                       | `main.ts` `_computeDifficultyMults`    |
+| The 10-wave table, with its pools and `spawnMult` | `src/data.ts` `WAVES`                  |
+| The 4 difficulty rows                             | `src/config.ts` `Difficulty`           |
+| `hpMult` / `dmgMult` applied **at spawn**         | the original applies them at spawn too |
+
+```
+  ok   a stationary hero eventually dies  (hp = 0.0 at 16s)
+```
+
+A SECOND BUG, FOUND BY THE SAME TEST
+
+Wave pools hold `"bat"`, and `ENEMIES` is keyed `"BAT"`. Looking up by dictionary key
+was a guess about casing that happened to be wrong — every spawn pushed a warning and
+fell through to the first enemy. Defs are now found by their own `id` field, which
+`src/data.ts` carries on every one **precisely so nothing has to infer one.**
+
 ### What was broken, and what now catches it
 
 The first version shipped with **an invisible hero**. The arena is 2400x1600 and the

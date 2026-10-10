@@ -59,6 +59,17 @@ export async function exportGodot(outDir = OUT_DIR) {
     writeFileSync(path.join(outDir, 'config.gd'), configFile(config.CONFIG, { HERO_MAX_HP: 100 }));
     files.push('config.gd');
 
+    // `Difficulty` and the spawn pacing are real constants, not slice tuning. The
+    // whole reason the original gets hard is `timeDiff`, which lives in main.ts
+    // rather than config, so the formula is written down in `game.gd` with the
+    // constants it needs exported here.
+    const cfg = await import(path.join(repoRoot, 'src', 'config.ts'));
+    writeFileSync(
+        path.join(outDir, 'difficulty.gd'),
+        configFile(cfg.Difficulty, {}).replace('class_name Config', 'class_name Difficulty')
+    );
+    files.push('difficulty.gd');
+
     for (const name of TABLES) {
         const value = data[name];
         if (value === undefined) {

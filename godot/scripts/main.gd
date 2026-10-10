@@ -69,7 +69,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE or event.keycode == KEY_P:
 			get_tree().quit()
 
+## Set by `verify_play.gd` so a test can drive input deterministically.
+## `Input.is_action_pressed` reads real hardware, which a headless test has none of --
+## and a seam is better than the test reaching into `Input` and faking a device.
+var _input_dir_override: Variant = null
+
 func _input_dir() -> Vector2:
+	if _input_dir_override != null:
+		return _input_dir_override
 	var d := Vector2.ZERO
 	if Input.is_action_pressed("ui_right"):
 		d.x += 1.0
