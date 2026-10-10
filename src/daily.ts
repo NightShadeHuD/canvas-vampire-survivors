@@ -97,7 +97,7 @@ export function dailyChallenge(dateStr?) {
 // without churning the save schema. 14 days is enough to render a streak
 // without bloating localStorage past a few KB even with verbose entries.
 // ---------------------------------------------------------------------------
-let _memory = null;
+let _memory: string | null = null;
 
 function usableLS() {
     try {
@@ -196,7 +196,13 @@ export function dailyStreakSummary(history, now = new Date()) {
         }
     }
     // Build the 14-day calendar window ending at `now` (UTC).
-    const days = [];
+    const days: Array<{
+        date: string;
+        played: boolean;
+        won: boolean;
+        timeSurvived: number;
+        kills: number;
+    }> = [];
     for (let i = 0; i < 14; i++) {
         const d = new Date(now.getTime() - i * 86400 * 1000);
         const key = todayKey(d);

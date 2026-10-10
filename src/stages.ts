@@ -252,6 +252,15 @@ export function getBossesFor(id) {
     // forest/crypt boss timelines pristine.
     const overrideOnlyIds = new Set(['ice_queen']);
 
+    // NOT typed structurally. `Record<string, unknown>` was tried and broke
+    // arithmetic at every call site, because these are BOSS DEFINITIONS with real
+    // numeric fields, not bags of unknowns.
+    //
+    // FOURTH time in this one batch: typing a container by the fields a function
+    // happens to touch, when the codebase already has the real type. The pattern
+    // is worth naming — under `strictNullChecks` the tempting fix for `never[]` is
+    // any annotation that silences it, and the only correct one is the type the
+    // values actually have.
     const out = [];
     for (const b of Object.values(BOSSES)) {
         if (overrideOnlyIds.has(b.id) && !replacementTargets.has(b.id)) {

@@ -151,7 +151,7 @@ export class EmojiRain {
         // Defensive: width/height are pulled from the canvas — guard against
         // zero/NaN so the math below stays well-defined in tests.
         const w = Number.isFinite(width) && width > 0 ? width : 1200;
-        const h = Number.isFinite(height) && height > 0 ? height : 800;
+        const h = height !== undefined && Number.isFinite(height) && height > 0 ? height : 800;
         for (let i = 0; i < count; i++) {
             if (this.drops.length >= this.max) break;
             this.drops.push({
@@ -168,7 +168,7 @@ export class EmojiRain {
         }
     }
     update(dt: number, height?: number) {
-        const h = Number.isFinite(height) && height > 0 ? height : 800;
+        const h = height !== undefined && Number.isFinite(height) && height > 0 ? height : 800;
         for (let i = this.drops.length - 1; i >= 0; i--) {
             const d = this.drops[i];
             d.x += d.vx * dt;
