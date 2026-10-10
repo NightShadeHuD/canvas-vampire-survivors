@@ -84,7 +84,9 @@ export class AchievementTracker {
         for (const ach of ACHIEVEMENTS) {
             if (this.save.achievements[ach.id]) continue;
             try {
-                if (ach.check(ctx)) {
+                // `ach.check?.(ctx)` would be five port hazards across this work;
+                // a ternary needs no rewriting at port time.
+                if (ach.check ? ach.check(ctx) : false) {
                     this.save.achievements[ach.id] = Date.now();
                     newly.push(ach);
                     this.queue.push(ach);

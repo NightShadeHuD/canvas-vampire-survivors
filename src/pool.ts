@@ -87,7 +87,8 @@ export class Pool<T extends object> {
         }
         if (this.reset) this.reset(obj, ...args);
         this.acquired++;
-        return obj;
+        // The `if (!obj)` guard above proves this, but `pop()` is typed `T | undefined`.
+        return obj as T;
     }
 
     /** Return an object to the pool. Drops the reference if we're at cap. */

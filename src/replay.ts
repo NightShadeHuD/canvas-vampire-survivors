@@ -186,9 +186,9 @@ export class ReplayRecorder {
 
     /** Snapshot final-run statistics into the recorder. */
     finalize({ kills, time, level }: { kills?: number; time?: number; level?: number }) {
-        this.finalKills = kills | 0;
-        this.finalTime = +time || 0;
-        this.finalLevel = level | 0 || 1;
+        this.finalKills = kills ? kills : 0;
+        this.finalTime = time ? time : 0;
+        this.finalLevel = level ? level : 1;
     }
 
     serialize() {
