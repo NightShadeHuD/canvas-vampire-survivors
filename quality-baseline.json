@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 81.34,
-            "branches": 84.11,
-            "functions": 72.08
+            "lines": 81.55,
+            "branches": 84.33,
+            "functions": 72.22
         },
         "files": {
             "scripts/lib/annotate.mjs": {
@@ -74,6 +74,11 @@
                 "lines": 87.37,
                 "branches": 75,
                 "functions": 42.86
+            },
+            "scripts/lib/strict-flags.mjs": {
+                "lines": 100,
+                "branches": 100,
+                "functions": 100
             },
             "scripts/lib/suite-report.mjs": {
                 "lines": 100,
@@ -219,6 +224,16 @@
         "error": 321,
         "silent": 8
     },
+    "strictCeilings": {
+        "strictNullChecks": {
+            "src": 0,
+            "test": 237
+        },
+        "noImplicitAny": {
+            "src": 267,
+            "test": 373
+        }
+    },
     "assertionDigests": {
         "test/a11y-dialogs.test.ts": "18741eba7d7390a8",
         "test/a11y-lists.test.ts": "9a66d05b15c93fad",
@@ -254,6 +269,7 @@
         "test/speedrun.test.ts": "b9efee3b7b00f35d",
         "test/stages_daily.test.ts": "d903148db9286657",
         "test/storage.test.ts": "6580d5b743f77f43",
+        "test/strict-flags.test.ts": "a94f2842fac39a60",
         "test/suite-report.test.ts": "fe2e1117af0e818f",
         "test/suppression-scanner.test.ts": "0a70e5a584236e1d",
         "test/systems.test.ts": "1afea4390f020ec3",
