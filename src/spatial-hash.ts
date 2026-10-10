@@ -56,7 +56,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
         return this._size;
     }
 
-    _key(x, y) {
+    _key(x: number, y: number) {
         return `${Math.floor(x / this.cell)},${Math.floor(y / this.cell)}`;
     }
 
@@ -82,7 +82,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
     }
 
     /** @deprecated alias kept for backwards compatibility with v2.x callers. */
-    insertEnemies(enemies) {
+    insertEnemies(enemies: T[]) {
         this.insertAll(enemies);
     }
 
@@ -121,7 +121,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
      * Return the single closest item within `maxRange` (Euclidean distance),
      * or `null` if no bucket is populated within the search square.
      */
-    findNearest(x, y, maxRange) {
+    findNearest(x: number, y: number, maxRange: number) {
         let best: T | null = null;
         let bestD = maxRange;
         for (const e of this.queryRect(x, y, maxRange)) {
@@ -135,7 +135,7 @@ export class SpatialHash<T extends { x: number; y: number }> {
     }
 
     /** Alias used throughout `weapons.ts`/`entities.ts`. */
-    findNearestEnemy(x, y, maxRange) {
+    findNearestEnemy(x: number, y: number, maxRange: number) {
         return this.findNearest(x, y, maxRange);
     }
 
