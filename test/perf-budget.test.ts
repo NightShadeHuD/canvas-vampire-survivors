@@ -97,7 +97,7 @@ test('perf/pool: reset is applied on every reuse, so stale state cannot leak', (
 // ---------------------------------------------------------------------------
 
 test('perf/spatial-hash: a local query touches a small fraction of entities', () => {
-    const hash = new SpatialHash(64);
+    const hash = new SpatialHash<{ x: number; y: number; id: string }>(64);
     const N = 5000;
     const items = [];
     for (let i = 0; i < N; i++) {
@@ -116,7 +116,7 @@ test('perf/spatial-hash: a local query touches a small fraction of entities', ()
 test('perf/spatial-hash: querying never misses a genuinely nearby entity', () => {
     // Culling is only useful if it is correct. Every entity inside the radius
     // must appear in the candidate set.
-    const hash = new SpatialHash(32);
+    const hash = new SpatialHash<{ x: number; y: number; id: string }>(32);
     const items = [
         { id: 'inside-a', x: 10, y: 10 },
         { id: 'inside-b', x: 15, y: 12 },
@@ -133,7 +133,7 @@ test('perf/spatial-hash: querying never misses a genuinely nearby entity', () =>
 });
 
 test('perf/spatial-hash: findNearest picks the true closest within range', () => {
-    const hash = new SpatialHash(64);
+    const hash = new SpatialHash<{ x: number; y: number; id: string }>(64);
     hash.insertAll([
         { id: 'near', x: 20, y: 0 },
         { id: 'mid', x: 60, y: 0 },
@@ -150,7 +150,7 @@ test('perf/spatial-hash: 20k entities x 20k queries stays inside the time budget
     // checks (~2-10s), so the regression this guards is still caught.
     const BUDGET_MS = 3000;
 
-    const hash = new SpatialHash(64);
+    const hash = new SpatialHash<{ x: number; y: number; id: string }>(64);
     const N = 20000;
     const items = [];
     for (let i = 0; i < N; i++) {

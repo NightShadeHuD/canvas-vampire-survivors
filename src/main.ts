@@ -141,7 +141,7 @@ export class Game {
     declare replayRecorder: ReplayRecorder | null;
     declare run: AchievementRun;
     declare save: SaveData;
-    declare spatial: SpatialHash;
+    declare spatial: SpatialHash<Enemy>;
     declare speedrunMode: boolean;
     declare speedrunRng: SeededRng | null;
     declare speedrunSplits: any[];

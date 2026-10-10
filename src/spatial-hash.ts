@@ -18,11 +18,21 @@
  *   - class SpatialHash
  */
 
-export class SpatialHash {
+/**
+ * A uniform-grid spatial index, GENERIC over what it holds.
+ *
+ * The generic is the whole point, and it replaces two failed attempts. A
+ * structural `{ x, y }` was tried first and broke five call sites, because
+ * `main.ts` reads `.size`, `.hp` and `.takeDamage` off what comes back. Typing it
+ * as `Enemy` directly would have fixed those and hard-coded the hash to one kind
+ * of entity. A generic says what is true: the hash indexes anything positioned,
+ * and the CALLER says which.
+ */
+export class SpatialHash<T extends { x: number; y: number }> {
     /** Bucket edge length in world units. */
     declare cell: number;
     /** Bucket key -> objects currently in that bucket. */
-    declare map: Map<string, object[]>;
+    declare map: Map<string, T[]>;
     /** Number of objects inserted; bucket arrays are not counted. */
     declare _size: number;
     /**
@@ -32,14 +42,7 @@ export class SpatialHash {
      */
     constructor(cell = 64) {
         this.cell = cell;
-        /** @type {Map<string, Array<object>>} */
-        // NOT typed here. A structural `{ x, y }` was tried and was WRONG: the
-        // hash stores enemies, and `main.ts` reads `.size`, `.hp` and
-        // `.takeDamage` off what it gets back. Narrowing it to coordinates broke
-        // five call sites immediately, which is the type system doing its job on a
-        // guess. Giving this a real type means naming the entity type it holds,
-        // and that is its own piece of work.
-        this.map = new Map();
+        this.map = new Map<string, T[]>();
         this._size = 0;
     }
 
@@ -102,12 +105,7 @@ export class SpatialHash {
         const x1 = Math.floor((x + r) / c);
         const y0 = Math.floor((y - r) / c);
         const y1 = Math.floor((y + r) / c);
-        // NOT typed here either, for the same reason as `this.map` below: the
-        // hash holds entities, not coordinates, and `main.ts` reads `.size`,
-        // `.hp` and `.takeDamage` off what `queryRect` returns. A structural
-        // `{ x, y }` broke five call sites. The correct type is the entity type,
-        // and naming it is its own piece of work.
-        const out = [];
+        const out: T[] = [];
         for (let gx = x0; gx <= x1; gx++) {
             for (let gy = y0; gy <= y1; gy++) {
                 const b = this.map.get(`${gx},${gy}`);
@@ -124,15 +122,7 @@ export class SpatialHash {
      * or `null` if no bucket is populated within the search square.
      */
     findNearest(x, y, maxRange) {
-        // NOT typed here, for the third time in this file and the same reason:
-        // `queryNearest` returns an ENTITY, and callers read `.id` off it. A
-        // structural coordinate type broke two test files and `main.ts` at once.
-        //
-        // The lesson is recorded rather than the mistake repeated: `SpatialHash`
-        // holds entities, so every local here that carries one is typed by naming
-        // the entity type, not by describing the fields this method happens to
-        // touch. Doing that means importing the type, which is its own change.
-        let best = null;
+        let best: T | null = null;
         let bestD = maxRange;
         for (const e of this.queryRect(x, y, maxRange)) {
             const d = Math.hypot(e.x - x, e.y - y);
