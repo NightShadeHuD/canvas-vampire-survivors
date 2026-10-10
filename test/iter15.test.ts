@@ -130,7 +130,7 @@ test('iter15 replay: quantize rounds to 2 decimals and handles non-finite', () =
 });
 
 test('iter15 replay: compress / expand frames is lossless and RLE shrinks runs', () => {
-    const flat = [
+    const flat: Array<[number, number]> = [
         [0, 0],
         [0, 0],
         [0, 0],

@@ -253,7 +253,7 @@ test('iter16 replay: ReplayPlayer with empty frames terminates immediately', () 
 });
 
 test('iter16 replay: compressFrames + expandFrames round-trip preserves data', () => {
-    const flat = [
+    const flat: Array<[number, number]> = [
         [0, 0],
         [0, 0],
         [1, 0],
@@ -266,7 +266,9 @@ test('iter16 replay: compressFrames + expandFrames round-trip preserves data', (
 });
 
 test('iter16 replay: compressFrames collapses a constant input correctly', () => {
-    const flat = Array.from({ length: 100 }, () => [0.5, -0.5]);
+    const flat: Array<[number, number]> = Array.from({ length: 100 }, (): [number, number] => [
+        0.5, -0.5
+    ]);
     const rle = compressFrames(flat);
     assert.equal(rle.length, 1, 'one RLE entry suffices for 100 identical frames');
     assert.deepEqual(rle[0], [0.5, -0.5, 100]);
