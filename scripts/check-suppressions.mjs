@@ -26,7 +26,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { writeBaseline } from './lib/baseline-file.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { RULES, scanFiles } from './lib/suppression-scanner.mjs';
@@ -76,7 +77,7 @@ const ceilings = baseline.suppressionCeilings || {};
 
 if (update) {
     baseline.suppressionCeilings = Object.fromEntries(RULES.map((r) => [r.id, totals[r.id]]));
-    writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 4)}\n`);
+    writeBaseline(baselinePath, baseline);
     console.log('check-suppressions: baseline ratcheted to current reality:');
     for (const rule of RULES) console.log(`  ${rule.id}: ${totals[rule.id]}`);
     process.exit(0);

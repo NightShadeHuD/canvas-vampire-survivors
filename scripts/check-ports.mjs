@@ -18,9 +18,10 @@
  * deliberate edit to `quality-baseline.json` with its reason.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { writeBaseline } from './lib/baseline-file.mjs';
 import path from 'node:path';
 import { measurePorts, judgePorts, PORT_HAZARDS } from './lib/port-hazards.mjs';
 
@@ -115,8 +116,7 @@ if (process.argv.includes('--update')) {
         console.log(`  most of it: ${n} x ${id}`);
     }
     baseline.portCeilings = next;
-    const escape = (s) => s.replace(/\u00a7/g, '\\u00a7').replace(/\u2014/g, '\\u2014');
-    writeFileSync(BASELINE, escape(JSON.stringify(baseline, null, 4)) + '\n');
+    writeBaseline(BASELINE, baseline);
     process.exit(0);
 }
 

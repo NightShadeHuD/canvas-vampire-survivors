@@ -28,8 +28,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { writeBaseline } from './lib/baseline-file.mjs';
 import path from 'node:path';
 import { compareFiles, judgeDigests } from './lib/assertion-diff.mjs';
 
@@ -126,11 +127,7 @@ if (process.argv.includes('--update')) {
     );
     // Written with the escaping the other baselines use, so the file stays
     // byte-consistent whichever tool last touched it.
-    const escape = (t) => t.replace(/\u00a7/g, '\\u00a7').replace(/\u2014/g, '\\u2014');
-    writeFileSync(
-        path.join(repoRoot, 'quality-baseline.json'),
-        escape(JSON.stringify(baseline, null, 4)) + '\n'
-    );
+    writeBaseline(path.join(repoRoot, 'quality-baseline.json'), baseline);
     console.log(
         `check-assertions: recorded digests for ${Object.keys(fresh).length} test file(s).`
     );

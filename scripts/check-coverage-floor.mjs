@@ -55,8 +55,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { writeBaseline } from './lib/baseline-file.mjs';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -233,7 +234,7 @@ if (update) {
                 ])
         )
     };
-    writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 4)}\n`);
+    writeBaseline(baselinePath, baseline);
 
     console.log('check-coverage-floor: floors ratcheted to current reality:');
     const next = baseline.coverageFloors;
