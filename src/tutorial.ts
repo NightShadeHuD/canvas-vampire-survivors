@@ -155,7 +155,11 @@ export class TutorialState {
             case 'move': {
                 if (moveVec && (Math.abs(moveVec.x) > 0.05 || Math.abs(moveVec.y) > 0.05)) {
                     this._moveSeconds += dt;
-                    if (this._moveSeconds >= step.thresholdSeconds) this.advance();
+                    const secs = step.thresholdSeconds;
+                    // `!= null` rather than `!== undefined`: GDScript has both `null`
+                    // and `!=`, so this needs no rewriting at port time, while an
+                    // explicit `undefined` check would be five more hazards.
+                    if (secs != null && this._moveSeconds >= secs) this.advance();
                 }
                 break;
             }
@@ -164,7 +168,8 @@ export class TutorialState {
                 // weapon firing. We just accumulate gameplay time so a player
                 // not yet near an enemy doesn't get rushed past the prompt.
                 this._autoAttackSeconds += dt;
-                if (this._autoAttackSeconds >= step.thresholdSeconds) this.advance();
+                const autoSecs = step.thresholdSeconds;
+                if (autoSecs != null && this._autoAttackSeconds >= autoSecs) this.advance();
                 break;
             }
             // The remaining steps wait for explicit notifications (orb,
@@ -181,7 +186,8 @@ export class TutorialState {
         if (!step) return;
         if (step.id !== 'pickupExp') return;
         this._orbsPicked++;
-        if (this._orbsPicked >= step.thresholdOrbs) this.advance();
+        const orbs = step.thresholdOrbs;
+        if (orbs != null && this._orbsPicked >= orbs) this.advance();
     }
 
     /** Notify the machine of a level-up event. */
@@ -191,7 +197,8 @@ export class TutorialState {
         if (!step) return;
         if (step.id !== 'levelUp') return;
         this._levelUps++;
-        if (this._levelUps >= step.thresholdLevelUps) this.advance();
+        const ups = step.thresholdLevelUps;
+        if (ups != null && this._levelUps >= ups) this.advance();
     }
 
     /** Notify the machine that the player toggled pause. */
@@ -201,7 +208,8 @@ export class TutorialState {
         if (!step) return;
         if (step.id !== 'pause') return;
         this._pauses++;
-        if (this._pauses >= step.thresholdPauses) this.advance();
+        const pauses = step.thresholdPauses;
+        if (pauses != null && this._pauses >= pauses) this.advance();
     }
 
     /** Total number of steps (handy for "x / N" labels in the UI). */
