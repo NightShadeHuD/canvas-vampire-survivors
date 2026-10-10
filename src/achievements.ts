@@ -12,6 +12,7 @@
  */
 
 import type { AchievementDef } from './data.ts';
+import type { Game } from './main.ts';
 import { ACHIEVEMENTS, UNLOCKS } from './data.ts';
 
 /** Per-run counters used by the achievement checks. */
@@ -77,11 +78,7 @@ export class AchievementTracker {
         this.run.maxedWeapon = true;
     }
 
-    // `game` stays untyped for now: `AchievementContext.game` IS `Game`, so the
-    // `check` callbacks want the real thing, and five test fixtures build PARTIAL
-    // games ({ kills, gameTime, player: { level } }). Typing it here and casting
-    // those fixtures is one job, and it is the next one -- not a rider on this.
-    check(game) {
+    check(game: Game) {
         const ctx = { game, run: this.run };
         const newly: AchievementDef[] = [];
         for (const ach of ACHIEVEMENTS) {
