@@ -224,14 +224,17 @@ test('port-hazards: the guard and the value are counted once each, not both', ()
     assert.equal(counts.undefined, 1);
 });
 
-test('port-hazards: the gate exempts exactly its own fixtures, and nothing else', () => {
-    // Every test added to make this metric trustworthy raised the metric, so the
-    // ceiling was raised three times in one sitting for a reason nobody could
-    // review. The exemption is declared and asserted instead — the same pattern
-    // `check-destructive` uses for its own rule table.
+test('port-hazards: the gate measures src/ only, because only src/ is ported', () => {
+    // Measured BOTH ways before deciding. Every ceiling raise this metric needed
+    // — three in one sitting — came from test fixtures and never from shipped
+    // code, because `test/` drives the TypeScript implementation through
+    // `node --test` and would be replaced by GUT in a GDScript project. A metric
+    // that spends its budget on work that will not happen hides the work that will.
     const cli = readFileSync(new URL('../scripts/check-ports.mjs', import.meta.url), 'utf8');
-    const declared = cli.match(/DEFINES_THE_HAZARDS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? '';
-    assert.match(declared, /test\/port-hazards\.test\.ts/, 'its own fixtures must be exempt');
-    // And only that file: an exemption that grows is a metric that shrinks.
-    assert.equal(declared.split(',').filter((s) => s.trim()).length, 1);
+    assert.match(cli, /ls-files', 'src\/\*'\]/, 'it must scan src/');
+    assert.equal(
+        /ls-files', 'src\/\*', 'test\/\*'/.test(cli),
+        false,
+        'and it must NOT scan test/, which is never ported'
+    );
 });

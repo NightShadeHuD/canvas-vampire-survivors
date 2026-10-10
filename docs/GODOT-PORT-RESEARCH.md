@@ -72,8 +72,9 @@ them together made the port look like it had 31 null-migrations when 30 of them
 disappear with the platform.
 
 **These figures are now enforced rather than written down.** `npm run check:ports` measures
-them, holds two ceilings that may only fall, and runs in the gate. The counts below are
-`src/` only; the gate covers `src/` and `test/` together, which is why its total is higher.
+them, holds two ceilings that may only fall, and runs in the gate. **The gate measures `src/`
+only**, because `test/` drives the TypeScript implementation and will never be ported — a
+GDScript project would use GUT and different tests. The counts here and the gate agree.
 
 **`??` and `?.` are 215 of the 327.** They dominate the cost and they are
 entirely mechanical, which means the port's shape is known rather than hoped for.

@@ -261,3 +261,85 @@ export function compareFiles(parentText, currentText) {
 
     return findings;
 }
+
+/**
+ * A digest of a file's assertion STRENGTH, for detecting changes the base diff
+ * cannot see.
+ *
+ * WHY A DIGEST AND NOT A DIFF
+ *
+ * `check-assertions` compares the working tree against a base revision. That
+ * catches a weakening made on a branch — and it structurally cannot catch one
+ * committed DIRECTLY to the base, because the base then contains the weakened
+ * version and there is nothing to diff against. Row 8 of the shortcut register
+ * records exactly this hole.
+ *
+ * A digest recorded in `quality-baseline.json` closes it: if a test file's
+ * assertions differ from the recorded digest AND the file is not modified
+ * against the base, the change arrived by the path the diff cannot see. That is
+ * a report for a human, not a verdict — a legitimate assertion added in a
+ * reviewed commit also changes the digest, and the fix is to re-record it.
+ *
+ * WHAT IS HASHED
+ *
+ * Each assertion, normalised to its kind and the SHAPE of its arguments, sorted.
+ * Sorting makes the digest independent of assertion order, so moving a test does
+ * not change it. The shape keeps `calls` and `literals` out of it, so a changed
+ * expected value does not read as a changed strength — that is a different
+ * question, and the diff already answers it.
+ *
+ * @param {string} text the file's contents
+ * @returns {string} a short stable digest
+ */
+export function assertionDigest(text) {
+    const parts = [];
+    for (const found of assertions(text)) {
+        // The name, not the arguments: this digest answers "did the STRENGTH
+        // change", and a new expected value is not a strength change.
+        parts.push(`${found.name}/${found.kind}`);
+    }
+    // Sorted, so reordering tests is not a change. Counted, so deleting one is.
+    parts.sort();
+    const joined = parts.join('\n');
+
+    // A small, stable, dependency-free hash. Not cryptographic: this detects an
+    // accident or an unreviewed edit, and there is no adversary to defeat.
+    let h1 = 0x811c9dc5;
+    let h2 = 0x01000193;
+    for (let i = 0; i < joined.length; i += 1) {
+        const c = joined.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+        h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+    }
+    return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+}
+
+/**
+ * Compare recorded digests against the current tree.
+ *
+ * @param {Array<{ path: string, text: string }>} files current test files
+ * @param {Record<string, string>} recorded path -> digest
+ * @param {Set<string>} modifiedAgainstBase files the base diff already covers
+ * @returns {{ ok: boolean, reasons: string[], fresh: Record<string, string> }}
+ */
+export function judgeDigests(files, recorded, modifiedAgainstBase) {
+    const reasons = [];
+    const fresh = {};
+    for (const file of files) {
+        const digest = assertionDigest(file.text);
+        fresh[file.path] = digest;
+        const was = recorded[file.path];
+        if (was === undefined) continue; // new file: the diff covers it
+        if (was === digest) continue;
+        // The digest moved. If the base diff already sees this file, the existing
+        // comparison is the authority and this adds nothing.
+        if (modifiedAgainstBase.has(file.path)) continue;
+        reasons.push(
+            `${file.path}: the assertion digest changed but the file is NOT modified ` +
+                `against the base, so the change arrived by a path the revision diff ` +
+                `cannot see — a commit made directly to the base, or one already ` +
+                'merged. Review it, then re-record with `npm run check:assertions --update`.'
+        );
+    }
+    return { ok: reasons.length === 0, reasons, fresh };
+}
