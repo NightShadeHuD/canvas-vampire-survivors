@@ -261,7 +261,15 @@ export function getBossesFor(id) {
     // is worth naming — under `strictNullChecks` the tempting fix for `never[]` is
     // any annotation that silences it, and the only correct one is the type the
     // values actually have.
-    const out = [];
+    // Typed from BOSSES rather than described: the elements are a boss definition
+    // plus the two fields this function adds. A structural `Record<string, unknown>`
+    // was tried earlier and broke arithmetic at the call sites, because these have
+    // real numeric fields.
+    type SpawnedBoss = (typeof BOSSES)[keyof typeof BOSSES] & {
+        spawnAt: number;
+        sourceId: string;
+    };
+    const out: SpawnedBoss[] = [];
     for (const b of Object.values(BOSSES)) {
         if (overrideOnlyIds.has(b.id) && !replacementTargets.has(b.id)) {
             continue;
