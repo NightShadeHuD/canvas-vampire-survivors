@@ -20,9 +20,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors — exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 80.77,
-            "branches": 84.2,
-            "functions": 71.72
+            "lines": 80.87,
+            "branches": 84.22,
+            "functions": 71.77
         },
         "files": {
             "scripts/lib/annotate.mjs": {
@@ -156,9 +156,9 @@
                 "functions": 71.43
             },
             "src/main.ts": {
-                "lines": 49.3,
-                "branches": 58.24,
-                "functions": 26.42
+                "lines": 50,
+                "branches": 59.14,
+                "functions": 27.1
             },
             "src/pool.ts": {
                 "lines": 100,
@@ -181,7 +181,7 @@
                 "functions": 100
             },
             "src/storage.ts": {
-                "lines": 96.28,
+                "lines": 96.65,
                 "branches": 75.29,
                 "functions": 100
             },
@@ -207,7 +207,7 @@
             }
         }
     },
-    "testCountFloor": 803,
+    "testCountFloor": 805,
     "anyCeiling": 131,
     "_anyCeilingNote": "Raised 118 -> 137 to admit test/type-coverage.test.ts, whose FIXTURES are necessarily full of `any` — it tests the tool that counts them. Every one of the 19 added uses is a string literal fixture, not a type in shipped code. The ceiling may still only fall from here; this is a declared, bounded exception rather than a drift.",
     "portCeilings": {
@@ -228,8 +228,9 @@
         "test/entities-player.test.ts": "2e3f386f68786e7b",
         "test/entity-render.test.ts": "e43fe1af6fb865e5",
         "test/game-render.test.ts": "7b0a936c6d8d50ac",
-        "test/game.test.ts": "2f5708dbe4570bc7",
+        "test/game.test.ts": "092fce21588931d1",
         "test/gate-input.test.ts": "4b41afd655b1e92c",
+        "test/isolation-compare.test.ts": "c16b9f29586fb059",
         "test/iter13.test.ts": "3c0cb2889c95ec9c",
         "test/iter14.test.ts": "3eebaaeb2f54178b",
         "test/iter15.test.ts": "846e05ed36f8bb9f",
