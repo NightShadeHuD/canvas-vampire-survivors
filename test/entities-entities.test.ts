@@ -20,6 +20,7 @@ import {
     registerWeaponClass
 } from '../src/entities.ts';
 import { renderFloatingText, renderParticle, renderPlayer } from '../src/entity-render.ts';
+import { makeGameStub } from './helpers/game-stub.ts';
 import { Weapon } from '../src/weapons.ts';
 import { WEAPONS } from '../src/data.ts';
 import { CONFIG } from '../src/config.ts';
@@ -193,9 +194,9 @@ test('expOrb: a more valuable orb is drawn larger, on a log scale', () => {
 test('expOrb/update: expires after its lifetime', () => {
     const orb = new ExpOrb(0, 0, 5);
     // Far from the player and out of magnet range, so only the lifetime matters.
-    const game = {
+    const game = makeGameStub({
         player: { x: 10_000, y: 10_000, getMagnetRange: () => 120 }
-    };
+    });
 
     orb.update(CONFIG.EXP_ORB_LIFETIME - 1, game);
     assert.equal(orb.life, 1, 'one second of life left');
@@ -210,7 +211,7 @@ test('expOrb/update: an expired orb stops updating before touching the player', 
     // and could be collected twice in the same frame.
     const orb = new ExpOrb(0, 0, 5);
     let touched = false;
-    const game = {
+    const game = makeGameStub({
         player: {
             x: 0,
             y: 0,
@@ -219,7 +220,7 @@ test('expOrb/update: an expired orb stops updating before touching the player', 
                 touched = true;
             }
         }
-    };
+    });
     orb.update(CONFIG.EXP_ORB_LIFETIME + 1, game);
     assert.equal(orb.shouldRemove, true);
     assert.equal(touched, false, 'an expired orb must not grant experience');
@@ -231,7 +232,7 @@ test('expOrb/update: collecting grants experience, feedback, sound and a counter
     const sounds = [];
     const run: Record<string, any> = {};
     const orb = new ExpOrb(10, 10, 7);
-    const game = {
+    const game = makeGameStub({
         player: {
             x: 12,
             y: 10,
@@ -241,7 +242,7 @@ test('expOrb/update: collecting grants experience, feedback, sound and a counter
         createFloatingText: (...a) => floaters.push(a),
         audio: { pickup: () => sounds.push('pickup') },
         run
-    };
+    });
 
     orb.update(0.016, game);
 
@@ -255,19 +256,19 @@ test('expOrb/update: collecting grants experience, feedback, sound and a counter
 
 test('expOrb/update: collection works without a run object', () => {
     const orb = new ExpOrb(0, 0, 3);
-    const game = {
+    const game = makeGameStub({
         player: { x: 1, y: 0, getMagnetRange: () => 120, gainExp: () => {} },
         createFloatingText: () => {},
         audio: { pickup: () => {} },
         run: null
-    };
+    });
     assert.doesNotThrow(() => orb.update(0.016, game));
     assert.equal(orb.shouldRemove, true);
 });
 
 test('expOrb/update: an orb inside magnet range accelerates toward the player', () => {
     const orb = new ExpOrb(200, 0, 5);
-    const game = { player: { x: 0, y: 0, getMagnetRange: () => 1000 } };
+    const game = makeGameStub({ player: { x: 0, y: 0, getMagnetRange: () => 1000 } });
     const startX = orb.x;
 
     orb.update(0.016, game);
@@ -278,14 +279,14 @@ test('expOrb/update: an orb inside magnet range accelerates toward the player', 
 test('expOrb/update: magnet speed is capped', () => {
     const orb = new ExpOrb(2000, 0, 5);
     // Player far enough away to stay outside PICKUP_DISTANCE for many ticks.
-    const game = { player: { x: 0, y: 0, getMagnetRange: () => 5000 } };
+    const game = makeGameStub({ player: { x: 0, y: 0, getMagnetRange: () => 5000 } });
     for (let i = 0; i < 200; i++) orb.update(0.016, game);
     assert.ok(orb.magnetSpeed <= 560, `magnet speed must cap at 560, got ${orb.magnetSpeed}`);
 });
 
 test('expOrb/update: an orb beyond magnet range sits still', () => {
     const orb = new ExpOrb(5000, 0, 5);
-    const game = { player: { x: 0, y: 0, getMagnetRange: () => 120 } };
+    const game = makeGameStub({ player: { x: 0, y: 0, getMagnetRange: () => 120 } });
     orb.update(0.016, game);
     assert.equal(orb.x, 5000, 'out of range means stationary');
     assert.equal(orb.magnetSpeed, 0);

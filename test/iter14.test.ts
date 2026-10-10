@@ -21,6 +21,7 @@ import { _resetStorageForTests, getTouchButtonScale, loadSave, resetSave } from 
 import { BOSSES, PASSIVES, WEAPONS } from '../src/data.ts';
 import { Player } from '../src/entities.ts';
 import { Weapon } from '../src/weapons.ts';
+import { makeGameStub } from './helpers/game-stub.ts';
 
 // ---------------------------------------------------------------------------
 // Tundra stage
@@ -240,7 +241,7 @@ test('iter14 passives: Bulwark scales taken damage in takeDamage', () => {
     p.hp = 100;
     // 2 stacks × 0.08 = 0.16 reduction → 100 raw becomes 100 × 0.84 = 84.
     p.passives['damage_reduction'] = { def: PASSIVES.DAMAGE_REDUCTION, count: 2 };
-    p.takeDamage(100, { run: {} });
+    p.takeDamage(100, makeGameStub({ run: {} }));
     // Allow a 1 HP rounding fuzz from the Math.max(1, …) clamp.
     assert.ok(Math.abs(p.hp - 16) <= 1, `expected ~16 HP remaining, got ${p.hp}`);
 });
@@ -252,7 +253,7 @@ test('iter14 passives: dodge prevents damage entirely when it triggers', () => {
     const orig = Math.random;
     Math.random = () => 0; // always under the chance threshold
     try {
-        p.takeDamage(50, { run: {} });
+        p.takeDamage(50, makeGameStub({ run: {} }));
     } finally {
         Math.random = orig;
     }

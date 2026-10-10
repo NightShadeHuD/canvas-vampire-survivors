@@ -7,16 +7,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Player } from '../src/entities.ts';
+import { makeGameStub } from './helpers/game-stub.ts';
 import { CONFIG } from '../src/config.ts';
 
 // Minimal game scaffold that satisfies what Player.update touches.
-function makeGame(moveVec = { x: 0, y: 0 }) {
-    return {
+function makeGame(moveVec: { x: number; y: number } = { x: 0, y: 0 }) {
+    return makeGameStub({
         input: {
             getMoveVector: () => moveVec
         },
         run: { longestUnhit: 0 }
-    };
+    });
 }
 
 test('Player: starts at the position passed to constructor', () => {

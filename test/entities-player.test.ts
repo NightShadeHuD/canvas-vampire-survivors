@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import { Player } from '../src/entities.ts';
 import { CONFIG } from '../src/config.ts';
 import { PASSIVES } from '../src/data.ts';
+import { makeGameStub } from './helpers/game-stub.ts';
 
 /** Run `fn` with Math.random pinned, restoring it afterwards. */
 function withRandom(value, fn) {
@@ -30,15 +31,18 @@ function withRandom(value, fn) {
 }
 
 /** The minimum `game` bag Player.update / takeDamage expect. */
-function makeGame(overrides = {}) {
-    return {
+function makeGame(overrides: object = {}) {
+    // A partial `Game`, declared once through the shared stub. The object below is
+    // deliberate -- a unit test of `takeDamage` needs five members, not a running
+    // game -- and `makeGameStub` is where that decision is recorded and counted.
+    return makeGameStub({
         input: { getMoveVector: () => ({ x: 0, y: 0 }) },
         stageMods: null,
         run: null,
         createFloatingText: () => {},
         onPlayerHurt: () => {},
         ...overrides
-    };
+    });
 }
 
 /** Stack a real passive to its maximum. */

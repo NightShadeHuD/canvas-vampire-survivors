@@ -33,6 +33,7 @@ import {
     expandFrames
 } from '../src/replay.ts';
 import { availableLocales, getLocale, setLocale, t } from '../src/i18n.ts';
+import { makeGameStub } from './helpers/game-stub.ts';
 
 // ---------------------------------------------------------------------------
 // 1. Arena boundary clamp — corners must never be exceeded.
@@ -42,11 +43,11 @@ test('iter16 boundary: player at (0, 0) clamps inward to (size, size)', () => {
     // Fake game with a no-op input vector so update() doesn't push the player
     // further; the clamp at the end of update() should still snap the
     // position to the arena edge minus the player radius.
-    const fakeGame = {
+    const fakeGame = makeGameStub({
         input: { getMoveVector: () => ({ x: 0, y: 0 }) },
         run: {},
         stageMods: null
-    };
+    });
     p.update(0, fakeGame);
     assert.equal(p.x, p.size, 'x clamps to size');
     assert.equal(p.y, p.size, 'y clamps to size');
@@ -56,11 +57,11 @@ test('iter16 boundary: player at (ARENA_MAX, ARENA_MAX) clamps inward', () => {
     const W = CONFIG.ARENA_WIDTH;
     const H = CONFIG.ARENA_HEIGHT;
     const p = new Player(W * 2, H * 2);
-    const fakeGame = {
+    const fakeGame = makeGameStub({
         input: { getMoveVector: () => ({ x: 0, y: 0 }) },
         run: {},
         stageMods: null
-    };
+    });
     p.update(0, fakeGame);
     assert.equal(p.x, W - p.size);
     assert.equal(p.y, H - p.size);
@@ -68,11 +69,11 @@ test('iter16 boundary: player at (ARENA_MAX, ARENA_MAX) clamps inward', () => {
 
 test('iter16 boundary: pushing further into the wall does not double-clamp', () => {
     const p = new Player(CONFIG.ARENA_WIDTH - 1, CONFIG.ARENA_HEIGHT - 1);
-    const fakeGame = {
+    const fakeGame = makeGameStub({
         input: { getMoveVector: () => ({ x: 1, y: 1 }) }, // pushing into the corner
         run: {},
         stageMods: null
-    };
+    });
     // Several frames worth of pushing should hold against the wall.
     for (let i = 0; i < 60; i++) p.update(1 / 60, fakeGame);
     assert.equal(p.x, CONFIG.ARENA_WIDTH - p.size);
@@ -81,11 +82,11 @@ test('iter16 boundary: pushing further into the wall does not double-clamp', () 
 
 test('iter16 boundary: negative input on a corner does not punch through', () => {
     const p = new Player(0, 0);
-    const fakeGame = {
+    const fakeGame = makeGameStub({
         input: { getMoveVector: () => ({ x: -10, y: -10 }) },
         run: {},
         stageMods: null
-    };
+    });
     p.update(1 / 60, fakeGame);
     assert.equal(p.x, p.size);
     assert.equal(p.y, p.size);
