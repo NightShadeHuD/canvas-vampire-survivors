@@ -1,0 +1,14 @@
+; Engine configuration file.
+; Generated from the TypeScript sources -- see docs/GODOT-PORT.md.
+
+config_version=5
+
+[application]
+
+config/name="Canvas Vampire Survivors"
+config/description="A Godot port of the canvas-vampire-survivors codebase."
+run/main_scene=""
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"

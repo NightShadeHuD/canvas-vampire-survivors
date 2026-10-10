@@ -251,6 +251,7 @@
         "test/game-render.test.ts": "ce4486f14b28d0a5",
         "test/game.test.ts": "092fce21588931d1",
         "test/gate-input.test.ts": "4b41afd655b1e92c",
+        "test/godot-export.test.ts": "4af01802b4fe435e",
         "test/isolation-compare.test.ts": "c16b9f29586fb059",
         "test/iter13.test.ts": "3c0cb2889c95ec9c",
         "test/iter14.test.ts": "3eebaaeb2f54178b",
