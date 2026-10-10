@@ -42,6 +42,7 @@ import { Pool, resetFloatingText, resetParticle } from './pool.ts';
 import { EffectLayer } from './effects.ts';
 import { AchievementTracker } from './achievements.ts';
 import type { AchievementRun } from './achievements.ts';
+import type { SaveData } from './storage.ts';
 import {
     SeededRng,
     accumulateTotals,
@@ -51,7 +52,9 @@ import {
     recordHighScore,
     recordSpeedrunScore,
     resetSave,
-    saveSave
+    saveSave,
+    DEFAULT_SAVE,
+    structuredCloneCompat
 } from './storage.ts';
 import { setLocale, t as _t } from './i18n.ts';
 import {
@@ -137,7 +140,7 @@ export class Game {
     declare replayPlayer: ReplayPlayer | null;
     declare replayRecorder: ReplayRecorder | null;
     declare run: AchievementRun;
-    declare save: Record<string, any>;
+    declare save: SaveData;
     declare spatial: SpatialHash;
     declare speedrunMode: boolean;
     declare speedrunRng: SeededRng | null;
@@ -150,6 +153,26 @@ export class Game {
     declare state: string;
     declare tutorial: TutorialState;
     declare ui: UI;
+    /**
+     * Create `save.flags` if an older save predates it.
+     *
+     * This replaces `this.save.flags = this.save.flags || {}` in six places.
+     * That expression was the whole reason `save` could not be typed: `flags` is
+     * an object, so `flags || {}` produces a union with `{}`, and `{}` is missing
+     * every property — which is exactly the error a real save type reported, eight
+     * times over.
+     *
+     * Written as an `if` rather than `||=` or `??=` on purpose: neither operator
+     * exists in GDScript, so every one of them would be another site the port has
+     * to rewrite. `docs/SHORTCUTS.md` counts them, and this lowers that count
+     * rather than raising it.
+     */
+    ensureFlags(): void {
+        if (!this.save.flags) {
+            this.save.flags = { howToSeen: false, pwaPromptSeen: false, tutorialDone: false };
+        }
+    }
+
     constructor() {
         this.canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
         this.ctx = this.canvas.getContext('2d');
@@ -282,7 +305,7 @@ export class Game {
         if (!this.save?.flags?.howToSeen) {
             Promise.resolve().then(() => {
                 this.ui.showHowToPlay(() => {
-                    this.save.flags = this.save.flags || {};
+                    this.ensureFlags();
                     this.save.flags.howToSeen = true;
                     saveSave(this.save);
                     // After the how-to-play closes, offer the interactive
@@ -517,7 +540,7 @@ export class Game {
         const dismissBtn = document.getElementById('pwaInstallDismiss');
         if (!banner || !installBtn || !dismissBtn) return;
         const markSeen = () => {
-            this.save.flags = this.save.flags || {};
+            this.ensureFlags();
             this.save.flags.pwaPromptSeen = true;
             saveSave(this.save);
             banner.style.display = 'none';
@@ -750,7 +773,7 @@ export class Game {
 
     openHowToPlay() {
         this.ui.showHowToPlay(() => {
-            this.save.flags = this.save.flags || {};
+            this.ensureFlags();
             this.save.flags.howToSeen = true;
             saveSave(this.save);
         });
@@ -779,7 +802,7 @@ export class Game {
         }
         const dismiss = () => {
             overlay.style.display = 'none';
-            this.save.flags = this.save.flags || {};
+            this.ensureFlags();
             this.save.flags.tutorialDone = true;
             saveSave(this.save);
         };
@@ -823,7 +846,7 @@ export class Game {
                     e.preventDefault();
                     this.tutorial.skip();
                     this._renderTutorialBanner();
-                    this.save.flags = this.save.flags || {};
+                    this.ensureFlags();
                     this.save.flags.tutorialDone = true;
                     saveSave(this.save);
                     window.removeEventListener('keydown', onKey, true);
@@ -852,7 +875,7 @@ export class Game {
             banner.style.display = 'none';
             // If the tutorial just completed cleanly, persist the flag.
             if (this.tutorial.completed) {
-                this.save.flags = this.save.flags || {};
+                this.ensureFlags();
                 this.save.flags.tutorialDone = true;
                 saveSave(this.save);
                 this._announce(_t('tutorialDone'));
@@ -985,7 +1008,10 @@ export class Game {
         // of weapon ids at death. If we haven't seen this combination before,
         // append it. Hard-cap the array at SEEN_BUILDS_CAP (1000) to keep the
         // save under a reasonable byte budget — older keys roll out FIFO.
-        this.save.totals ??= { kills: 0, timePlayed: 0, runs: 0, bossKills: 0 };
+        // Derived from the default rather than re-typed, so a field added to
+        // DEFAULT_SAVE.totals cannot be forgotten here. That is exactly how
+        // `seenBuilds` and `uniqueBuilds` went undeclared for so long.
+        this.save.totals ??= structuredCloneCompat(DEFAULT_SAVE.totals);
         this.save.totals.seenBuilds ??= [];
         const buildKey = this.player.weapons
             .map((w) => w.id)

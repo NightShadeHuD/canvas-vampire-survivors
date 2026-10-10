@@ -16,7 +16,20 @@
 
 import { CONFIG, SPEEDRUN_STORAGE_KEY, STORAGE_KEY } from './config.ts';
 
-const DEFAULT_SAVE = {
+/**
+ * The shape of one leaderboard entry.
+ *
+ * Named because `highScores: []` infers as `never[]`, so `typeof DEFAULT_SAVE`
+ * alone would produce a save type whose leaderboard arrays can hold nothing.
+ */
+export interface HighScore {
+    kills: number;
+    timeSurvived: number;
+    level: number;
+    date: number;
+}
+
+export const DEFAULT_SAVE = {
     // Legacy single-slot best-of. Kept for backwards compatibility with v2.0 saves.
     highScore: {
         kills: 0,
@@ -24,19 +37,29 @@ const DEFAULT_SAVE = {
         level: 1
     },
     // v2.1: top-N leaderboard and cumulative stats.
-    highScores: [], // { kills, timeSurvived, level, date (epoch ms) }
+    highScores: [] as HighScore[],
     totals: {
         kills: 0,
         timePlayed: 0,
         runs: 0,
-        bossKills: 0
+        bossKills: 0,
+        // These two were PERSISTED WITHOUT BEING DECLARED. `main.ts` writes them
+        // lazily -- `this.save.totals.seenBuilds ??= []` -- so a save carried them
+        // and the format never said so. Nothing noticed while the save object was
+        // `Record<string, any>`; giving it a real type reported them immediately,
+        // which is precisely the defect row 4 of `docs/SHORTCUTS.md` was waiting
+        // for ("the first defect traced to a save field that a type would have
+        // caught"). `seenBuilds` is a FIFO list of weapon combinations already
+        // seen, capped by `CONFIG.SEEN_BUILDS_CAP`; `uniqueBuilds` is its length.
+        seenBuilds: [] as string[],
+        uniqueBuilds: 0
     },
     achievements: {} as Record<string, number>,
     // v2.6 (iter-12): per-stage leaderboards. Each key is a stage id; the
     // value is a top-N array shaped like `highScores`. The legacy global
     // `highScores` field is retained as the union-of-all-stages view so old
     // UI paths keep working.
-    stageHighScores: {},
+    stageHighScores: {} as Record<string, HighScore[]>,
     settings: {
         masterVolume: 0.6,
         sfxVolume: 0.8,
@@ -99,7 +122,7 @@ function usableLS() {
 // The save object is assembled by mergeDeep, which erases DEFAULT_SAVE's
 // shape. Returning the loose record is honest about that; giving saves a real
 // interface is Phase B work.
-export function loadSave(): Record<string, any> {
+export function loadSave(): SaveData {
     try {
         const raw = usableLS() ? window.localStorage.getItem(STORAGE_KEY) : memoryFallback;
         if (!raw) return structuredCloneCompat(DEFAULT_SAVE);
@@ -237,14 +260,26 @@ export function structuredCloneCompat(obj) {
     return JSON.parse(JSON.stringify(obj));
 }
 
-export function mergeDeep(target, source) {
-    for (const key of Object.keys(source)) {
-        if (Array.isArray(source[key])) {
-            target[key] = source[key];
-        } else if (source[key] && typeof source[key] === 'object') {
-            target[key] = mergeDeep(target[key] ?? {}, source[key]);
+/**
+ * The save format, DERIVED from the default rather than declared beside it.
+ *
+ * `typeof DEFAULT_SAVE` cannot drift from `DEFAULT_SAVE`, which a hand-written
+ * interface could — and a save interface that disagrees with the default is worse
+ * than none, because it type-checks and lies.
+ */
+export type SaveData = typeof DEFAULT_SAVE;
+
+export function mergeDeep<T extends object>(target: T, source: object): T {
+    const into = target as Record<string, unknown>;
+    const from = source as Record<string, unknown>;
+    for (const key of Object.keys(from)) {
+        const value = from[key];
+        if (Array.isArray(value)) {
+            into[key] = value;
+        } else if (value && typeof value === 'object') {
+            into[key] = mergeDeep((into[key] ?? {}) as object, value);
         } else {
-            target[key] = source[key];
+            into[key] = value;
         }
     }
     return target;
