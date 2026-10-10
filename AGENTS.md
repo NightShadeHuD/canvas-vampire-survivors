@@ -117,6 +117,21 @@ npx playwright install chromium   # only needed for the browser gates
 npm run setup                     # installs the git hooks
 ```
 
+**Re-run `npx playwright install chromium` after any Playwright upgrade.** The
+browser is versioned with the library, so a bump leaves the old binary in place
+and the new one missing. The failure is loud but misleading — `verify` passes all
+20 gates and then stops at
+
+```
+boot-smoke: could not launch Chromium — Executable doesn't exist at
+  .../chromium_headless_shell-1243/...
+```
+
+— which reads like a broken gate rather than a missing download. **CI is unaffected
+because `verify:all`'s workflow step installs the browser every run**, which is
+why a green PR is not evidence that a local checkout works. Hit for real when
+Playwright went 1.59 to 1.63.
+
 ---
 
 ## What is enforced, and by what
