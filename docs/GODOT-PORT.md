@@ -80,6 +80,45 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### XP and the level-up pick — it is a survivors game now
+
+Kill a foe, an orb drops where it fell, it flies to you once you are close enough,
+and the bar fills. Fill it and **the run pauses** on three offers you choose between.
+
+Ported from the original rather than invented:
+
+| Ported                                          | From             | Note                                                                                   |
+| ----------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| `expToNext` 50, `*1.2` floored per level        | `Player.gainExp` | asserted against those numbers, not against this code\'s output                        |
+| Level-up heals 20, capped at max                | same             | the difference between a reward and a lifeline                                         |
+| Orb magnet: 600/s² capped at 560/s              | `ExpOrb.update`  | an orb accelerates rather than flying at a fixed speed                                 |
+| Two radii — magnet 120, pickup 24               | `CONFIG`         | collapsed into one, an orb is banked the instant it is pulled and never appears to fly |
+| `buildUpgradePool` live/maxed split, pick 3     | `src/ui.ts`      | maxed options only surface when live ones run out                                      |
+| Labels `(New!)` / `(Lv.2)` / `(x3)` / `(MAXED)` | same             |                                                                                        |
+
+```
+  ok   50 xp is a level              ok   an orb inside the magnet moves toward the hero
+  ok   the next costs 60             ok   one outside the magnet stays put
+  ok   then 72                       ok   one inside the pickup is collected
+  ok   a level heals 20              ok   three offers, all distinct
+  ok   and never past max            ok   taking a weapon again LEVELS it
+  ok   a kill drops an orb           ok   without adding a duplicate
+```
+
+That last pair is the bug worth having a test for: **taking the same weapon twice must
+level it, not add a second copy** — otherwise a three-weapon build silently becomes
+eleven of the same knife.
+
+### A test that was wrong and looked like a bug
+
+The pause check first reported `FAIL and the run PAUSES for it (-1 frames frozen)`.
+The pause was fine. **The test compared the clock against one baseline captured at the
+first offer**, so the legitimate resume after a pick read as the sim running on.
+
+It now tracks the _transition_ into and out of each offer. Worth recording because
+the failure was indistinguishable from the bug it was testing for, and the instinct
+was to go and change working code.
+
 ### The hero was immortal, and the test that found it
 
 `verify_play.gd` plays the SCENE for ninety seconds — real `_process`, real `_draw`,
