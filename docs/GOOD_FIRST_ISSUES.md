@@ -14,7 +14,7 @@ section verbatim into a fresh GitHub Issue and tag it `good first issue`.
 
 ## 1. Add a Spanish (`es`) translation
 
-**Scope**: localisation · **Files**: `src/i18n.js`
+**Scope**: localisation · **Files**: `src/i18n.ts`
 **Why it's friendly**: the file is one flat object per locale; copy the `en`
 block, rename to `es`, translate values, done. No build step.
 
@@ -35,7 +35,7 @@ Same scope as #1, with one extra check: confirm `<html lang>` becomes
 
 ## 3. Settings: remember last-played difficulty as default per-locale
 
-**Scope**: storage · **Files**: `src/storage.js`, `src/main.js`
+**Scope**: storage · **Files**: `src/storage.ts`, `src/main.ts`
 **Acceptance**:
 
 - `save.settings.difficulty` persists exactly as today (no behaviour change
@@ -47,7 +47,7 @@ Same scope as #1, with one extra check: confirm `<html lang>` becomes
 
 ## 4. Replace one synth SFX with a free CC0 wav
 
-**Scope**: audio · **Files**: `src/audio.js`, optional new
+**Scope**: audio · **Files**: `src/audio.ts`, optional new
 `docs/audio-credits.md`
 **Acceptance**:
 
@@ -61,7 +61,7 @@ Same scope as #1, with one extra check: confirm `<html lang>` becomes
 
 ## 5. Add a "Forest" colourway to the in-game theme
 
-**Scope**: visual · **Files**: `styles.css`, `src/main.js` (background gradient)
+**Scope**: visual · **Files**: `styles.css`, `src/main.ts` (background gradient)
 **Acceptance**:
 
 - New radio in Settings: "Theme" (Default / Forest / Dusk).
@@ -74,7 +74,7 @@ Same scope as #1, with one extra check: confirm `<html lang>` becomes
 
 ## 6. Pause icon button visible in the top-right corner on touch devices
 
-**Scope**: UX · **Files**: `index.html`, `styles.css`, `src/ui.js`
+**Scope**: UX · **Files**: `index.html`, `styles.css`, `src/ui.ts`
 **Acceptance**:
 
 - The on-canvas DOM overlay shows a `⏸` button only when
@@ -86,7 +86,7 @@ Same scope as #1, with one extra check: confirm `<html lang>` becomes
 
 ## 7. Show the seed string on the Speedrun result screen
 
-**Scope**: UI polish · **Files**: `src/ui.js`
+**Scope**: UI polish · **Files**: `src/ui.ts`
 **Acceptance**:
 
 - After a Speedrun ends, the game-over card displays
@@ -123,7 +123,7 @@ Same scope as #1, with one extra check: confirm `<html lang>` becomes
 
 ## 10. Add `data-build-id` to the body so DevTools can confirm the live version
 
-**Scope**: ops · **Files**: `index.html`, `src/config.js`
+**Scope**: ops · **Files**: `index.html`, `src/config.ts`
 **Acceptance**:
 
 - `<body data-build-id="2.5.0">` is set from `CONFIG.VERSION` at boot.

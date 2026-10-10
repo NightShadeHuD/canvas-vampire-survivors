@@ -14,6 +14,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { noticesIn } from './lib/gate-input.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -28,6 +29,10 @@ const STEPS = [
         proves: 'lint, format and test discovery actually reach every file'
     },
     { script: 'typecheck', proves: 'the TypeScript config is valid and the tree parses' },
+    {
+        script: 'check:strict',
+        proves: 'no strict flag this project already enabled has been turned back off'
+    },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     {
@@ -38,6 +43,14 @@ const STEPS = [
         script: 'check:assertions',
         proves: 'no assertion was weakened since the base revision'
     },
+    {
+        script: 'check:register',
+        proves: 'every declared shortcut is bounded, tracked and correctly cited'
+    },
+    {
+        script: 'check:docs',
+        proves: 'rule docs hold: tables, citations, acceptance criteria'
+    },
     { script: 'test:clock', proves: 'no test depends on today’s date' },
     { script: 'check:baseline', proves: 'no new failures, no stale baseline entries' },
     {
@@ -45,7 +58,19 @@ const STEPS = [
         proves: 'measured code coverage has not fallen below its recorded floors'
     },
     { script: 'check:suppressions', proves: 'every suppression is within its declared ceiling' },
+    {
+        script: 'check:types',
+        proves: 'the use of `any` has not grown — the port-readiness metric'
+    },
+    {
+        script: 'check:ports',
+        proves: 'the Godot transform has not grown — error and SILENT hazards'
+    },
     { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' },
+    {
+        script: 'check:destructive',
+        proves: 'no committed tooling rewrites source with an unanchored substitution'
+    },
     { script: 'build', proves: 'the shipped browser artifact compiles' }
 ];
 
@@ -64,6 +89,8 @@ const gaps = declaredGaps();
 console.log(`verify: running ${STEPS.length} gates\n`);
 
 const failures = [];
+/** Gates that passed while reporting they had nothing to check. */
+const notCheckingAnything = [];
 
 for (const [i, step] of STEPS.entries()) {
     const label = step.script.padEnd(20);
@@ -78,7 +105,21 @@ for (const [i, step] of STEPS.entries()) {
     const ms = Date.now() - started;
     const ok = result.status === 0;
 
-    console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label} ${String(ms).padStart(6)} ms   ${step.proves}`);
+    // A gate that legitimately had nothing to check says so with a NOTICE line.
+    // It PASSES — "no shortcuts are declared yet" is a real state — but the run
+    // reports how many did, so "passed" is never mistaken for "verified
+    // everything". The scaffold's closing line is the model:
+    //   "ALL 12 GATES PASSED (3 skipped as unconfigured — each is a rule this
+    //    project does not yet check)"
+    const notices = ok ? noticesIn(`${result.stdout || ''}${result.stderr || ''}`) : [];
+    if (notices.length) {
+        for (const text of notices) notCheckingAnything.push({ step: step.script, text });
+    }
+
+    console.log(
+        `  ${ok ? 'ok  ' : 'FAIL'} ${label} ${String(ms).padStart(6)} ms   ${step.proves}` +
+            (notices.length ? '  (checked nothing — see below)' : '')
+    );
 
     if (!ok) {
         const output = `${result.stdout || ''}${result.stderr || ''}`;
@@ -101,7 +142,18 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
-console.log('\nverify: all gates passed.');
+if (notCheckingAnything.length > 0) {
+    console.log(
+        `\nverify: all ${STEPS.length} gates passed, ${notCheckingAnything.length} of which ` +
+            'checked nothing:'
+    );
+    for (const { step, text } of notCheckingAnything) {
+        console.log(`  - ${step}: ${text}`);
+    }
+    console.log('  Each is a rule this project does not yet have anything to apply to.');
+} else {
+    console.log(`\nverify: all ${STEPS.length} gates passed, and every one checked something.`);
+}
 
 if (gaps.length > 0) {
     console.log(`\nDeclared gaps still open (${gaps.length}) — tracked, not forgotten:`);

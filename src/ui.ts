@@ -485,7 +485,9 @@ export class UI {
                 window.dispatchEvent(ev);
             } catch (err) {
                 console.warn('[ui] Import JSON parse failed', err);
-                ta.value = 'Invalid JSON: ' + err.message;
+                // `unknown`, not `any`: anything can be thrown, and a non-Error
+                // has no `.message`.
+                ta.value = 'Invalid JSON: ' + (err instanceof Error ? err.message : String(err));
             }
         });
     }

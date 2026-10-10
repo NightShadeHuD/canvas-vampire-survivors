@@ -6,16 +6,16 @@ change a value, update both to keep reviewers happy.
 
 ## Global scaling
 
-| Constant                    | Value                                                                         | Notes                                           |
-| --------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------- |
-| `PLAYER_SPEED`              | 240                                                                           | pixels / second                                 |
-| `INVINCIBILITY_TIME`        | 0.5 s                                                                         | i-frames after taking damage                    |
-| `WEAPON_MAX_LEVEL`          | 5                                                                             | level 5 triggers evolution for eligible weapons |
-| `PASSIVE_MAX_STACK`         | 5                                                                             | stacks per passive                              |
-| `MAGNET_BASE`               | 120                                                                           | base pickup radius                              |
-| `HIGHSCORE_SLOTS`           | 10                                                                            | leaderboard depth                               |
-| `MAX_ENEMIES`               | 300                                                                           | hard cap per frame                              |
-| Difficulty hp / dmg / spawn | Easy 0.75/0.75/0.8 · Normal 1.0 · Hard 1.3/1.25/1.25 · Nightmare 1.75/1.5/1.6 |
+| Constant                    | Value                                                                         | Notes                                               |
+| --------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------- |
+| `PLAYER_SPEED`              | 240                                                                           | pixels / second                                     |
+| `INVINCIBILITY_TIME`        | 0.5 s                                                                         | i-frames after taking damage                        |
+| `WEAPON_MAX_LEVEL`          | 5                                                                             | level 5 triggers evolution for eligible weapons     |
+| `PASSIVE_MAX_STACK`         | 5                                                                             | stacks per passive                                  |
+| `MAGNET_BASE`               | 120                                                                           | base pickup radius                                  |
+| `HIGHSCORE_SLOTS`           | 10                                                                            | leaderboard depth                                   |
+| `MAX_ENEMIES`               | 300                                                                           | hard cap per frame                                  |
+| Difficulty hp / dmg / spawn | Easy 0.75/0.75/0.8 · Normal 1.0 · Hard 1.3/1.25/1.25 · Nightmare 1.75/1.5/1.6 | hp / damage / spawn-rate multipliers, in that order |
 
 Time-scaling: every 60 s in a run, enemy HP + damage both multiply by 1.3×
 (`timeDiff = 1 + floor(gameTime/60) * 0.3`).

@@ -43,6 +43,29 @@
         "allowJs": true,
         "checkJs": false,
 
+        /* --- Strictness, enabled flag by flag ------------------------------
+         * `strict` is a bundle of eight flags and they are NOT equally hard, so
+         * they are switched on individually rather than all at once. Measured,
+         * with each enabled alone: alwaysStrict 0 errors, strictBindCallApply 0,
+         * strictFunctionTypes 0, noImplicitThis 1, useUnknownInCatchVariables 1,
+         * strictNullChecks 363, noImplicitAny 809. strictPropertyInitialization
+         * is 1 but cannot be set without strictNullChecks.
+         *
+         * The five below are therefore ON, and two paid for themselves at once:
+         * noImplicitThis found a bare `this` passed where the entity was meant —
+         * a TypeError every frame a player held garlic. useUnknownInCatchVariables
+         * found a catch block reading `.message` off an unknown.
+         *
+         * The remaining two are declared in docs/SHORTCUTS.md with ceilings in
+         * quality-baseline.json. When both reach zero, `strict` replaces this. */
+        "alwaysStrict": true,
+        "strictBindCallApply": true,
+        "strictFunctionTypes": true,
+        "noImplicitThis": true,
+        "useUnknownInCatchVariables": true,
+        "strictNullChecks": false,
+        "noImplicitAny": false,
+
         "noEmit": true
     },
     "include": ["src/**/*.js", "src/**/*.ts", "test/**/*.js", "test/**/*.ts"]

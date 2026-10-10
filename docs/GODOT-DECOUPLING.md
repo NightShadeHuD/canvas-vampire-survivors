@@ -1,5 +1,9 @@
 # Decoupling game logic from DOM and canvas
 
+> **See also [`GODOT-PORT-RESEARCH.md`](./GODOT-PORT-RESEARCH.md)** — what the port
+> actually involves now the tooling has been researched: a TypeScript-to-GDScript
+> converter exists, and the syntax sites needing transformation are inventoried there.
+
 **Status: entities and the game render path are decoupled. Complete.**
 
 Outcome, measured:
