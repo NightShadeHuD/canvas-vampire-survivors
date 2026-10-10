@@ -20,7 +20,7 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 81.02,
+            "lines": 81.06,
             "branches": 84.16,
             "functions": 71.91
         },
@@ -212,7 +212,7 @@
             }
         }
     },
-    "testCountFloor": 814,
+    "testCountFloor": 816,
     "anyCeiling": 131,
     "_anyCeilingNote": "Raised 118 -> 137 to admit test/type-coverage.test.ts, whose FIXTURES are necessarily full of `any` \u2014 it tests the tool that counts them. Every one of the 19 added uses is a string literal fixture, not a type in shipped code. The ceiling may still only fall from here; this is a declared, bounded exception rather than a drift.",
     "portCeilings": {
@@ -223,7 +223,7 @@
         "test/a11y-dialogs.test.ts": "18741eba7d7390a8",
         "test/a11y-lists.test.ts": "9a66d05b15c93fad",
         "test/achievements.test.ts": "3b543bc082acad6e",
-        "test/annotate.test.ts": "2dfb4fc42c895fb0",
+        "test/annotate.test.ts": "23b52250208f5bb2",
         "test/assertion-diff.test.ts": "1c169181178e889d",
         "test/audio.test.ts": "7f6abd33bd8de603",
         "test/baseline-file.test.ts": "a50c2c7e928109b0",

@@ -26,6 +26,22 @@ import type { WeaponDef } from './weapons.ts';
 // Level 5 triggers a weapon's "evolution" flag (see weapons.ts).
 // ---------------------------------------------------------------------------
 /** An achievement definition. Reward fields are present on few entries. */
+/**
+ * What an achievement's `check` is given: the live game and the run's tally.
+ *
+ * Declared because the interface below carries an index signature, so without
+ * this `check` is `any` and all TWENTY-ONE of its callbacks take an implicitly-any
+ * `c`. Typing the FIELD is what fixes them -- no annotation is needed at any of the
+ * twenty-one call sites, because each `c` infers from here.
+ */
+import type { AchievementRun } from './achievements.ts';
+import type { Game } from './main.ts';
+
+export interface AchievementContext {
+    game: Game;
+    run: AchievementRun;
+}
+
 export interface AchievementDef {
     id: string;
     name: string;
@@ -36,6 +52,8 @@ export interface AchievementDef {
     weapon?: string;
     /** Cosmetic id unlocked by earning this. */
     cosmetic?: string;
+    /** Whether this achievement is earned. */
+    check?: (context: AchievementContext) => boolean;
     [key: string]: any;
 }
 
