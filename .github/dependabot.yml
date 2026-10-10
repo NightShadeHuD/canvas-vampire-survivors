@@ -16,6 +16,19 @@ updates:
       groups:
           dev-dependencies:
               dependency-type: development
+      # TypeScript 7 is refused by typescript-eslint, which declares
+      # `peer typescript@">=4.8.4 <6.1.0"`. Dependabot proposed the major bump and
+      # CI failed in the Install dependencies step -- before any of our code ran --
+      # with `Conflicting peer dependency: typescript@6.0.3`.
+      #
+      # The constraint is upstream and nothing here can fix it, so the choice is
+      # between a permanently-red PR and an ignore. A PR that cannot pass teaches
+      # its reader to skip the PR list, which is how a real one gets missed.
+      # Recorded in docs/SHORTCUTS.md row 6; remove this when typescript-eslint
+      # supports TypeScript 7.
+      ignore:
+          - dependency-name: typescript
+            update-types: ['version-update:semver-major']
 
     - package-ecosystem: github-actions
       directory: /
