@@ -58,6 +58,10 @@ const STEPS = [
         proves: 'measured code coverage has not fallen below its recorded floors'
     },
     { script: 'check:suppressions', proves: 'every suppression is within its declared ceiling' },
+    {
+        script: 'check:types',
+        proves: 'the use of `any` has not grown — the port-readiness metric'
+    },
     { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' },
     {
         script: 'check:destructive',
