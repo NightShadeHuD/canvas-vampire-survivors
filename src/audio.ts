@@ -10,6 +10,7 @@
  * Exports:
  *   - class AudioEngine
  */
+import type { SaveData } from './storage.ts';
 
 export class AudioEngine {
     declare settings: Record<string, any>;
@@ -24,7 +25,11 @@ export class AudioEngine {
     declare unlocked: boolean;
     /** Cached white-noise buffer, built lazily by `_noiseBuffer()`. */
     declare _noise: AudioBuffer | null;
-    constructor(settings) {
+    // PARTIAL, because audio supplies a default for every field it reads and the
+    // callers legitimately pass `{}`. `SaveData['settings']` was tried first and
+    // cascaded to 14 test errors -- the same shape as `achievements.ts`, where the
+    // full save type was rejected by fixtures that build only what they need.
+    constructor(settings: Partial<SaveData['settings']>) {
         this.settings = settings;
         this.ctx = null;
         this.masterGain = null;
@@ -84,7 +89,7 @@ export class AudioEngine {
     }
 
     /** Toggle a global mute (zeroes master gain, leaves volumes intact). */
-    setMuted(flag) {
+    setMuted(flag: boolean) {
         this.settings.muted = !!flag;
         this.applyVolumes();
     }
@@ -267,7 +272,7 @@ export class AudioEngine {
         }
     }
 
-    toggleMusic(on) {
+    toggleMusic(on: boolean) {
         this.settings.musicEnabled = !!on;
         this.applyVolumes();
         if (on) this.startMusic();

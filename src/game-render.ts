@@ -122,7 +122,7 @@ export function renderEnemies(ctx: CanvasRenderingContext2D, game: Game) {
     }
 }
 
-function getEnemySprite(def, size) {
+function getEnemySprite(def: { id: string; color?: string }, size: number) {
     const key = spriteKey(def.id, size);
     const cached = SPRITE_CACHE.get(key);
     if (cached) return cached;
@@ -155,6 +155,6 @@ function getEnemySprite(def, size) {
 /** Cached offscreen sprites, keyed by enemy type and size. */
 const SPRITE_CACHE = new Map();
 
-function spriteKey(id, size) {
+function spriteKey(id: string, size: number) {
     return `${id}@${size}`;
 }

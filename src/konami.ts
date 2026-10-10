@@ -34,7 +34,10 @@ export const KONAMI_SEQUENCE = Object.freeze([
  * Lowercase a KeyboardEvent.key value. Returns '' for non-strings so the
  * detector treats them as a reset rather than crashing the matcher.
  */
-export function normaliseKonamiKey(k) {
+// `unknown`, not `string`: the body's first act is `typeof k !== 'string'`, so this
+// is a VALIDATION function and a caller may hand it anything. The test passes `0`
+// on purpose to prove exactly that.
+export function normaliseKonamiKey(k: unknown) {
     if (typeof k !== 'string' || !k) return '';
     return k.toLowerCase();
 }
@@ -61,7 +64,7 @@ export class KonamiDetector {
      * wrong key happens to match the FIRST sequence step (so a stray
      * arrow up doesn't lose progress when the user hits it twice).
      */
-    push(rawKey) {
+    push(rawKey: string) {
         const k = normaliseKonamiKey(rawKey);
         if (!k) return false;
         const expected = KONAMI_SEQUENCE[this._idx];

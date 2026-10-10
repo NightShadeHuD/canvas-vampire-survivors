@@ -20,7 +20,7 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 81.1,
+            "lines": 81.13,
             "branches": 84.16,
             "functions": 71.91
         },
@@ -156,7 +156,7 @@
                 "functions": 100
             },
             "src/konami.ts": {
-                "lines": 97.96,
+                "lines": 98.02,
                 "branches": 88.89,
                 "functions": 71.43
             },

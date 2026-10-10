@@ -259,7 +259,7 @@ let current = 'en';
 // Map BCP-47-ish identifiers to <html lang> values. Only what we actually ship.
 const HTML_LANG = { en: 'en', zh: 'zh-Hans' };
 
-export function setLocale(loc) {
+export function setLocale(loc: string) {
     if (STRINGS[loc]) current = loc;
     // Keep <html lang> in sync so screen readers, browser translation prompts
     // and CSS `:lang(...)` selectors all match the active UI language.
@@ -273,6 +273,6 @@ export function getLocale() {
 export function availableLocales() {
     return Object.keys(STRINGS);
 }
-export function t(key) {
+export function t(key: string) {
     return (STRINGS[current] && STRINGS[current][key]) || STRINGS.en[key] || key;
 }

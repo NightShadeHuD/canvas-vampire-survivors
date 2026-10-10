@@ -74,7 +74,8 @@ test('iter19 haptics: missing navigator.vibrate is a silent no-op', () => {
     assert.equal(eng.isSupported(), false);
     assert.equal(eng.hurt(), false);
     // Unknown pattern name returns false too.
-    assert.equal(eng.vibrate('nope'), false);
+    // Deliberately not a pattern name: the runtime guard is what is under test.
+    assert.equal(eng.vibrate('nope' as keyof typeof VIBRATION_PATTERNS), false);
 });
 
 test('iter19 haptics: throwing navigator.vibrate is swallowed', () => {
