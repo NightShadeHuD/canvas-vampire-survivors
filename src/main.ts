@@ -140,7 +140,16 @@ export class Game {
     // is not progress.
     declare player: Player | null;
     /** Reusable object pools, keyed by entity name. */
-    declare pools: Record<string, Pool>;
+    // Two keys, two DIFFERENT pool types. `Record<string, Pool<A> | Pool<B>>` was
+    // tried first and failed at four call sites -- `acquire` on a union of pools
+    // takes the INTERSECTION of its parameters, so neither `Particle` nor
+    // `FloatingText` satisfied it. A record whose keys have different types is not
+    // a record of their union, and this is the seventh time in this work that the
+    // shape I reached for was not the shape the values have.
+    declare pools: {
+        floatingText: Pool<FloatingText>;
+        particle: Pool<Particle>;
+    };
     declare projectiles: Projectile[];
     declare raf: number | null;
     declare replayActive: boolean;
@@ -217,11 +226,15 @@ export class Game {
         // Object pools for the churny entities. `prealloc` avoids the
         // first-level burst triggering an allocation cascade.
         this.pools = {
-            floatingText: new Pool(() => new FloatingText('', 0, 0, '#fff'), resetFloatingText, {
-                maxSize: 256,
-                prealloc: 32
-            }),
-            particle: new Pool(() => new Particle(0, 0, '#fff'), resetParticle, {
+            floatingText: new Pool<FloatingText>(
+                () => new FloatingText('', 0, 0, '#fff'),
+                resetFloatingText,
+                {
+                    maxSize: 256,
+                    prealloc: 32
+                }
+            ),
+            particle: new Pool<Particle>(() => new Particle(0, 0, '#fff'), resetParticle, {
                 maxSize: 512,
                 prealloc: 64
             })

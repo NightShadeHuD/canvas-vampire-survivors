@@ -22,7 +22,15 @@
  *   - function resetFloatingText, resetParticle, resetEnemyProjectile
  */
 
-export class Pool {
+/**
+ * An object pool, GENERIC over what it holds.
+ *
+ * The class was untyped, so `factory`, `reset` and every `acquire`/`release` were
+ * implicitly `any` -- eighteen errors in a file whose entire job is moving one
+ * kind of object in and out of a free list. The generic is what the class already
+ * was in practice; this says it.
+ */
+export class Pool<T extends object> {
     /** Creates a blank instance of the pooled type. */
     factory: () => any;
     /** Optional in-place re-initialiser used by `release()`. */
@@ -30,7 +38,7 @@ export class Pool {
     /** Hard cap on retained objects; releases beyond it are dropped. */
     declare maxSize: number;
     /** Recycled instances ready to hand out. */
-    declare free: any[];
+    declare free: T[];
     /** Lifetime totals, exposed for tests and tuning. */
     declare acquired: number;
     declare created: number;
@@ -39,7 +47,11 @@ export class Pool {
      * @param {(obj: any, ...args: any[]) => void} [reset]   re-inits before re-use
      * @param {{ maxSize?: number, prealloc?: number }} [opts]
      */
-    constructor(factory, reset?, opts: Record<string, any> = {}) {
+    constructor(
+        factory: () => T,
+        reset?: (obj: T, ...args: any[]) => void,
+        opts: { maxSize?: number; prealloc?: number } = {}
+    ) {
         if (typeof factory !== 'function') {
             throw new TypeError('Pool: factory must be a function');
         }
@@ -62,7 +74,7 @@ export class Pool {
      * a fresh instance via `factory()`. Any extra args are forwarded to the
      * optional `reset()` re-initialiser — mimic a constructor signature.
      */
-    acquire(...args) {
+    acquire(...args: any[]): T {
         let obj = this.free.pop();
         if (!obj) {
             obj = this.factory();
@@ -74,7 +86,7 @@ export class Pool {
     }
 
     /** Return an object to the pool. Drops the reference if we're at cap. */
-    release(obj) {
+    release(obj: T) {
         if (!obj) return;
         if (this.free.length >= this.maxSize) return;
         this.free.push(obj);
