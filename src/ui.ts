@@ -80,7 +80,13 @@ export class UI {
             'howToPlayScreen',
             'btnStageChip'
         ];
-        for (const id of ids) this.els[id] = document.getElementById(id);
+        for (const id of ids) {
+            // `getElementById` returns `| null` and the type says so. Skipping a
+            // missing element is better than asserting: a typo in an id would
+            // otherwise store a null that fails much later, somewhere else.
+            const el = document.getElementById(id);
+            if (el) this.els[id] = el;
+        }
         // iter-20: harden ARIA on the dynamic overlay hosts. The static
         // overlays in index.html (`startScreen`, `levelUpMenu`, `pauseMenu`,
         // `gameOver`) already declare role+aria-modal at the markup level;
@@ -386,7 +392,13 @@ export class UI {
         };
         m.querySelectorAll<HTMLElement>('[data-replay-speed]').forEach((b) =>
             b.addEventListener('click', () => {
-                const s = parseFloat(b.dataset.replaySpeed) || 1;
+                // `dataset` values are `string | undefined` and `parseFloat`
+                // takes a string. `String(...)` rather than `?? '':` the nullish
+                // operator does not exist in GDScript, so each one is a site the
+                // port must rewrite and `check:ports` refuses it. `String()` is
+                // portable, and `parseFloat('undefined')` is NaN, which the
+                // existing `|| 1` already handles.
+                const s = parseFloat(String(b.dataset.replaySpeed)) || 1;
                 close();
                 onPlay && onPlay(s);
             })
@@ -579,7 +591,7 @@ export class UI {
             }))
         );
         // Passive icons
-        const passives = [];
+        const passives: Array<{ icon: string; level: number; max: number }> = [];
         for (const id in p.passives) {
             const p2 = p.passives[id];
             passives.push({ icon: p2.def.icon, level: p2.count, max: CONFIG.PASSIVE_MAX_STACK });
@@ -1111,12 +1123,41 @@ export class UI {
     }
 }
 
-function buildUpgradePool(player) {
+/**
+ * One selectable upgrade: a weapon or a passive, and which it is.
+ *
+ * Named because `buildUpgradePool` returns a concatenation of two arrays that
+ * were both `const x = []`, so the pool inferred as `never[]` and every reader of
+ * `up.type` and `up.data` — sixteen of them, all in the level-up screen — was
+ * reading a property off a value the compiler had been told could not exist.
+ */
+type WeaponDef = (typeof WEAPONS)[keyof typeof WEAPONS];
+type PassiveDef = (typeof PASSIVES)[keyof typeof PASSIVES];
+
+/**
+ * One selectable upgrade, as a DISCRIMINATED union.
+ *
+ * The discrimination is the point, and it took three attempts to get here:
+ *
+ *   1. `data: { id: string }` — too narrow. The level-up screen reads
+ *      `evolveLevel` and `evolveName` off a weapon.
+ *   2. `data: WeaponDef | PassiveDef` with `type: 'weapon' | 'passive'` — the
+ *      right types, but the two fields were INDEPENDENT, so `up.type === 'weapon'`
+ *      narrowed nothing and the weapon-only reads still failed.
+ *   3. This. `type` and `data` vary TOGETHER, so the check narrows `data` too.
+ *
+ * Both types are DERIVED from the catalogues rather than described, which is the
+ * rule this work keeps relearning: name the type the values have, do not describe
+ * the fields a reader happens to touch.
+ */
+type UpgradeChoice = { type: 'weapon'; data: WeaponDef } | { type: 'passive'; data: PassiveDef };
+
+function buildUpgradePool(player): UpgradeChoice[] {
     // Two tiers: live (selectable) upgrades first, then "maxed" cards as a
     // visible reminder of mastery. The level-up screen still prefers `live`,
     // so the player rarely sees a maxed card unless their build is full.
-    const live = [];
-    const maxed = [];
+    const live: UpgradeChoice[] = [];
+    const maxed: UpgradeChoice[] = [];
     for (const weapon of Object.values(WEAPONS)) {
         const existing = player.weapons.find((w) => w.id === weapon.id);
         if (existing) {
@@ -1153,8 +1194,13 @@ function isUpgradeLive(player, up) {
     return !existing || existing.count < CONFIG.PASSIVE_MAX_STACK;
 }
 
-function pickN(arr, n) {
-    const out = [];
+function pickN<T>(arr: T[], n: number): T[] {
+    // Generic, not annotated locally. `const out = []` infers as `never[]`, and
+    // the sixteen errors it caused were all at the CALLER, reading `.type` and
+    // `.data` off elements the compiler had been told could not exist. Typing the
+    // local would have fixed this call site; making the helper generic fixes every
+    // call site, present and future.
+    const out: T[] = [];
     const copy = arr.slice();
     while (out.length < n && copy.length) {
         const i = Math.floor(Math.random() * copy.length);
