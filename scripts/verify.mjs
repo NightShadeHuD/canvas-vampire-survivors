@@ -62,6 +62,10 @@ const STEPS = [
         script: 'check:types',
         proves: 'the use of `any` has not grown — the port-readiness metric'
     },
+    {
+        script: 'check:ports',
+        proves: 'the Godot transform has not grown — error and SILENT hazards'
+    },
     { script: 'check:hygiene', proves: 'no conflicts, focus marks, debug logs, secrets or bloat' },
     {
         script: 'check:destructive',

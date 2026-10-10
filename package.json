@@ -38,7 +38,8 @@
         "check:docs": "node scripts/check-docs.mjs",
         "check:strict": "node scripts/check-strict.mjs",
         "check:destructive": "node scripts/check-destructive.mjs",
-        "check:types": "node scripts/check-types.mjs"
+        "check:types": "node scripts/check-types.mjs",
+        "check:ports": "node scripts/check-ports.mjs"
     },
     "keywords": [
         "game",

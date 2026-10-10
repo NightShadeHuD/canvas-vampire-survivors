@@ -53,6 +53,10 @@ through unnoticed. Measured across `src/` — 24 modules:
 | default or namespace imports       |   **0** | ✅                                                                          |
 | **total**                          | **327** |                                                                             |
 
+**These figures are now enforced rather than written down.** `npm run check:ports` measures
+them, holds two ceilings that may only fall, and runs in the gate. The counts below are
+`src/` only; the gate covers `src/` and `test/` together, which is why its total is higher.
+
 **`??` and `?.` are 215 of the 327.** They dominate the cost and they are
 entirely mechanical, which means the port's shape is known rather than hoped for.
 
