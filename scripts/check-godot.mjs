@@ -8,10 +8,18 @@
  *   1. `npm run export:godot`  -- the generated files must match `src/data.ts`
  *   2. `res://verify_data.gd`  -- Godot must LOAD them and the values must be right
  *   3. `res://verify_slice.gd` -- the slice must MOVE, SPAWN, KILL and take damage
+ *   4. `res://verify_scene.gd` -- the hero must be VISIBLE, the camera must FOLLOW,
+ *      and the menu must exist and work
  *
  * Step 1 is what stops the two sources of truth drifting. Step 2 is what stops a
  * generated file being valid-looking nonsense. Step 3 is what stops a project that
  * opens being mistaken for a game that runs.
+ *
+ * **Step 4 exists because step 3 was not enough.** The first version shipped with an
+ * invisible hero: no Camera2D, and the hero starts at the centre of a 2400x1600
+ * arena while the viewport is 1152x648. Every check passed, because every check
+ * asserted the SIMULATION and the simulation was right. Nothing asked whether a
+ * human could see it. A test at the wrong level passes while the game is unplayable.
  *
  * If Godot is not installed this SKIPS loudly rather than passing quietly. A check
  * that reports success by not running is worse than no check.
@@ -62,7 +70,8 @@ try {
 
 const checks = [
     ['res://verify_data.gd', 'the generated data loads and the values are right'],
-    ['res://verify_slice.gd', 'the slice moves, spawns, kills and takes damage']
+    ['res://verify_slice.gd', 'the slice moves, spawns, kills and takes damage'],
+    ['res://verify_scene.gd', 'the hero is VISIBLE, the camera follows, the menu works']
 ];
 
 let failed = false;

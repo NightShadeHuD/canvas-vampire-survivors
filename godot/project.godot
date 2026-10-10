@@ -7,6 +7,11 @@ config_version=5
 
 config/name="Canvas Vampire Survivors"
 config/description="A Godot port of the canvas-vampire-survivors codebase."
+config/features=PackedStringArray("4.7", "GL Compatibility")
+run/max_fps=60
+window/size/viewport_width=1152
+window/size/viewport_height=648
+window/stretch/mode="canvas_items"
 run/main_scene="res://scenes/main.tscn"
 
 [rendering]
