@@ -2,6 +2,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { EnemyProjectile, FloatingText, Particle } from '../src/entities.ts';
 import { Pool, resetFloatingText, resetParticle, resetEnemyProjectile } from '../src/pool.ts';
 
 class Box {
@@ -89,7 +90,7 @@ test('Pool: release(null) is a no-op', () => {
 });
 
 test('resetFloatingText: applies all fields including defaults', () => {
-    const obj: Record<string, any> = {};
+    const obj = new FloatingText('', 0, 0, '#fff');
     resetFloatingText(obj, 'hello', 10, 20, '#fff');
     assert.equal((obj as any).text, 'hello');
     assert.equal((obj as any).x, 10);
@@ -101,7 +102,7 @@ test('resetFloatingText: applies all fields including defaults', () => {
 });
 
 test('resetFloatingText: opts override defaults', () => {
-    const obj: Record<string, any> = {};
+    const obj = new FloatingText('', 0, 0, '#fff');
     resetFloatingText(obj, 'boom', 0, 0, '#f00', { crit: true, life: 2, vy: -100 });
     assert.equal((obj as any).crit, true);
     assert.equal((obj as any).life, 2);
@@ -109,7 +110,7 @@ test('resetFloatingText: opts override defaults', () => {
 });
 
 test('resetParticle: sets velocity components from angle+speed', () => {
-    const obj: Record<string, any> = {};
+    const obj = new Particle(0, 0, '#fff');
     resetParticle(obj, 5, 6, '#0f0', { angle: 0, speed: 100 });
     assert.equal((obj as any).x, 5);
     assert.equal((obj as any).y, 6);
@@ -118,7 +119,11 @@ test('resetParticle: sets velocity components from angle+speed', () => {
 });
 
 test('resetEnemyProjectile: resets life + shouldRemove on re-use', () => {
-    const obj = { life: 0, shouldRemove: true };
+    // A real projectile in a SPENT state, which is what "re-use" means here:
+    // the point of the test is that the reset overwrites both fields.
+    const obj = new EnemyProjectile(0, 0, 0, 100, 5);
+    obj.life = 0;
+    obj.shouldRemove = true;
     resetEnemyProjectile(obj, 100, 200, 0, 250, 7);
     assert.equal((obj as any).x, 100);
     assert.equal((obj as any).y, 200);
@@ -160,20 +165,20 @@ test('Pool: default maxSize is 512', () => {
 });
 
 test('resetParticle: zero speed keeps entity stationary', () => {
-    const obj: Record<string, any> = {};
+    const obj = new Particle(0, 0, '#fff');
     resetParticle(obj, 10, 20, '#fff', { angle: 0, speed: 0 });
     assert.equal((obj as any).vx, 0);
     assert.equal((obj as any).vy, 0);
 });
 
 test('resetFloatingText: empty opts leaves weight as default "bold"', () => {
-    const obj: Record<string, any> = {};
+    const obj = new FloatingText('', 0, 0, '#fff');
     resetFloatingText(obj, 'x', 0, 0, '#fff');
     assert.equal((obj as any).weight, 'bold');
 });
 
 test('resetEnemyProjectile: negative angles map to correct velocity signs', () => {
-    const obj: Record<string, any> = {};
+    const obj = new EnemyProjectile(0, 0, 0, 100, 5);
     resetEnemyProjectile(obj, 0, 0, -Math.PI / 2, 100, 5);
     assert.ok(Math.abs(obj.vx) < 1e-6);
     assert.ok(Math.abs(obj.vy + 100) < 1e-6);
