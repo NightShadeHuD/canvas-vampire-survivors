@@ -6,10 +6,17 @@ import assert from 'node:assert/strict';
 import { Weapon } from '../src/weapons.ts';
 import { WEAPONS } from '../src/data.ts';
 import { CONFIG } from '../src/config.ts';
+import { makeEnemyStub, makePlayerStub } from './helpers/game-stub.ts';
+import type { Game } from '../src/main.ts';
 
 // Minimal player that satisfies every getter Weapon touches.
-function makePlayer({ crit = 0, dmgMult = 1, cdMult = 1, areaMult = 1 } = {}) {
-    return {
+function makePlayer({
+    crit = 0,
+    dmgMult = 1,
+    cdMult = 1,
+    areaMult = 1
+}: Record<string, number> = {}) {
+    return makePlayerStub({
         x: 0,
         y: 0,
         passives: {},
@@ -18,13 +25,13 @@ function makePlayer({ crit = 0, dmgMult = 1, cdMult = 1, areaMult = 1 } = {}) {
         getAreaMult: () => areaMult,
         getCritChance: () => crit,
         weapons: []
-    };
+    });
 }
 
 // Minimal game that records floating-text calls.
 function makeGame() {
-    const texts = [];
-    return {
+    const texts: any[] = [];
+    const game = {
         texts,
         createFloatingText(text, x, y, color, opts) {
             texts.push({ text, x, y, color, opts });
@@ -36,6 +43,7 @@ function makeGame() {
         mines: [],
         player: undefined
     };
+    return game as unknown as Game & { texts: any[] };
 }
 
 test('Weapon: starts at level 1', () => {
@@ -196,7 +204,7 @@ test('Weapon: config WEAPON_MAX_LEVEL + evolveLevel agree on 5', () => {
 test('Weapon: nova fire applies damage + slow to nearby enemies', () => {
     const w = new Weapon(WEAPONS.FROST_NOVA);
     const p = makePlayer();
-    const enemy = {
+    const enemy = makeEnemyStub({
         x: 50,
         y: 0,
         hp: 100,
@@ -205,8 +213,8 @@ test('Weapon: nova fire applies damage + slow to nearby enemies', () => {
         },
         slowTimer: 0,
         slowPct: 0
-    };
-    const farEnemy = {
+    });
+    const farEnemy = makeEnemyStub({
         x: 9999,
         y: 0,
         hp: 100,
@@ -215,7 +223,7 @@ test('Weapon: nova fire applies damage + slow to nearby enemies', () => {
         },
         slowTimer: 0,
         slowPct: 0
-    };
+    });
     const g = makeGame();
     g.enemies = [enemy, farEnemy];
     g.player = p;
@@ -230,20 +238,20 @@ test('Weapon: nova fire applies damage + slow to nearby enemies', () => {
 test('Weapon: drain heals the player via lifesteal', () => {
     const w = new Weapon(WEAPONS.SOUL_DRAIN);
     let healed = 0;
-    const p = {
+    const p = makePlayerStub({
         ...makePlayer(),
         heal(n) {
             healed += n;
         }
-    };
-    const enemy = {
+    });
+    const enemy = makeEnemyStub({
         x: 10,
         y: 0,
         hp: 200,
         takeDamage(d) {
             this.hp -= d;
         }
-    };
+    });
     const g = makeGame();
     g.enemies = [enemy];
     g.player = p;
@@ -254,14 +262,14 @@ test('Weapon: drain heals the player via lifesteal', () => {
 
 test('Weapon: drain does nothing when no enemies in range', () => {
     const w = new Weapon(WEAPONS.SOUL_DRAIN);
-    const p = {
+    const p = makePlayerStub({
         ...makePlayer(),
         heal() {
             throw new Error('should not heal without a target');
         }
-    };
+    });
     const g = makeGame();
-    g.enemies = [{ x: 99999, y: 0, hp: 100, takeDamage() {} }];
+    g.enemies = [makeEnemyStub({ x: 99999, y: 0, hp: 100, takeDamage() {} })];
     g.player = p;
     assert.doesNotThrow(() => w.fire(p, g));
 });

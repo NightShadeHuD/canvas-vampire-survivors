@@ -35,7 +35,7 @@
  * @module test/helpers/game-stub
  */
 
-import type { Player } from '../../src/entities.ts';
+import type { Enemy, Player } from '../../src/entities.ts';
 import type { Game } from '../../src/main.ts';
 import type { SaveData } from '../../src/storage.ts';
 
@@ -45,7 +45,7 @@ import type { SaveData } from '../../src/storage.ts';
  * @param overrides - The parts of `Game` the code under test will touch.
  * @returns The same object, typed as `Game`.
  */
-export function makeGameStub(overrides: object): Game {
+export function makeGameStub<T extends object>(overrides: T): Game {
     return overrides as unknown as Game;
 }
 
@@ -54,7 +54,7 @@ export function makeGameStub(overrides: object): Game {
  *
  * `Player` has thirty-odd fields; a test about an achievement needs `level`.
  */
-export function makePlayerStub(overrides: object): Player {
+export function makePlayerStub<T extends object>(overrides: T): Player {
     return overrides as unknown as Player;
 }
 
@@ -64,6 +64,19 @@ export function makePlayerStub(overrides: object): Player {
  * `SaveData` has sixteen fields and a test that exercises a high-score sort needs
  * about three of them.
  */
+/**
+ * An `Enemy`-shaped double.
+ *
+ * `Enemy` has thirty fields. The fixtures that need this one are checking that a
+ * weapon slows, damages or knocks back a target -- they care about four of them.
+ *
+ * This was the LAST blocker named before it was written: `src/weapons.ts` could not
+ * be annotated without it, and `src/main.ts` needs it too.
+ */
+export function makeEnemyStub<T extends object>(overrides: T): Enemy {
+    return overrides as unknown as Enemy;
+}
+
 export function makeSaveStub(overrides: object) {
     return overrides as unknown as SaveData;
 }
