@@ -226,6 +226,7 @@
         "test/annotate.test.ts": "2dfb4fc42c895fb0",
         "test/assertion-diff.test.ts": "1c169181178e889d",
         "test/audio.test.ts": "7f6abd33bd8de603",
+        "test/baseline-file.test.ts": "a50c2c7e928109b0",
         "test/data.test.ts": "9d1dd4d5a5c07ce3",
         "test/destructive-edit.test.ts": "191d35c1b2b79ca1",
         "test/effects.test.ts": "d138b50ca7fbf498",
