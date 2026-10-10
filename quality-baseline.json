@@ -211,7 +211,7 @@
                 "functions": 65.52
             },
             "src/weapons.ts": {
-                "lines": 56.09,
+                "lines": 56.28,
                 "branches": 85.96,
                 "functions": 65.22
             }
@@ -227,11 +227,11 @@
     "strictCeilings": {
         "strictNullChecks": {
             "src": 0,
-            "test": 237
+            "test": 225
         },
         "noImplicitAny": {
-            "src": 203,
-            "test": 366
+            "src": 168,
+            "test": 360
         }
     },
     "assertionDigests": {

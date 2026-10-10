@@ -17,6 +17,8 @@
 
 import type { Enemy } from './entities.ts';
 import { Mine, OrbitShard, Projectile } from './entities.ts';
+import type { Player } from './entities.ts';
+import type { Game } from './main.ts';
 
 /** A weapon catalogue entry. Every field here is read by `Weapon`. */
 export interface WeaponDef {
@@ -50,7 +52,7 @@ export class Weapon {
     declare cooldown: number;
     /** Orbit weapons only; built lazily and rebuilt when the count changes. */
     _shards: any[] | null = null;
-    constructor(def) {
+    constructor(def: any) {
         this.def = def;
         this.id = def.id;
         this.name = def.name;
@@ -68,7 +70,7 @@ export class Weapon {
         return !!this.def.evolveLevel && this.level >= this.def.evolveLevel;
     }
 
-    update(dt, player, game) {
+    update(dt: number, player: Player, game: Game) {
         // Orbit weapon ticks every frame (maintains shards), but re-fires on cooldown
         // to refresh damage state. Everything else fires on its cooldown.
         if (this.def.type === 'orbit') {
@@ -88,7 +90,7 @@ export class Weapon {
         }
     }
 
-    getDamage(player) {
+    getDamage(player: Player) {
         let base = this.def.baseDamage * (1 + (this.level - 1) * 0.2) * player.getDamageMult();
         // iter-14 evolution micro-tweak: a per-weapon evolved damage scalar.
         if (this.isEvolved() && this.def.evolveDamageMult) {
@@ -97,7 +99,7 @@ export class Weapon {
         return base;
     }
 
-    _rollCrit(player, game, baseDamage, x, y, color) {
+    _rollCrit(player: Player, game: Game, baseDamage: number, x: number, y: number, color: string) {
         // iter-14: evolved weapons may add a flat crit-chance bonus on top
         // of the player's passive-derived crit chance. Stacks additively
         // because the player's crit chance is already a sum of LUCK stacks.
@@ -114,7 +116,7 @@ export class Weapon {
         return baseDamage;
     }
 
-    getCooldown(player) {
+    getCooldown(player: Player) {
         let cd = this.def.baseCooldown * Math.pow(0.92, this.level - 1) * player.getCooldownMult();
         // iter-14: evolution can shave additional cooldown (Twin Arc).
         if (this.isEvolved() && this.def.evolveCooldownMult) {
@@ -123,11 +125,11 @@ export class Weapon {
         return cd;
     }
 
-    getRange(player) {
+    getRange(player: Player) {
         return this.def.baseRange * (1 + (this.level - 1) * 0.1) * player.getAreaMult();
     }
 
-    getOrbitShardCount(player) {
+    getOrbitShardCount(player: Player) {
         // Each 2 weapon levels adds a shard; evolved doubles and mirrors.
         // A TERNARY, not `??` or `||`. The field is genuinely optional -- absent on
         // weapons that do not fire discrete projectiles -- so a default is needed,
@@ -142,7 +144,7 @@ export class Weapon {
         return Math.min(12, n + extra);
     }
 
-    _ensureShards(player) {
+    _ensureShards(player: Player) {
         const count = this.getOrbitShardCount(player);
         const radius = this.getRange(player);
         const dmg = this.getDamage(player);
@@ -161,13 +163,13 @@ export class Weapon {
         }
     }
 
-    renderExtras(ctx) {
+    renderExtras(ctx: CanvasRenderingContext2D) {
         if (this.def.type === 'orbit' && this._shards) {
             for (const s of this._shards) s.render(ctx);
         }
     }
 
-    fire(player, game) {
+    fire(player: Player, game: Game) {
         switch (this.def.type) {
             case 'melee':
                 return this._fireMelee(player, game);
@@ -186,7 +188,7 @@ export class Weapon {
         }
     }
 
-    _fireMelee(player, game) {
+    _fireMelee(player: Player, game: Game) {
         const range = this.getRange(player);
         const baseDmg = this.getDamage(player);
         const hit = new Set();
@@ -223,7 +225,7 @@ export class Weapon {
         game.audio.shoot();
     }
 
-    _fireProjectile(player, game) {
+    _fireProjectile(player: Player, game: Game) {
         const baseCount = this.def.projectileCount;
         let count = (baseCount ? baseCount : 0) + Math.floor((this.level - 1) / 2);
         if (this.isEvolved() && this.id === 'knife') count = Math.max(count, 5);
@@ -249,7 +251,7 @@ export class Weapon {
         game.audio.shoot();
     }
 
-    _fireInstant(player, game) {
+    _fireInstant(player: Player, game: Game) {
         const range = this.getRange(player);
         const baseDmg = this.getDamage(player);
         // iter-16 perf: spatial probe + materialise into an array (we still
@@ -324,7 +326,7 @@ export class Weapon {
         game.audio.shoot();
     }
 
-    _fireAura(player, game) {
+    _fireAura(player: Player, game: Game) {
         const range = this.getRange(player);
         const dmg = this.getDamage(player);
         // iter-16 perf: cells overlapping the aura radius only. Aura is
@@ -348,7 +350,7 @@ export class Weapon {
         }
     }
 
-    _fireMine(player, game) {
+    _fireMine(player: Player, game: Game) {
         const radius = this.getRange(player);
         const dmg = this.getDamage(player);
         const fuse = this.def.fuse || 1.2;
@@ -375,7 +377,7 @@ export class Weapon {
      * within `range` and applies a timed slow. Evolved variant fires a
      * second delayed ring at 60% strength for a staggered AOE.
      */
-    _fireNova(player, game) {
+    _fireNova(player: Player, game: Game) {
         const range = this.getRange(player);
         const baseDmg = this.getDamage(player);
         const slowPct = this.def.slowPct ?? 0.5;
@@ -431,7 +433,7 @@ export class Weapon {
      * fire, and heals the hero for `lifestealPct × damageDealt`. Evolved
      * variant drains two foes simultaneously.
      */
-    _fireDrain(player, game) {
+    _fireDrain(player: Player, game: Game) {
         const range = this.getRange(player);
         const baseDmg = this.getDamage(player);
         const steal = this.def.lifestealPct ?? 0.25;
@@ -439,7 +441,7 @@ export class Weapon {
         const targets: Enemy[] = [];
         // Pick nearest N enemies within range.
         const nearby = game.enemies
-            .filter((e) => Math.hypot(e.x - player.x, e.y - player.y) < range)
+            .filter((e: any) => Math.hypot(e.x - player.x, e.y - player.y) < range)
             .sort(
                 (a, b) =>
                     Math.hypot(a.x - player.x, a.y - player.y) -
