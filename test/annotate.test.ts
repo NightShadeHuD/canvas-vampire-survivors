@@ -207,3 +207,26 @@ test('annotate: --explain exists so a cascade can be inspected without editing t
     assert.match(cli, /--explain/);
     assert.match(cli, /EXPLAIN/);
 });
+
+test('annotate: a name that means different types in different files is refused', () => {
+    // `type` was in the table as `string` and had to come out. In `data.ts` it IS a
+    // string; in `entities.ts` it is an `EnemyDef` OBJECT, and `--explain` showed
+    // the cost of the wrong entry exactly: `Type 'string' is not assignable to
+    // type 'EnemyDef'` plus seven follow-on errors reading `.size`, `.hp` and
+    // `.speed` off a string.
+    //
+    // This is the third name to prove the same thing -- after `a`/`b` (comparator
+    // operands, not arithmetic) and `viewport` (a shape, not a number). A name is
+    // not a type, and the table refuses rather than guesses.
+    for (const name of ['type', 'a', 'b', 'viewport']) {
+        if (name === 'viewport') continue; // viewport now has its real shape
+        const result = plan(`    f(|${name}) {`, name);
+        assert.equal(result.ok, false, `${name} must be refused, not guessed`);
+    }
+});
+
+test('annotate: the numeric multipliers a weapon carries are known', () => {
+    for (const name of ['hpMult', 'dmgMult', 'fuse', 'radius', 'damage']) {
+        assert.equal(plan(`    f(|${name}) {`, name).ok, true, `${name} should annotate`);
+    }
+});

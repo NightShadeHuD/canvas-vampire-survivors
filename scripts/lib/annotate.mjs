@@ -73,6 +73,10 @@ export const TYPE_BY_NAME = {
     ratio: 'number',
     scale: 'number',
     damage: 'number',
+    hpMult: 'number',
+    dmgMult: 'number',
+    fuse: 'number',
+    radius: 'number',
     baseDamage: 'number',
     // `a` and `b` are DELIBERATELY ABSENT.
     //
@@ -100,7 +104,12 @@ export const TYPE_BY_NAME = {
     glyph: 'string',
     query: 'string',
     tag: 'string',
-    type: 'string',
+    // `type` is DELIBERATELY ABSENT -- the same lesson as `a` and `b` above, and
+    // `viewport` before them. In `data.ts` it is a string; in `entities.ts` it is
+    // an `EnemyDef` OBJECT, and `--explain` showed exactly what a wrong entry
+    // costs: `Type 'string' is not assignable to type 'EnemyDef'` plus seven
+    // follow-on errors reading `.size`, `.hp`, `.speed` off a string. A name is
+    // not a type, and this is the third name that has proved it.
     message: 'string',
     url: 'string',
     selector: 'string',
