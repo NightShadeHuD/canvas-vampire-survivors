@@ -97,6 +97,22 @@ func _init() -> void:
 	_check(scene_hit_levelup, "the scene reaches a level-up", "state = LEVEL_UP")
 	_check(frozen_for > 0 and not stalled, "and the run PAUSES for it", "%d frames frozen" % frozen_for)
 	_check(main.game.hero.level > 1, "the hero levelled", "level %d" % main.game.hero.level)
+
+	# Shots must reach the world, or a weapon that "works" in isolation is invisible in
+	# play -- the same failure as the hero, one layer down.
+	var saw_shots := false
+	var g2 := Game.new(0.3)
+	g2.hero.weapons.clear()
+	g2.hero.add_weapon(Weapons.WEAPONS["MAGIC_WAND"])
+	# Run the WHOLE window. The first version of this broke out as soon as a shot
+	# existed, so it asserted "and they kill" three frames after the first shot was
+	# fired -- and failed against a weapon that kills nine bats in twenty seconds.
+	for i in 60 * 20:
+		g2.step(FRAME, Vector2.ZERO)
+		if g2.shots.size() > 0:
+			saw_shots = true
+	_check(saw_shots, "a projectile weapon puts shots in the world", "MAGIC_WAND fired")
+	_check(g2.kills > 0, "and they kill", "%d kill(s)" % g2.kills)
 	_check(main.game.hero.weapons.size() >= 1, "and holds a weapon", "%d" % main.game.hero.weapons.size())
 
 	main.queue_free()
