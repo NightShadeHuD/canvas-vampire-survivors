@@ -74,7 +74,8 @@ const checks = [
     ['res://verify_scene.gd', 'the hero is VISIBLE, the camera follows, the menu works'],
     ['res://verify_play.gd', '90s of real play: foes scale, and the hero CAN die'],
     ['res://verify_xp.gd', 'orbs drop, the curve matches the original, picks apply'],
-    ['res://verify_weapons.gd', 'EVERY weapon in the data actually damages something']
+    ['res://verify_weapons.gd', 'EVERY weapon in the data actually damages something'],
+    ['res://verify_passives.gd', 'EVERY passive in the data actually changes something']
 ];
 
 let failed = false;

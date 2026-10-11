@@ -25,8 +25,14 @@ static func fire(
 ) -> Array:
 	var created: Array = []
 	var kind: String = str(weapon["type"])
-	var dmg := float(weapon["baseDamage"])
-	var reach := float(weapon["baseRange"])
+	# The hero's passives, applied HERE rather than at each archetype. This is the hook
+	# the weapon commit recorded as missing: `damageMult`, `areaMult` and `cooldownMult`
+	# had no port, so Might/Area/Cooldown did nothing when taken.
+	var dmg := float(weapon["baseDamage"]) * hero.damage_mult()
+	# A crit doubles. `luck` is the only source and a base hero has none.
+	if hero.crit_chance() > 0.0 and randf() < hero.crit_chance():
+		dmg *= 2.0
+	var reach := float(weapon["baseRange"]) * hero.area_mult()
 	var count: int = int(weapon.get("projectileCount", 1))
 
 	match kind:

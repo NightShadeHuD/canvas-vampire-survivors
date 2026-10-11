@@ -25,8 +25,14 @@ var exp := 0
 var level := 1
 var exp_to_next := 50.0
 var weapons: Array = []
-## Passives are COUNTS, not objects -- "x3 of Armor" is the whole state.
+## Passives, keyed by id, holding the DEF and the count.
+##
+## The first version stored a bare count, which cannot compute anything -- an effect
+## lives on the def, so "x3 of Armor" with no def is a number with no meaning. The bug
+## was invisible because nothing read the counts yet.
 var passives: Dictionary = {}
+## Cached totals, recomputed when a passive is taken rather than every frame.
+var _base_max_hp := 100.0
 
 func _init(start_x: float, start_y: float) -> void:
 	x = start_x
@@ -41,23 +47,43 @@ func _init(start_x: float, start_y: float) -> void:
 func move(dir: Vector2, delta: float) -> void:
 	if dir.length() > 0.0:
 		var d := dir.normalized()
-		x += d.x * speed * delta
-		y += d.y * speed * delta
+		# Swiftness multiplies SPEED rather than the step, so the normalisation above
+		# still holds and a diagonal stays the same length as a straight line.
+		var step := speed * speed_mult() * delta
+		x += d.x * step
+		y += d.y * step
 
 ## Clamp to the arena. Boundaries get pinned on and one past the edge in the tests.
 func clamp_to(width: float, height: float) -> void:
 	x = clampf(x, size, width - size)
 	y = clampf(y, size, height - size)
 
-func take_damage(amount: float) -> void:
+## Dodge, then armor, then damage reduction -- the original's order, and the order
+## matters: a dodged hit must not be reduced to zero, it must not land at all.
+##
+## Returns what happened, so a caller can show it.
+func take_damage(amount: float) -> String:
 	if dead or invincible:
-		return
-	hp -= amount
+		return "ignored"
+	# `-=` the original: a dodged hit also does not burn an i-frame window.
+	var dodge := dodge_chance()
+	if dodge > 0.0 and randf() < dodge:
+		return "dodged"
+
+	var taken := amount
+	taken -= armor()
+	taken *= 1.0 - damage_reduction()
+	# Floored at 1, so a tanky build cannot become literally immortal. The original
+	# does this and it is the difference between a good build and a broken one.
+	taken = maxf(taken, 1.0)
+
+	hp -= taken
 	invincible_timer = Config.INVINCIBILITY_TIME
 	invincible = true
 	if hp <= 0.0:
 		hp = 0.0
 		dead = true
+	return "hit"
 
 ## Gain experience and level up for as long as the bar is full.
 ##
@@ -67,7 +93,7 @@ func take_damage(amount: float) -> void:
 ##
 ## The heal on level is the original's: `hp = min(hp + 20, maxHp)`.
 func gain_exp(amount: float) -> int:
-	exp += amount
+	exp += amount * exp_mult()
 	var gained := 0
 	while exp >= exp_to_next:
 		exp -= exp_to_next
@@ -90,15 +116,68 @@ func weapon_level(id: String) -> int:
 	return 0
 
 func passive_count(id: String) -> int:
-	return int(passives.get(id, 0))
+	if not passives.has(id):
+		return 0
+	return int(passives[id]["count"])
 
 ## Returns false at the cap, so a caller cannot stack past `PASSIVE_MAX_STACK`.
-func add_passive(id: String) -> bool:
-	var n := passive_count(id)
-	if n >= int(Config.PASSIVE_MAX_STACK):
+func add_passive(def: Dictionary) -> bool:
+	var id: String = def["id"]
+	if passive_count(id) >= int(Config.PASSIVE_MAX_STACK):
 		return false
-	passives[id] = n + 1
+	if passives.has(id):
+		passives[id]["count"] = passive_count(id) + 1
+	else:
+		passives[id] = {"def": def, "count": 1}
+	_recompute()
 	return true
+
+## Additive effects: `armor`, `hpRegen`, `critChance`. Summed, scaled by count.
+##
+## Ported from `Player._passiveSum`.
+func passive_sum(key: String) -> float:
+	var total := 0.0
+	for id in passives:
+		var e: Dictionary = passives[id]["def"].get("effect", {})
+		if e.has(key):
+			total += float(e[key]) * float(passives[id]["count"])
+	return total
+
+## Multiplicative effects: `damageMult`, `areaMult`, `speedMult`. COMPOUNDED per
+## stack -- two Armor passives are `1.2 * 1.2`, not `1.4` -- which is the original's
+## behaviour and the difference between a passive that scales and one that does not.
+##
+## Ported from `Player._passiveMult`.
+func passive_mult(key: String) -> float:
+	var mult := 1.0
+	for id in passives:
+		var e: Dictionary = passives[id]["def"].get("effect", {})
+		if e.has(key):
+			mult *= pow(1.0 + float(e[key]), float(passives[id]["count"]))
+	return mult
+
+## Everything a passive can change, read through one place.
+func damage_mult() -> float: return passive_mult("damageMult")
+func area_mult() -> float: return passive_mult("areaMult")
+func speed_mult() -> float: return passive_mult("speedMult")
+func exp_mult() -> float: return passive_mult("expMult")
+func cooldown_mult() -> float: return passive_mult("cooldownMult")
+func magnet_mult() -> float: return passive_mult("magnetMult")
+
+func max_hp_mult() -> float: return passive_mult("maxHpMult")
+func armor() -> float: return passive_sum("armor")
+func dodge_chance() -> float: return passive_sum("dodgeChance")
+func crit_chance() -> float: return passive_sum("critChance")
+func hp_regen() -> float: return passive_sum("hpRegen")
+func damage_reduction() -> float: return passive_sum("damageReduction")
+func magnet_range() -> float: return float(Config.MAGNET_BASE) * magnet_mult()
+
+## Vitality raises the CEILING and heals by the same amount, so taking it is not a
+## downgrade -- the original raises both together.
+func _recompute() -> void:
+	var before := max_hp
+	max_hp = _base_max_hp * max_hp_mult()
+	hp = minf(hp + maxf(max_hp - before, 0.0), max_hp)
 
 func add_weapon(def: Dictionary) -> void:
 	weapons.append({"id": def["id"], "def": def, "level": 1})
@@ -114,6 +193,12 @@ func level_weapon(id: String) -> bool:
 	return false
 
 func tick(delta: float) -> void:
+	# Recovery. Applied before the i-frame countdown so a hero healing through a fight
+	# is not gated on being out of invincibility.
+	var regen := hp_regen()
+	if regen > 0.0 and not dead:
+		hp = minf(hp + regen * delta, max_hp)
+
 	if invincible_timer > 0.0:
 		invincible_timer -= delta
 		if invincible_timer <= 0.0:

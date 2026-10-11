@@ -97,7 +97,9 @@ func step(delta: float, move_dir: Vector2) -> void:
 
 	for w in hero.weapons:
 		var id: String = w["id"]
-		var cd := float(w["def"]["baseCooldown"])
+		# Cooldown passive. `cooldownMult` is NEGATIVE in the data (-0.08), so
+		# `1 + effect` is 0.92 and a stack genuinely shortens the timer.
+		var cd := float(w["def"]["baseCooldown"]) * hero.cooldown_mult()
 		var left := float(cooldowns.get(id, 0.0)) - delta
 		if left <= 0.0:
 			left = cd

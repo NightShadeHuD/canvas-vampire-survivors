@@ -80,6 +80,65 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### Every passive works too — and the hook the weapon commit recorded as missing
+
+Weapons were fixed and **passives were the same bug one screen over**: thirteen were
+offered, the hero tracked counts, and nothing read them.
+
+The root cause was worse than "unimplemented". `add_passive(id)` stored a **bare
+count**, and an effect lives on the def -- so a count with no def _cannot_ compute
+anything. The bug was invisible because no test asked what a passive does.
+
+```
+  ok   EVERY passive changes something  (silent: none)
+  ok   one Might is 1.1x / two compound to 1.21x, not 1.2x
+  ok   damage is floored at 1, never 0
+  ok   about 25% of hits are dodged  (0.245 over 4000 trials)
+  ok   and a dodged hit costs no health and no i-frames  (0 violation(s))
+  ok   Recovery heals over time  (hp 51.00 after 2s)
+  ok   Magnet extends the pickup range  (120.0 -> 150.0)
+  ok   Might raises weapon damage  (12.0 -> 13.2)
+  ok   and IS hit once Area extends the reach  (hp 9995)
+  ok   Cooldown shortens the timer, not lengthens it  (0.9200)
+  ok   Vitality raises max HP / and heals by the same amount
+```
+
+#### The two aggregations are not the same shape
+
+Ported from `_passiveSum` and `_passiveMult` in `src/entities.ts`:
+
+|                | How it combines                      | Used by                                                                                     |
+| -------------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `passive_sum`  | adds `effect * count`                | `armor`, `hpRegen`, `critChance`, `dodgeChance`, `damageReduction`                          |
+| `passive_mult` | **compounds** `(1 + effect) ^ count` | `damageMult`, `areaMult`, `speedMult`, `expMult`, `cooldownMult`, `magnetMult`, `maxHpMult` |
+
+Two Might stacks are **1.21x, not 1.2x**. A passive that adds instead of compounding
+stops scaling the moment you hold more than one, and the difference is invisible until
+you do.
+
+#### Also now applied, all of which had no port
+
+`damageMult`, `areaMult` and `cooldownMult` were the hook the weapon commit recorded
+as **missing** -- Might, Area and Cooldown did nothing. `magnetMult` was the reason
+taking Magnet did nothing; the orb read the bare `MAGNET_BASE`. `speedMult`,
+`expMult`, `maxHpMult`, `armor`, `dodgeChance`, `damageReduction` and `hpRegen` were
+all unread.
+
+Three ordering rules, all from the original and all load-bearing:
+
+- **dodge → armor → reduction**, so a dodged hit _does not land_ rather than being
+  reduced to zero, and **does not burn an i-frame window**
+- **damage is floored at 1**, so a tanky build cannot become literally immortal
+- **Vitality raises the ceiling AND heals by the same amount**, so taking it is not a
+  downgrade
+
+#### A test that was wrong and looked like a bug
+
+The dodge check stacked Evasion twenty times and expected a 100% dodge. `add_passive`
+**correctly caps at `PASSIVE_MAX_STACK`**, so it reached 25% and the test failed
+against working code. It measures the _rate_ over 4000 trials now -- 0.245 against an
+expected 0.25 -- which is a better check than the one it replaced.
+
 ### Every weapon works — and the test that says so
 
 The level-up screen offered eleven weapons and **only Garlic had an implementation**.
