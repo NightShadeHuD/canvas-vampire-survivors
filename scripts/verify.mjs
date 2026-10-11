@@ -36,6 +36,10 @@ const STEPS = [
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     {
+        script: 'check:godot',
+        proves: 'the Godot port runs, and its generated data matches the TypeScript'
+    },
+    {
         script: 'check:isolation',
         proves: 'the suite agrees under per-file isolation and a single process'
     },

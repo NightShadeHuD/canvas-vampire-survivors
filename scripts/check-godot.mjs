@@ -26,7 +26,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { exportGodot } from './export-godot.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -44,15 +46,55 @@ function have(cmd) {
 }
 
 if (!have('godot')) {
+    // The `NOTICE:` prefix is how `verify.mjs` knows a gate had nothing to check. It
+    // PASSES -- "Godot is not installed here" is a real state -- but the run reports
+    // how many gates did, so "passed" is never mistaken for "verified everything".
     console.log(
-        'check-godot: SKIPPED — `godot` is not on PATH, so the port was NOT verified.\n' +
-            '  This is reported as a skip and not as a pass. Install Godot 4 to run it.'
+        'check-godot: NOTICE: `godot` is not on PATH, so the port was NOT verified.\n' +
+            '  Install Godot 4 to run this gate; until then it checks nothing.'
     );
     process.exit(0);
 }
 
-// 1. Regenerate, so a stale `godot/data/` cannot pass on yesterday's values.
-execFileSync('node', [path.join(here, 'export-godot.mjs')], { cwd: repoRoot, stdio: 'inherit' });
+// 1. Generate to a TEMP DIRECTORY and compare against what is committed.
+//
+// This used to regenerate into `godot/data/` and then verify -- which meant it
+// SILENTLY REPAIRED drift and always passed. Proved by corrupting a committed value:
+// `check:godot` rewrote it and reported ok. Edit `src/data.ts`, forget to re-export,
+// and CI passes while the game runs on yesterday's numbers -- the exact two-sources-of-
+// truth problem the generator exists to prevent, reintroduced by the check that was
+// supposed to catch it.
+//
+// Generating elsewhere and DIFFING is the only form that can fail.
+const scratch = mkdtempSync(path.join(tmpdir(), 'godot-drift-'));
+const drifted = [];
+try {
+    const { files } = await exportGodot(scratch);
+    for (const name of files) {
+        const fresh = readFileSync(path.join(scratch, name), 'utf8');
+        const committedPath = path.join(godotDir, 'data', name);
+        const committed = existsSync(committedPath) ? readFileSync(committedPath, 'utf8') : null;
+        if (committed === null) drifted.push(`${name} (missing)`);
+        else if (committed !== fresh) drifted.push(name);
+    }
+} finally {
+    rmSync(scratch, { recursive: true, force: true });
+}
+
+if (drifted.length > 0) {
+    console.error(
+        `check-godot: FAILED — ${drifted.length} generated file(s) do NOT match src/:\n` +
+            drifted.map((f) => `    ${f}`).join('\n') +
+            '\n\n  These are GENERATED from the TypeScript. Run `npm run export:godot` and\n' +
+            '  commit the result. A stale file here means the game runs on old numbers\n' +
+            '  while `src/data.ts` says otherwise, and nothing else in this repository\n' +
+            '  would notice.'
+    );
+    process.exit(1);
+}
+console.log(
+    `check-godot: ok   ${'generated data matches src/'} — ${drifted.length === 0 ? 'no drift' : ''}`
+);
 
 if (!existsSync(path.join(godotDir, 'project.godot'))) {
     console.error('check-godot: FAILED — godot/project.godot is missing.');

@@ -99,6 +99,7 @@ It runs, in order, and stops at the first failure:
 | Strict flags       | `npm run check:strict`         | Enabled strict flags stay on, and the two outstanding flags do not rise |
 | Format             | `npm run format:check`         | Code matches the project's Prettier contract                            |
 | Unit tests         | `npm test`                     | Behaviour is as specified                                               |
+| Godot port         | `npm run check:godot`          | The Godot project runs, and its generated data matches the TypeScript   |
 | Isolation          | `npm run check:isolation`      | The suite behaves the same under both isolation models                  |
 | Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted                           |
 | Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision                       |
