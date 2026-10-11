@@ -45,6 +45,12 @@ func _init(spawn_interval: float = 0.8) -> void:
 	hero.add_weapon(weapon)
 	foe_def = Enemies.ENEMIES["BAT"]
 	_spawn_interval = spawn_interval
+	# START at the interval, not at zero. `spawn_timer` used to begin at 0, so the first
+	# `step` spawned immediately -- which meant `Game.new(999.0)`, the obvious way to say
+	# "do not spawn", still produced one foe. Two tests were written against that
+	# surprise in a single round. An interval of 999s now means the first spawn is in
+	# 999s, which is what it always read as.
+	spawn_timer = spawn_interval
 	current_wave = wave_for(0.0)
 
 var _spawn_interval: float
@@ -150,6 +156,20 @@ func step(delta: float, move_dir: Vector2) -> void:
 			break
 		foes.append(child)
 	spawned.clear()
+
+## A Game that never spawns, for a test that drives one foe at a time.
+##
+## Named rather than passing a large interval, because the intent of `Game.new(999.0)`
+## is invisible at the call site -- and it was WRONG until the timer started at the
+## interval rather than at zero, so the "obvious" way to disable spawning still produced
+## a foe. Two tests were written against that surprise in a single round.
+static func without_spawns() -> Game:
+	var g := Game.new()
+	# `_spawn_interval` is what `step` re-arms to, so INFINITY is a stronger guarantee
+	# than a large number -- nothing can accidentally land past it.
+	g._spawn_interval = INF
+	g.spawn_timer = INF
+	return g
 
 ## Spawn on a ring outside the view, so foes walk IN rather than appearing beside the
 ## hero. The original does this through `SPAWN_RADIUS` and so does this.

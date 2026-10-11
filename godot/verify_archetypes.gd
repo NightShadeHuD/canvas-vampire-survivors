@@ -24,8 +24,12 @@ func _init() -> void:
 	_bomber_arms_and_hurts_the_hero()
 	_illusionist_clones_are_worth_no_experience()
 
-	print("verify_archetypes: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
+	# while reporting PASS is a false green -- the failure mode this tooling exists
+	# to remove, introduced by the tooling itself.
+	var passed := ok and Check.ok
+	print("verify_archetypes: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)
 
 func _foe_def(id: String) -> Dictionary:
 	for d in Enemies.ENEMIES.values():
@@ -91,9 +95,12 @@ func _ranged_keeps_its_distance_and_fires() -> void:
 	var mage := _foe("mage", 30.0, 0.0)
 	var keep := float(mage.def.get("keepDistance", 0.0))
 	# Placed well inside its standoff: it must BACK AWAY, not close in.
-	for i in 120:
-		mage.chase(0.0, 0.0, FRAME)
-	_check(mage.x > 30.0, "a mage backs off when too close", "30.0 -> %0.1f" % mage.x)
+	# `Check.further` states the claim as DISTANCE from the target. The hand-rolled form
+	# asserted a coordinate, and the version before that placed the mage exactly ON its
+	# target -- where `chase` correctly returns early.
+	var mage_start := mage.x
+	Check.over(120, func(_i): mage.chase(0.0, 0.0, FRAME))
+	Check.further(mage_start, 0.0, mage.x, 0.0, 0.0, 0.0, "a mage backs off when too close")
 	# Now well outside: it must advance.
 	var far := _foe("mage", keep + 300.0, 0.0)
 	var x0 := far.x
@@ -151,29 +158,37 @@ func _illusionist_clones_are_worth_no_experience() -> void:
 	# PEAK simultaneous population, not a running total. The first version incremented
 	# per clone PER FRAME, so one clone alive for a thousand frames read as a thousand
 	# clones -- and 2348 looked like a runaway that was not there.
-	var clones_seen := 0
-	var clone_xp := -1
-	for i in 60 * 25:
+	# `Peak` for the population -- the hand-rolled counter incremented once per clone
+	# PER FRAME and read four clones as two thousand.
+	#
+	# `clone_xp` is captured INSIDE the window. Read afterwards it is always -1: Garlic
+	# kills them long before the run ends.
+	var peak := Check.Peak.new()
+	# An ARRAY, because a GDScript lambda captures locals BY VALUE. The plain `int` this
+	# replaced was assigned inside the callback and never escaped -- so the check read
+	# its initial -1 and failed against correct code. Second time this bit me today.
+	var clone_xp := [-1]
+	Check.over(60 * 25, func(i):
 		g.step(FRAME, Vector2.ZERO)
 		var live := 0
 		for f in g.foes:
 			if f.def_id == "illusionist" and f != ill:
 				live += 1
-				# Captured HERE, while a clone is alive. Read afterwards it is always
-				# -1: Garlic kills them long before the window ends.
-				clone_xp = f.exp_value
-		clones_seen = maxi(clones_seen, live)
+				clone_xp[0] = f.exp_value
+		peak.consider(float(live), i)
+	)
+	var clones_seen := int(peak.value)
 	var want := int(ill.def.get("cloneCount", 2))
-	_check(clones_seen >= want, "an illusionist makes clones", "%d clone(s)" % clones_seen)
+	Check.at_least(float(clones_seen), float(want), "an illusionist makes clones")
 	# AND THEY MUST STOP. A clone is the same def, so without a guard a clone clones,
 	# and the population is exponential -- measured at 27,165 in 25 seconds. Asked here
 	# because "makes clones" passed the whole time that was true.
 	var ceiling := want * (1 + int(25.0 / float(ill.def.get("cloneCooldown", 5.5))))
-	_check(clones_seen <= ceiling, "and clones do NOT clone", "%d <= %d over 25s" % [clones_seen, ceiling])
+	Check.at_most(float(clones_seen), float(ceiling), "and clones do NOT clone")
 	# Checked BY ID, not by "not the original object". `Game.new(999.0)` does not stop
 	# the first spawn -- `spawn_timer` starts at 0, so one foe appears immediately --
 	# and the first version of this test counted that bat as a clone.
-	_check(clone_xp == 0, "and they are worth NO experience", "clone exp = %d" % clone_xp)
+	Check.approx(float(clone_xp[0]), 0.0, "and they are worth NO experience", 0.5)
 
 func _check(cond: bool, label: String, detail: String) -> void:
 	if cond:

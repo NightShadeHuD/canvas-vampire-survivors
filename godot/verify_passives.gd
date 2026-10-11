@@ -27,8 +27,12 @@ func _init() -> void:
 	_growth_multiplies_xp()
 	_vitality_raises_the_ceiling_and_heals()
 
-	print("verify_passives: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
+	# while reporting PASS is a false green -- the failure mode this tooling exists
+	# to remove, introduced by the tooling itself.
+	var passed := ok and Check.ok
+	print("verify_passives: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)
 
 func _def(id: String) -> Dictionary:
 	for p in Passives.PASSIVES.values():
@@ -110,14 +114,15 @@ func _dodge_prevents_the_hit_entirely() -> void:
 			dodged += 1
 			if t.hp != hp0 or t.invincible:
 				burned += 1
-	var rate := float(dodged) / float(trials)
-	_check(absf(rate - 0.25) < 0.03, "about 25% of hits are dodged", "%0.3f over %d trials" % [rate, trials])
-	_check(burned == 0, "and a dodged hit costs no health and no i-frames", "%d violation(s)" % burned)
+	# `Check.rate` states the claim as a rate, which is what it is. The hand-rolled form
+	# it replaces compared a derived float against a hand-picked tolerance -- and the
+	# version BEFORE that asserted certainty of a 25% chance.
+	Check.rate(dodged, trials, 0.25, 0.03, "about 25% of hits are dodged")
+	Check.unchanged(0, burned, "and a dodged hit costs no health and no i-frames")
 
 func _regen_heals_over_time() -> void:
-	var h := Hero.new(0, 0)
+	var h := Check.wounded(Hero.new(0, 0), 50.0)
 	h.add_passive(_def("recovery"))
-	h.hp = 50.0
 	# 0.5 HP/s for 2 seconds.
 	for i in 120:
 		h.tick(1.0 / 60.0)

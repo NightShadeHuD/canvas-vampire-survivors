@@ -80,6 +80,54 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### Tooling for the way tests actually went wrong
+
+Half the red tests in this project were the TEST being wrong -- and they were not
+random. They fell into seven shapes, and each had a correct assertion that was
+_slightly more work to write than the wrong one_. `godot/assertions.gd` makes the
+right form the short form.
+
+| The mistake                                                  | What it looked like                              | The helper                                |
+| ------------------------------------------------------------ | ------------------------------------------------ | ----------------------------------------- |
+| asserted a **magnitude** where the claim was a **direction** | a mage was "at x > 20" instead of "further away" | `Check.further/closer`                    |
+| counted **events** where the claim was a **population**      | 4 clones alive 1000 frames read as 2348          | `Check.Peak/Trough`                       |
+| read state **after** it changed                              | clone XP read once they were all dead            | capture inside `Check.over`               |
+| wrote down a value it could **read**                         | hero start hardcoded 400 in a 1600-tall arena    | derive from the object                    |
+| compared floats for **equality**                             | two shots compared by `vx`, where `cos` is EVEN  | `Check.differs(a, b, min_delta)`          |
+| expected a **rate** to be a certainty                        | 25% dodge asserted as 100%                       | `Check.rate(hits, trials, expected, tol)` |
+| assumed a **precondition** that was unset                    | healing tested on a full-health hero             | `Check.wounded/sturdy`                    |
+
+`Check.rose(before, after)` is no longer than `assert(before < 20.0)` and it **cannot
+be wrong about which direction the claim was.** Every helper prints the values it
+compared -- a failure that says only "expected true" costs a round trip.
+
+#### An API trap, fixed rather than documented
+
+`Game.new(999.0)` was the obvious way to say "do not spawn" and it **spawned once
+immediately**, because `spawn_timer` began at 0 and the first `step` fired. Two tests
+were written against that surprise in one round.
+
+The fix is not a note in the docs. **An interval of 999 seconds now means the first
+spawn is in 999 seconds** -- the timer starts at the interval -- and `Game.new()` has
+been joined by `Game.without_spawns()` so the intent has a name.
+
+#### The tooling had to be tested, and it had three bugs
+
+A helper that reports PASS when it should report FAIL is worse than no helper. The 50
+checks in `verify_assertions.gd` exercise every helper **in both directions**.
+
+Three bugs came out of that, and the third is the one worth reading:
+
+1. Two shots at +/-0.023 rad have **exactly** equal `vx` -- `cos` is even. Not "equal
+   to three decimals"; **equal.** The original check compared a constant with itself.
+2. A GDScript **lambda captures locals by value**. `ran += 1` inside a callback never
+   escaped, and neither did a capture in the archetype test. _A test counting inside a
+   callback counts nothing._
+3. **A suite mixing both harnesses could print `FAIL` and still report `PASS`** --
+   because `Check.ok` was never consulted by the older `_check` harness. A false green,
+   introduced by the tooling built to remove false greens. Fixed across all three
+   suites, which now require **both** flags.
+
 ### Every enemy archetype, and the two bugs the tools found
 
 `archetype` is on every enemy in `src/data.ts` and **nothing read it**, so ten enemy

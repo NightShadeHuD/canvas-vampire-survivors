@@ -77,7 +77,8 @@ const checks = [
     ['res://verify_weapons.gd', 'EVERY weapon in the data actually damages something'],
     ['res://verify_passives.gd', 'EVERY passive in the data actually changes something'],
     ['res://verify_invariants.gd', '10 minutes of adversarial play stays coherent'],
-    ['res://verify_archetypes.gd', 'EVERY enemy archetype in the data behaves differently']
+    ['res://verify_archetypes.gd', 'EVERY enemy archetype in the data behaves differently'],
+    ['res://verify_assertions.gd', 'the assertion helpers fail when they should']
 ];
 
 let failed = false;
