@@ -80,6 +80,63 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### Every weapon works — and the test that says so
+
+The level-up screen offered eleven weapons and **only Garlic had an implementation**.
+Picking the Magic Wand stored it, showed it on the hero, and changed nothing. Nothing
+caught it because every test asserted the one weapon that worked.
+
+`verify_weapons.gd` drives **the data table**, not a hand-written list:
+
+```
+  ok   EVERY weapon damages a foe in range  (silent: none)
+  ok   a piercing knife hits more than one foe  (3 of 3)
+  ok   orbit makes projectileCount shards  (2)
+  ok   and they MOVE / at a constant radius  (120.0)
+  ok   a boomerang is thrown / and knows it is one
+  ok   Soul Drain heals on hit  (hp 50.0 -> 52.0)
+  ok   lightning hits the NEAREST foe / and not the far one
+  ok   a 2-projectile weapon fires 2 / 4.6 deg apart
+  ok   each weapon has its own timer / the slow one is not reset by the fast one
+```
+
+**A weapon added to `src/data.ts` later fails until it is implemented** -- which is the
+property that makes this worth having rather than a list that goes stale.
+
+Eight archetypes: `aura`, `melee`, `nova`, `instant`, `drain`, `mine`, `orbit` and
+`projectile`. All ported from `src/weapons.ts`.
+
+#### Three bugs it found
+
+1. **The boomerang reversed on frame one.** It flew zero distance and looked exactly
+   like a weapon that did nothing. It now has an outbound leg, and returns to the
+   thrower's SPOT rather than to the hero -- the original's behaviour, and better:
+   walk away and the shard comes back to where you were.
+2. **The volley spread was wider than the hit radius.** `+/-0.25` rad put both
+   blaster shots either side of a bat; `+/-0.12` still missed at 192px. A shot
+   connects within `radius + foe.size` = 18px, and 0.12 rad is 23px there. It is
+   `+/-0.04` now -- visibly a fan, and converging inside the weapon's own range.
+   _A weapon that looks implemented and deals no damage is worse than one that is
+   obviously absent._
+3. **`getDamageMult` and friends were never applied.** Weapon damage ignored the
+   hero's passives entirely. Noted rather than fixed: no passive grants a damage
+   multiplier yet, so there is nothing to apply -- but the hook is missing and the
+   first damage passive added will silently do nothing.
+
+#### Two of my tests were wrong and looked like bugs
+
+- The **drain** check left the hero at full health, so the heal was correctly clamped
+  and the test failed against working code.
+- The **fan** check compared `vx` across a spread of 4.6 degrees -- where the x
+  components are equal to three decimals. It compares angles now.
+- The **projectile** check `break`-ed out of its loop on the first shot, then asserted
+  "and they kill" three frames later. Against a weapon that kills nine bats in twenty
+  seconds.
+
+Three times in one round the failure was in the test rather than the code, and each
+one was indistinguishable from the bug it was testing for. The instinct every time was
+to go and change working code.
+
 ### XP and the level-up pick — it is a survivors game now
 
 Kill a foe, an orb drops where it fell, it flies to you once you are close enough,

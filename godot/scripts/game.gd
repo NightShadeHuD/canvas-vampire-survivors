@@ -16,9 +16,13 @@ var orbs: Array[Orb] = []
 var pending_picks := 0
 ## Set by the view when it has an offer on screen, so the sim does not run on.
 var awaiting_pick := false
-## Seconds until the next spawn / the next weapon tick.
+## Seconds until the next spawn.
 var spawn_timer := 0.0
-var attack_timer := 0.0
+## One cooldown PER WEAPON, keyed by id. A single shared timer would throttle a fast
+## knife to whatever the slowest weapon the hero holds happens to be.
+var cooldowns: Dictionary = {}
+## Shots in flight.
+var shots: Array[Shot] = []
 var elapsed := 0.0
 var kills := 0
 var weapon: Dictionary
@@ -91,10 +95,14 @@ func step(delta: float, move_dir: Vector2) -> void:
 		spawn_timer = _spawn_interval / maxf(mult, 0.05)
 		_spawn_foe()
 
-	attack_timer -= delta
-	if attack_timer <= 0.0:
-		attack_timer = weapon["baseCooldown"]
-		_attack()
+	for w in hero.weapons:
+		var id: String = w["id"]
+		var cd := float(w["def"]["baseCooldown"])
+		var left := float(cooldowns.get(id, 0.0)) - delta
+		if left <= 0.0:
+			left = cd
+			WeaponFire.fire(w["def"], hero, foes, shots)
+		cooldowns[id] = left
 
 	for foe in foes:
 		if not foe.dead:
@@ -106,6 +114,7 @@ func step(delta: float, move_dir: Vector2) -> void:
 			if sqrt(dx * dx + dy * dy) < foe.size + hero.size:
 				hero.take_damage(foe.damage)
 
+	_update_shots(delta)
 	_update_orbs(delta)
 	_remove_dead()
 
@@ -119,9 +128,24 @@ func _spawn_foe() -> void:
 	var def: Dictionary = _foe_def(pool[randi() % pool.size()])
 	foes.append(Foe.new(def, hero.x + cos(angle) * r, hero.y + sin(angle) * r, hp_mult(), dmg_mult()))
 
-## The slice's one weapon: a damaging aura around the hero, which is what GARLIC is.
-## `baseRange` and `baseDamage` are the real values from the generated table.
-func _attack() -> void:
+## Every shot in flight: move it, then let it hit what it touches.
+##
+## `bounce_off_walls` is not a thing in this game -- a shot that leaves the arena is
+## simply gone, which is what the original does too.
+func _update_shots(delta: float) -> void:
+	var kept: Array[Shot] = []
+	for shot in shots:
+		# Orbit shards are placed relative to the hero, so they need it every frame.
+		shot.update(delta, hero.x, hero.y, hero.x, hero.y)
+		if not shot.dead:
+			shot.resolve(foes, Callable())
+		if not shot.dead:
+			kept.append(shot)
+	shots = kept
+
+## Superseded by `WeaponFire`, which dispatches on the weapon's archetype. Kept only
+## as the aura case it always was -- see `WeaponFire._strike_all_in_range`.
+func _unused_attack() -> void:
 	# Every weapon the hero holds fires on its own cooldown. A weapon picked at
 	# level-up changes this loop and nothing else, which is the point of keeping
 	# `weapons` on the hero rather than a single `weapon` field.

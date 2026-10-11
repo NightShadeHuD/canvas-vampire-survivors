@@ -185,6 +185,11 @@ func _draw() -> void:
 	# pickup they will not notice they took.
 	for orb in game.orbs:
 		_draw_orb(orb)
+	# Shots UNDER the actors, so a bolt passing behind a foe still reads as passing
+	# behind it. Drawn at all because a weapon whose projectile is invisible is the
+	# same class of bug as a hero who is -- and that one shipped.
+	for shot in game.shots:
+		_draw_shot(shot)
 	for foe in game.foes:
 		_draw_foe(foe)
 	if not game.hero.dead:
@@ -209,6 +214,22 @@ func _draw_hero(hero: Hero) -> void:
 		Vector2(hero.x, hero.y), float(game.weapon["baseRange"]),
 		0.0, TAU, 64, Color(160 / 255.0, 1.0, 160 / 255.0, 0.25 + sin(t) * 0.08), 2.0
 	)
+
+## A shot in flight. Orbit shards are drawn as a ring segment, everything else as a
+## bright core with a trail, so a boomerang and a knife are distinguishable at a glance.
+func _draw_shot(shot: Shot) -> void:
+	var p := Vector2(shot.x, shot.y)
+	if shot.kind == Shot.Kind.ORBIT:
+		draw_circle(p, shot.radius, Color("ffd166"))
+		draw_circle(p, shot.radius * 0.5, Color(1, 1, 1, 0.8))
+		return
+	var heading := Vector2(shot.vx, shot.vy)
+	if heading.length() > 0.001:
+		# A short tail behind the shot, in the direction it came from.
+		draw_line(p, p - heading.normalized() * 14.0, Color(1, 1, 1, 0.25), 3.0)
+	var tint := Color("ffcc55") if shot.kind == Shot.Kind.BOOMERANG else Color("aaddff")
+	draw_circle(p, shot.radius, tint)
+	draw_circle(p, shot.radius * 0.45, Color(1, 1, 1, 0.9))
 
 ## An experience orb: a green core with a soft ring, brighter as it is magnetised.
 func _draw_orb(orb: Orb) -> void:
