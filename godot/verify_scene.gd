@@ -88,6 +88,36 @@ func _init() -> void:
 	_check(main.game.elapsed < elapsed_before or main.game.elapsed == 0.0, "with a NEW run, not the old one", "elapsed %0.1f" % main.game.elapsed)
 	_check(main.game.hero.hp == main.game.hero.max_hp, "and a full-health hero", "hp %0.0f" % main.game.hero.hp)
 
+	# Esc used to QUIT. A player hits it expecting a menu and loses the run -- the most
+	# expensive kind of wrong, so it is asserted rather than eyeballed.
+	main.state = main.State.PLAYING
+	main._start_run()
+	var tick := InputEventKey.new()
+	tick.keycode = KEY_ESCAPE
+	tick.pressed = true
+	main._unhandled_input(tick)
+	_check(main.state == main.State.PAUSED, "Esc PAUSES rather than quitting", "state = PAUSED")
+	_check(main.paused_panel.visible, "and shows a pause panel", "Paused visible")
+
+	# The clock must not move while paused.
+	var frozen: float = main.game.elapsed
+	for i in 60:
+		main._process(FRAME)
+	_check(is_equal_approx(main.game.elapsed, frozen), "and the run does not advance", "elapsed %0.2f" % main.game.elapsed)
+
+	var again_key := InputEventKey.new()
+	again_key.keycode = KEY_P
+	again_key.pressed = true
+	main._unhandled_input(again_key)
+	_check(main.state == main.State.PLAYING, "P resumes", "state = PLAYING")
+	_check(not main.paused_panel.visible, "and hides the panel", "Paused hidden")
+
+	# A level-up must NOT be pausable: two modals at once, and the pick is the one
+	# that has to be answered.
+	main.state = main.State.LEVEL_UP
+	main._unhandled_input(tick)
+	_check(main.state == main.State.LEVEL_UP, "a level-up cannot be paused over", "still LEVEL_UP")
+
 	main.queue_free()
 	_finish()
 
