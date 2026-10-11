@@ -80,6 +80,48 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### All 21 achievements, and the false green behind them
+
+`scripts/export-godot.mjs` has reported this on every run since it was written:
+
+```
+    21  a function -- needs a hand-written `func`
+```
+
+Those 21 were the port worklist, and this closes them. The CONDITIONS live in
+`godot/scripts/achievements.gd`; the DEFINITIONS stay generated, and the generated file
+holds `null` where a condition belongs so nothing looks finished that is not.
+
+`Run` -- a new `RefCounted` -- carries the tallies the conditions read: bosses defeated,
+longest unhit, orbs collected, passives picked, clones of the speedrun clocks. Named
+fields rather than a Dictionary, because **a typo in a string key is a runtime null and a
+typo in a field is a compile error.** It is separate from `Game` because it outlives it:
+`Game` is the simulation, `Run` is the scorecard, and a leaderboard reads the second.
+
+```
+  ok   EVERY achievement definition has a condition  (0 -> 0)
+  ok   and the generated table holds all 21  (21.0000 vs 21.0000)
+  ok   no condition is orphaned  (0 -> 0)
+  ok   slayer_100 stays quiet one kills below / fires ON the boundary
+  ok   a missing time is not a fast time
+  ok   and over it does not
+```
+
+Every threshold is pinned **on the boundary and one past it**, which is how this project
+pins an edge -- and for a good reason: a `>=` written `>` passes a "fires when true"
+test and fails a player who reaches exactly 100 kills.
+
+#### The bug, and the much worse bug behind it
+
+`triple_build` reads a lifetime total from the save. `Game` had **no `save` member at
+all**, so `g.save` threw -- and **the suite reported PASS anyway**, because a GDScript
+runtime error does not fail a suite. It prints a stack trace and carries on.
+
+**A crashing test that reports success is worse than a failing one.** `check:godot` now
+treats `SCRIPT ERROR`, `Invalid access`, `Invalid call` and `nonexistent function` in
+the output as a FAILURE regardless of what the script printed. Swept across all eleven
+suites: nothing else was hiding.
+
 ### Tooling for the way tests actually went wrong
 
 Half the red tests in this project were the TEST being wrong -- and they were not

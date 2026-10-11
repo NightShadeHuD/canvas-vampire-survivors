@@ -33,6 +33,12 @@ var elapsed := 0.0
 var kills := 0
 var weapon: Dictionary
 var foe_def: Dictionary
+## Lifetime totals from a previous session, which `triple_build` reads.
+##
+## A Dictionary rather than a typed save object: nothing in the slice persists yet, and
+## a field that is always empty is more honest than a save system that only exists to
+## satisfy one achievement. `null` means "no save", which `_unique_builds` handles.
+var save: Variant = null
 
 ## `spawn_interval` and the rest are the slice's own pacing, NOT ported constants --
 ## the original tunes waves through `stages.ts`, which is out of scope here. They are

@@ -78,7 +78,8 @@ const checks = [
     ['res://verify_passives.gd', 'EVERY passive in the data actually changes something'],
     ['res://verify_invariants.gd', '10 minutes of adversarial play stays coherent'],
     ['res://verify_archetypes.gd', 'EVERY enemy archetype in the data behaves differently'],
-    ['res://verify_assertions.gd', 'the assertion helpers fail when they should']
+    ['res://verify_assertions.gd', 'the assertion helpers fail when they should'],
+    ['res://verify_achievements.gd', 'EVERY achievement is reachable and fires on its boundary']
 ];
 
 let failed = false;
@@ -92,9 +93,19 @@ for (const [script, what] of checks) {
     } catch (err) {
         out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
     }
-    const pass = out.includes('PASS');
+    // A runtime ERROR is a failure even when the script prints PASS and Godot exits 0.
+    // GDScript does not fail a suite on an uncaught error: it prints a stack trace and
+    // carries on, so `verify_achievements.gd` passed while `g.save` threw on a Game
+    // that had no such member. That is a false green, and it is the class of failure
+    // this project keeps having to remove.
+    const errored =
+        /SCRIPT ERROR|Parse Error|Invalid access|Invalid call|nonexistent function/i.test(out);
+    const pass = out.includes('PASS') && !errored;
     if (!pass) failed = true;
-    console.log(`check-godot: ${pass ? 'ok  ' : 'FAIL'} ${script} — ${what}`);
+    console.log(
+        `check-godot: ${pass ? 'ok  ' : 'FAIL'} ${script} — ${what}` +
+            (errored ? '  [runtime error]' : '')
+    );
     if (!pass) {
         console.error(
             out
