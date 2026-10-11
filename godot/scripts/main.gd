@@ -13,7 +13,7 @@
 ## (1200, 800). Nothing tested whether a human could see it.
 extends Node2D
 
-enum State { MENU, PLAYING, DEAD, LEVEL_UP }
+enum State { MENU, PLAYING, DEAD, LEVEL_UP, PAUSED }
 
 var game: Game
 var state := State.MENU
@@ -25,6 +25,8 @@ var _offers: Array = []
 var picker: VBoxContainer
 ## The run-summary panel, hidden until the hero dies.
 var over: VBoxContainer
+## The pause panel, hidden until Esc or P.
+var paused_panel: VBoxContainer
 
 @onready var camera: Camera2D = $Camera2D
 @onready var menu: CanvasLayer = $Menu
@@ -59,6 +61,14 @@ func _ready() -> void:
 	layer.add_child(over)
 	over.visible = false
 
+	paused_panel = VBoxContainer.new()
+	paused_panel.name = "Paused"
+	paused_panel.set_anchors_preset(Control.PRESET_CENTER)
+	paused_panel.add_theme_constant_override("separation", 18)
+	paused_panel.alignment = BoxContainer.ALIGNMENT_CENTER
+	layer.add_child(paused_panel)
+	paused_panel.visible = false
+
 	picker = VBoxContainer.new()
 	picker.name = "Offers"
 	picker.set_anchors_preset(Control.PRESET_CENTER)
@@ -81,6 +91,8 @@ func _start_run() -> void:
 		picker.visible = false
 	if over != null:
 		over.visible = false
+	if paused_panel != null:
+		paused_panel.visible = false
 	# Aim the camera at the hero before the first frame is drawn, or the first frame
 	# is the black corner the original bug produced.
 	camera.position = Vector2(game.hero.x, game.hero.y)
@@ -120,10 +132,43 @@ func _process(delta: float) -> void:
 	]
 	queue_redraw()
 
+## Esc or P toggles pause -- the original's binding, taken from `index.html` rather
+## than chosen here.
+##
+## This used to QUIT. That was a placeholder from the first commit and it is the wrong
+## behaviour in the most expensive way: a player hits Escape expecting a menu and loses
+## the run instead. `verify_scene.gd` now asserts the run survives the key.
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_ESCAPE or event.keycode == KEY_P:
-			get_tree().quit()
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if event.keycode != KEY_ESCAPE and event.keycode != KEY_P:
+		return
+	# Pausing a level-up would put two modals on screen at once, and the pick is the
+	# one that must be answered.
+	if state == State.PLAYING:
+		state = State.PAUSED
+		_show_pause(true)
+	elif state == State.PAUSED:
+		state = State.PLAYING
+		_show_pause(false)
+
+## The pause panel. Reuses the shared overlay layer, like the other two.
+func _show_pause(visible_now: bool) -> void:
+	if visible_now and paused_panel.get_child_count() == 0:
+		var title := Label.new()
+		title.name = "Title"
+		title.text = "PAUSED"
+		title.add_theme_font_size_override("font_size", 44)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		paused_panel.add_child(title)
+
+		var hint := Label.new()
+		hint.name = "Hint"
+		hint.text = "Esc / P to resume"
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.add_theme_font_size_override("font_size", 18)
+		paused_panel.add_child(hint)
+	paused_panel.visible = visible_now
 
 ## Set by `verify_play.gd` so a test can drive input deterministically.
 ## `Input.is_action_pressed` reads real hardware, which a headless test has none of --

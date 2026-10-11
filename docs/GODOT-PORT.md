@@ -80,6 +80,53 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### Every enemy archetype, and the two bugs the tools found
+
+`archetype` is on every enemy in `src/data.ts` and **nothing read it**, so ten enemy
+types were ten SKINS walking at you at different speeds. Third time for this shape:
+the data declares something the code ignores.
+
+| Archetype     | Foes                                    | Behaviour, all driven by the data's own flags                                |
+| ------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
+| `chaser`      | bat, zombie, skeleton, ghost, slimeling | closes to nothing                                                            |
+| `dasher`      | wolf                                    | prowls at `speed`, bursts to `dashSpeed` on a cycle                          |
+| `shielded`    | golem                                   | `shieldHp` absorbs first, `damageReduction` cuts the rest                    |
+| `ranged`      | mage                                    | holds `keepDistance`, fires inside `firingRange`                             |
+| `splitter`    | slime                                   | becomes `splitCount` x `splitInto` on death                                  |
+| `bomber`      | bomber                                  | arms inside `fuseRange`, then blasts `blastRadius` -- **including the hero** |
+| `illusionist` | illusionist                             | makes `cloneCount` clones, worth no XP                                       |
+
+```
+  ok   EVERY archetype in the data is handled  (unhandled: none)
+  ok   a dasher outruns a chaser over 4s  (wolf 702.0 vs bat 440.0)
+  ok   and moves in BURSTS rather than steadily  (5.333 vs 2.500 per frame)
+  ok   and past it, damage is reduced / by exactly the 50% in the data
+  ok   a mage backs off when too close  (30.0 -> 170.0)
+  ok   and the signals a shot for the Game to place
+  ok   and the blast hurts the HERO, not just foes  (hp 90.0)
+  ok   and clones do NOT clone  (4 <= 10 over 25s)
+```
+
+#### Three bugs, found three different ways
+
+1. **A constant I invented.** The wolf's prowl was `speed * 0.35` -- a number I made
+   up. The data says `speed: 150` and `dashSpeed: 320`, and my version left a wolf
+   **slower than a bat over four seconds**: a dasher that never catches anything.
+   Found by asserting it outruns a chaser.
+
+2. **Clones cloned.** A clone is the same def, so it cloned too, and the population was
+   exponential -- **27,165 foes in 25 seconds**. Found by adding a ceiling to a test
+   that had passed the whole time "makes clones" was true.
+
+3. **Clones bypassed the enemy cap.** `_spawn_clones` appended to `foes` directly while
+   `_split` used the `spawned` staging list -- so clones skipped the cap check _and_
+   mutated the array `step` was iterating. **Found by the invariant fuzzer** at 302
+   foes against a cap of 300, ten minutes into a run. It only saw the cap: the mutation
+   is a silently skipped foe rather than a number out of range.
+
+Esc/P also **quit** the game. It pauses now, and a level-up cannot be paused over --
+two modals at once, and the pick is the one that has to be answered.
+
 ### An invariant fuzzer, and the bug no behavioural test could see
 
 Every check so far asserts a specific behaviour in a specific scenario. **None asked
