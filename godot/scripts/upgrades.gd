@@ -85,5 +85,6 @@ static func apply(hero: Hero, entry: Dictionary) -> String:
 			return "levelled" if hero.level_weapon(def["id"]) else "maxed"
 		hero.add_weapon(def)
 		return "new"
-	# Passives are counts, not objects; the hero tracks them by id.
-	return "passive"
+	# The DEF is passed, not an id: an effect lives on the def, so a count alone
+	# cannot change anything.
+	return "passive" if hero.add_passive(def) else "maxed"

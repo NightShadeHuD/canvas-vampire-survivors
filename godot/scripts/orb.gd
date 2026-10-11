@@ -46,7 +46,9 @@ func update(delta: float, hero: Hero) -> void:
 
 	# `MAGNET_BASE` scaled by the hero's area multiplier in the original. Level 1 has
 	# a multiplier of 1, so this is the whole of it for now.
-	if d < float(Config.MAGNET_BASE) and d > 0.001:
+	# `hero.magnet_range()` applies the Magnet passives. Using the bare base here is
+	# why taking Magnet did nothing.
+	if d < hero.magnet_range() and d > 0.001:
 		magnet_speed = minf(magnet_speed + ACCEL * delta, MAX_SPEED)
 		x += (dx / d) * magnet_speed * delta
 		y += (dy / d) * magnet_speed * delta
