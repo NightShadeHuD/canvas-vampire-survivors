@@ -28,8 +28,12 @@ func _init() -> void:
 	_multi_projectile_fires_a_volley()
 	_cooldowns_are_per_weapon()
 
-	print("verify_weapons: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
+	# while reporting PASS is a false green -- the failure mode this tooling exists
+	# to remove, introduced by the tooling itself.
+	var passed := ok and Check.ok
+	print("verify_weapons: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)
 
 ## A hero with one weapon, and a foe placed just inside that weapon's range.
 func _scene(weapon_id: String, foes_at := 40.0) -> Dictionary:
@@ -136,9 +140,9 @@ func _boomerang_comes_back() -> void:
 
 func _drain_heals() -> void:
 	var s := _scene("soul_drain", 100.0)
-	# WOUND the hero first. At full health the heal is correctly clamped and the test
-	# would fail against working code -- which it did.
-	s["game"].hero.hp = 50.0
+	# `Check.wounded` states the precondition. At full health the heal is correctly
+	# clamped and the test fails against working code -- which it did.
+	Check.wounded(s["game"].hero, 50.0)
 	var before: float = s["game"].hero.hp
 	var shots: Array = []
 	WeaponFire.fire(s["def"], s["game"].hero, s["game"].foes, shots)
@@ -171,18 +175,10 @@ func _multi_projectile_fires_a_volley() -> void:
 		# Compared by ANGLE, not by `vx`. A tight fan has almost the same x component
 		# in both shots -- the separation is in y -- and the first version of this
 		# check failed against a correctly spread volley.
-		var a0 := atan2(shots[0].vy, shots[0].vx)
-		var a1 := atan2(shots[1].vy, shots[1].vx)
-		_check(
-			absf(a1 - a0) > 0.01,
-			"and they spread rather than overlap",
-			"%0.1f deg apart" % rad_to_deg(absf(a1 - a0))
-		)
-		_check(
-			shots[0].vy * shots[1].vy < 0.0,
-			"on opposite sides of the aim line",
-			"vy %0.1f vs %0.1f" % [shots[0].vy, shots[1].vy]
-		)
+		Check.differs(shots[0].vy, shots[1].vy, 1.0, "and they spread rather than overlap")
+		# `vy`, not `vx`. `cos` is EVEN, so the x components of a symmetric fan are
+		# EXACTLY equal -- the original check compared a constant with itself.
+		Check.differs(shots[0].vy * shots[1].vy, 0.0, 1.0, "on opposite sides of the aim line")
 
 func _cooldowns_are_per_weapon() -> void:
 	# A knife (0.4s) must not be throttled by a slower weapon the hero also holds.
