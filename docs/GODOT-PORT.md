@@ -80,6 +80,46 @@ asserted rather than eyeballed: the hero moves _and_ a diagonal is not faster, f
 spawn _and_ close the distance, the weapon kills _and_ i-frames hold. All of it runs
 headless in under a second.
 
+### An invariant fuzzer, and the bug no behavioural test could see
+
+Every check so far asserts a specific behaviour in a specific scenario. **None asked
+the question that catches a whole class of bug at once: after however many frames of
+whatever input, is anything IMPOSSIBLE now true?**
+
+`verify_invariants.gd` runs ten minutes of adversarial play -- random directions,
+absurd magnitudes, a hero driven into every corner -- and checks invariants after
+every frame, reporting the frame each broke at:
+
+```
+  ok   hp is never negative / never exceeds max / is a real number
+  ok   hero position is real / is inside the arena
+  ok   exp is never negative / is below the next threshold
+  ok   foe count is capped
+  ok   10 minutes of adversarial play stayed coherent  (36000 frames)
+```
+
+Plus the boundary checks a fuzzer cannot reach on its own:
+
+| Check                                                 | Why it is an edge                                     |
+| ----------------------------------------------------- | ----------------------------------------------------- |
+| a level never goes backwards                          | a mis-signed XP subtraction                           |
+| the threshold grows at every level                    | free levelling partway through                        |
+| **the threshold stays finite at level 200**           | `*1.2` compounds to 3.3e17                            |
+| an unreachable orb expires                            | an orb outside the magnet forever                     |
+| every instant falls in a wave                         | sampling every second plus both edges of all 10 waves |
+| a boundary instant belongs to the wave STARTING there | an off-by-one that would double-spawn or stop         |
+| a fully maxed hero is still offered something         | an empty offer pauses the run forever                 |
+
+#### The bug it found
+
+**`add_weapon` allowed duplicates.** It appended unconditionally, so calling it twice
+created two copies of the same weapon at level 1 -- and `has_weapon` then reported the
+first, leaving the second as **invisible state the level-up screen could still offer**.
+
+No behavioural test could see it, because every one went through `Upgrades.apply`,
+which checks first. The fuzzer found it by asking what a fully-maxed hero is offered --
+a question no behavioural test had a reason to ask. It levels instead of appending now.
+
 ### Every passive works too — and the hook the weapon commit recorded as missing
 
 Weapons were fixed and **passives were the same bug one screen over**: thirteen were

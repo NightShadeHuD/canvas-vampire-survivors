@@ -179,8 +179,19 @@ func _recompute() -> void:
 	max_hp = _base_max_hp * max_hp_mult()
 	hp = minf(hp + maxf(max_hp - before, 0.0), max_hp)
 
+## Give the hero a weapon, or LEVEL the one they already hold.
+##
+## The first version appended unconditionally, so calling it twice created two copies
+## of the same weapon at level 1 -- and `has_weapon` then reported the first, so the
+## second was invisible state that the level-up screen could still offer. Found by the
+## invariant fuzzer asking what a fully-maxed hero is offered, not by any behavioural
+## test: every one of those went through `Upgrades.apply`, which checks first.
 func add_weapon(def: Dictionary) -> void:
-	weapons.append({"id": def["id"], "def": def, "level": 1})
+	var id: String = def["id"]
+	if has_weapon(id):
+		level_weapon(id)
+		return
+	weapons.append({"id": id, "def": def, "level": 1})
 
 ## Raise a weapon the hero already holds. Returns false if it is at the cap.
 func level_weapon(id: String) -> bool:
