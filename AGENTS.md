@@ -8,7 +8,11 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The seven non-negotiables
+## The fourteen non-negotiables
+
+Rules 1-7 are the original mandate. Rules 8-14 were each learned here the hard way --
+each made more than twice before being written down, which is the threshold for a rule
+worth having.
 
 ### 1. A red baseline stops everything
 
@@ -92,6 +96,16 @@ source file, and direct `writeFileSync('src/...')` in committed tooling — but 
 **cannot see a shell command that was never committed**, which is exactly where
 the second failure happened. That half is on you.
 
+**Do not mix mechanisms on one file.** A third failure, in one line of Python: read
+`AGENTS.md` into memory, edit it with `edit.mjs` (which writes to disk), then write the
+in-memory copy back — **clobbering the edit just made.** The file looked fine and one
+change had silently vanished.
+
+**One file, one tool, one write.** If a script must read and write, let IT do all the
+edits, and never interleave a helper that writes with a buffer read before it.
+
+---
+
 ### 7. Apple is the benchmark
 
 How it looks, how smoothly it runs, how optimised the code is, how smooth the
@@ -99,6 +113,82 @@ interface is, how easy it is to use — we settle for nothing less. Perceived
 quality comes from consistency, not features.
 
 ---
+
+## What this project learned the hard way
+
+Every rule below cost a round trip. They are written down because each one was made
+**more than twice**, and a rule you have broken three times is a rule you will break
+again.
+
+### 8. A number in prose must cite the command that produced it
+
+`strictNullChecks` in `src/` was reported as **zero for seven consecutive rounds** after
+it had gone back to seven. Every one of those figures came from a hand-run shell command
+and was then quoted rather than re-measured.
+
+**If you state a metric, name the command — and re-run it in the round you state it.**
+A metric with no gate behind it drifts, and prose does not notice.
+
+### 9. When a port or migration is the goal, START IT
+
+The Godot port was deferred for twenty rounds of TypeScript strictness work first.
+Twenty rounds later: `strictNullChecks` had been worth every hour — GDScript has only
+`null`, and the exporter's `undefined` branch is one line because of it — while
+`noImplicitAny` had **no GDScript analogue at all** and 168 errors still outstanding.
+
+**The port tells you what the source actually needs.** Doing the preparation first means
+preparing for the wrong things, and nothing reveals which until the port begins.
+
+### 10. Make the correct assertion the EASIER one
+
+Half the red tests in this project were the _test_ being wrong, and they were not random
+— they took seven distinct shapes: magnitude asserted where the claim was _direction_;
+events counted where the claim was a _population_; state read _after_ it changed; a value
+hardcoded that could be _read_; floats compared for _equality_; a _rate_ expected to be a
+certainty; a _precondition_ assumed and never set.
+
+"Be more careful" fixes none of these. `godot/assertions.gd` does, by making the correct
+form the short form: `Check.rose(before, after)` is no longer than
+`assert(before < 20.0)` and **cannot be wrong about which direction the claim was.**
+
+### 11. A check is not a check until you have watched it FAIL
+
+Twice in two rounds the verification layer itself was the defect:
+
+- A suite mixing two assertion harnesses **printed `FAIL` and reported `PASS`.**
+- A **GDScript runtime error did not fail a suite** — it printed a stack trace and
+  carried on, so a crashing test was green.
+
+**Break the thing on purpose and confirm the check catches it.** A green light nobody
+investigates is worse than a red one.
+
+### 12. If the data declares it, a test must prove the code reads it
+
+Four times a field existed in `src/data.ts` and **nothing read it**: weapon `type`,
+passive `effect`, enemy `archetype`, achievement `check`. Each was invisible because the
+tests asserted the one case that happened to work.
+
+**Drive the data table itself.** A test that iterates the real table and asserts every
+entry does _something_ fails the moment a new entry is added without an implementation —
+which is what `verify_weapons`, `verify_passives` and `verify_archetypes` do.
+
+### 13. Generated code needs a DRIFT check, not a regeneration
+
+`check:godot` regenerated the Godot data and then verified it — so it **silently repaired
+drift and always passed.** Proved by corrupting a committed value: the check rewrote it
+and reported `ok`.
+
+**Generate to a temporary directory and DIFF.** A check that fixes the thing it is
+checking can never fail.
+
+### 14. Measure a cascade before starting it
+
+A dozen changes were backed out because the cascade was larger than the increment — and
+every one was discovered _after_ starting. `--explain`, `--dry-run` and a one-file probe
+say how big a change is before it is half-made.
+
+Backing out is correct. Backing out **repeatedly, for the same reason,** means the
+measuring step was being skipped.
 
 ## Before you commit
 
@@ -119,8 +209,8 @@ npm run setup                     # installs the git hooks
 
 **Re-run `npx playwright install chromium` after any Playwright upgrade.** The
 browser is versioned with the library, so a bump leaves the old binary in place
-and the new one missing. The failure is loud but misleading — `verify` passes all
-20 gates and then stops at
+and the new one missing. The failure is loud but misleading — `verify` passes every
+gate and then stops at
 
 ```
 boot-smoke: could not launch Chromium — Executable doesn't exist at
@@ -147,6 +237,7 @@ Playwright went 1.59 to 1.63.
 | The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
 | Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |
 | No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                  |
+| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                        |
 | All of the above, in order, locally                     | `.githooks/pre-push` → `npm run verify`          |
 | All of the above, unbypassably                          | CI job **Verify**, required by branch protection |
 
