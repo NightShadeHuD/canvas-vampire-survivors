@@ -14,6 +14,7 @@
 ##   godot --headless --path godot --script res://verify_scene.gd
 extends SceneTree
 
+const FRAME := 1.0 / 60.0
 var ok := true
 
 func _init() -> void:
@@ -68,6 +69,24 @@ func _init() -> void:
 	_check(main.state == main.State.PLAYING, "START begins a run", "state = PLAYING")
 	_check(not main.menu.visible, "the menu gets out of the way", "menu.visible = false")
 	_check(main.hud.visible, "and the HUD appears", "hud.visible = true")
+
+	# The loop must CLOSE: die, see what happened, play again. Without this the game
+	# stops on death and reads as a crash rather than an ending.
+	main.game.hero.hp = 1.0
+	main.game.hero.take_damage(9999.0)
+	main._process(FRAME)
+	_check(main.state == main.State.DEAD, "dying ends the run", "state = DEAD")
+	_check(main.over.visible, "the summary appears", "GameOver visible")
+	_check(main.get_node_or_null("Picker/GameOver/Title") != null, "with a title", main.get_node("Picker/GameOver/Title").text)
+	_check(main.get_node_or_null("Picker/GameOver/Again") != null, "and a way back", "PLAY AGAIN button")
+
+	var elapsed_before: float = main.game.elapsed
+	main.get_node("Picker/GameOver/Again").emit_signal("pressed")
+	await process_frame
+	_check(main.state == main.State.PLAYING, "PLAY AGAIN starts a fresh run", "state = PLAYING")
+	_check(not main.over.visible, "and the summary gets out of the way", "GameOver hidden")
+	_check(main.game.elapsed < elapsed_before or main.game.elapsed == 0.0, "with a NEW run, not the old one", "elapsed %0.1f" % main.game.elapsed)
+	_check(main.game.hero.hp == main.game.hero.max_hp, "and a full-health hero", "hp %0.0f" % main.game.hero.hp)
 
 	main.queue_free()
 	_finish()

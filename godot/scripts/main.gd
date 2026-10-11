@@ -23,6 +23,8 @@ var _offers: Array = []
 ## `.tscn` that has to be kept in step with `_show_picks` is a second place to be
 ## wrong. The menu is in the scene because the MENU is the thing you look at first.
 var picker: VBoxContainer
+## The run-summary panel, hidden until the hero dies.
+var over: VBoxContainer
 
 @onready var camera: Camera2D = $Camera2D
 @onready var menu: CanvasLayer = $Menu
@@ -46,6 +48,17 @@ func _ready() -> void:
 	shade.color = Color(0.02, 0.02, 0.04, 0.82)
 	layer.add_child(shade)
 
+	# The game-over panel shares the picker's layer and layout: two modal overlays that
+	# never appear together, so a second CanvasLayer would be a second thing to keep in
+	# step for no gain.
+	over = VBoxContainer.new()
+	over.name = "GameOver"
+	over.set_anchors_preset(Control.PRESET_CENTER)
+	over.add_theme_constant_override("separation", 18)
+	over.alignment = BoxContainer.ALIGNMENT_CENTER
+	layer.add_child(over)
+	over.visible = false
+
 	picker = VBoxContainer.new()
 	picker.name = "Offers"
 	picker.set_anchors_preset(Control.PRESET_CENTER)
@@ -61,6 +74,13 @@ func _on_start() -> void:
 
 func _start_run() -> void:
 	game = Game.new()
+	# A restart must not inherit the previous run's overlays -- a level-up screen left
+	# open across a death would offer upgrades to a dead hero.
+	_offers = []
+	if picker != null:
+		picker.visible = false
+	if over != null:
+		over.visible = false
 	# Aim the camera at the hero before the first frame is drawn, or the first frame
 	# is the black corner the original bug produced.
 	camera.position = Vector2(game.hero.x, game.hero.y)
@@ -87,6 +107,7 @@ func _process(delta: float) -> void:
 			game.step(minf(delta, Config.DT_CLAMP), _input_dir())
 			if game.hero.dead:
 				state = State.DEAD
+				_show_game_over()
 
 	var hero := game.hero
 	# The camera FOLLOWS. Without this the arena scrolls off and the hero walks out
@@ -163,6 +184,52 @@ func _on_pick(index: int) -> void:
 	state = State.PLAYING
 	# Nothing steps while the offer is up, so `elapsed` has not moved and the camera
 	# is already where it should be. Resuming is just changing the state back.
+
+## What the run was, and a way to start another.
+##
+## The original shows "YOU DIED" with the run's figures -- taken from `index.html`
+## rather than invented -- and without this the game simply stops, which reads as a
+## crash rather than an ending.
+func _show_game_over() -> void:
+	for child in over.get_children():
+		child.queue_free()
+
+	var title := Label.new()
+	title.name = "Title"
+	title.text = "YOU DIED"
+	title.add_theme_font_size_override("font_size", 48)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	over.add_child(title)
+
+	var summary := Label.new()
+	summary.name = "Summary"
+	summary.text = "%s\nSurvived %s\n%d kills   Level %d" % [
+		_format_time(game.elapsed), _format_time(game.elapsed), game.kills, game.hero.level
+	]
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	summary.add_theme_font_size_override("font_size", 20)
+	over.add_child(summary)
+
+	var again := Button.new()
+	again.name = "Again"
+	again.text = "PLAY AGAIN"
+	again.custom_minimum_size = Vector2(240, 48)
+	again.pressed.connect(_restart)
+	over.add_child(again)
+
+	over.visible = true
+
+## `m:ss`, matching the original's run timer rather than raw seconds.
+func _format_time(seconds: float) -> String:
+	var total := int(seconds)
+	return "%d:%02d" % [total / 60, total % 60]
+
+func _restart() -> void:
+	over.visible = false
+	picker.visible = false
+	_offers = []
+	state = State.PLAYING
+	_start_run()
 
 func _draw() -> void:
 	# The arena floor, drawn as a grid so movement is legible. The original sits on a
