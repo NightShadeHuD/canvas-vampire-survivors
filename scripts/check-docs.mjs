@@ -28,7 +28,30 @@ import { refuseEmptyScan } from './lib/gate-input.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 
-/** Tracked Markdown documents, excluding the register's own review table. */
+/**
+ * Documents this gate READS, and the ones it deliberately does not.
+ *
+ * A gate with a filter is a gate with a scope, and an undeclared scope drifts. The glob
+ * below matches `*.md` at any depth, so a document in another format -- or a directory
+ * nobody thought about -- is silently outside the gate, and the pass line reads the same
+ * either way. That is the defect `check:hygiene` had when it printed "275 tracked files
+ * checked" while reading 183.
+ *
+ * Adopted from `agent-scaffold`'s `check_docs`. Its own words: **"a gate with a filter is a
+ * gate with a scope, and an undeclared scope drifts."**
+ */
+
+/** Every extension this gate reads. A new one is a deliberate edit here. */
+const READ_EXTENSIONS = ['.md'];
+
+/**
+ * Directories whose documents are NOT this gate's business. Each needs a reason, because
+ * an exclusion without one is how a hole becomes policy.
+ */
+const UNCHECKED_DIRS = [
+    ['node_modules/', 'not tracked, and not ours'],
+    ['.git/', 'not documents']
+];
 const documents = execFileSync('git', ['ls-files', '*.md'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\n')
     .map((line) => line.trim())
@@ -72,6 +95,59 @@ if (findings.length) {
     console.error('');
     process.exit(1);
 }
+
+// ---------------------------------------------------------------------------
+// THE SCOPE CHECK, and it runs even when every document PASSES.
+//
+// A handful of immaculate documents proves nothing about the ones the glob never reached.
+// This finds tracked files that a reader would call a rule document and the scope does not
+// read, and refuses each unless it is declared above with a reason.
+//
+// "Zero found" is not a pass either: a scope check that examined nothing is the same false
+// green as an empty scan, so `refuseEmptyScan` guards it the way the documents are guarded.
+// ---------------------------------------------------------------------------
+const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+const inScope = (rel) =>
+    READ_EXTENSIONS.some((ext) => rel.endsWith(ext)) ||
+    UNCHECKED_DIRS.some(([dir]) => rel.startsWith(dir));
+
+// A "rule document" is anything a reader would go looking for rules in: the repo root, or
+// `docs/`. Prose that is not in either is a README of a tool, not a rule.
+const looksLikeARuleDoc = (rel) =>
+    (rel.startsWith('docs/') || !rel.includes('/')) &&
+    /\.(md|markdown|mdx|rst|txt|adoc)$/.test(rel);
+
+const outsideScope = tracked.filter((rel) => looksLikeARuleDoc(rel) && !inScope(rel));
+
+if (outsideScope.length > 0) {
+    console.error('check-docs: FAILED — document(s) outside the declared scope\n');
+    for (const rel of outsideScope) {
+        console.error(`  ${rel}`);
+        console.error(
+            '    This is a rule document by its extension and its location, and the gate\n' +
+                '    does not read it. Add its extension to READ_EXTENSIONS, or declare why\n' +
+                '    it is out of scope. An undeclared exclusion is how a hole becomes policy.\n'
+        );
+    }
+    process.exit(1);
+}
+
+// NUMERATOR AND DENOMINATOR FROM THE SAME SET. The first version took the numerator from
+// `git ls-files '*.md'` (any depth) and the denominator from `looksLikeARuleDoc` (root or
+// docs/ only), so it printed "read 47 of 46" -- two definitions of "a document" in one
+// sentence. A scope line that cannot be read is not a scope line.
+const withReadableExtension = tracked.filter((rel) =>
+    READ_EXTENSIONS.some((ext) => rel.endsWith(ext))
+);
+console.log(
+    `check-docs: scope — opened ${documents.length} of ${withReadableExtension.length} ` +
+        `tracked ${READ_EXTENSIONS.join('/')} file(s); ${outsideScope.length} rule-shaped ` +
+        `document(s) outside the scope; ${tracked.length} tracked file(s) examined.`
+);
 
 console.log(
     `check-docs: ${loaded.length} document(s); tables well formed, ` +
