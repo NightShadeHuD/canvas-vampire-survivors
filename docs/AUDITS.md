@@ -69,6 +69,29 @@ volunteered demoted suspicions separately from findings.
 
 ---
 
+## Rule 17: split authorship, and the count that produced it
+
+**The author of a fix does not verify it.** Six of the seven defects found in one session were
+found by someone who did not write the work; the seventh was found by its author _breaking it
+on purpose_.
+
+So every non-trivial change has two agents and the conductor:
+
+| Role          | Does                                                                | Must not                        |
+| ------------- | ------------------------------------------------------------------- | ------------------------------- |
+| **Author**    | writes the fix, against the real source                             | decide whether it is correct    |
+| **Verifier**  | writes the check, **from the bug report**, against the UNFIXED tree | see the fix, or write any of it |
+| **Conductor** | runs both, compares the checks, merges                              | trust either report             |
+
+**The verifier must paste the raw output of its check FAILING before it is finished.** A check
+that has not been watched failing is a check nobody knows works — that is rule 11, and this is
+the same rule applied to the person rather than the mechanism.
+
+**And if a check cannot be watched failing, the change is REVERTED, not described.** F6 --
+`check:selftests` counting a crash as a watched failure -- was written, could not be
+demonstrated in the time available, and was backed out rather than shipped with a confident
+message. That is the intended outcome, not a failure.
+
 ## The brief template
 
 Copy this. Fill the brackets. **Delete nothing** — the parts that look like boilerplate are

@@ -8,12 +8,13 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The sixteen non-negotiables
+## The seventeen non-negotiables
 
-Rules 1-7 are the original mandate. Rules 8-16 were each learned here the hard way --
+Rules 1-7 are the original mandate. Rules 8-17 were each learned here the hard way --
 each made more than twice before being written down, which is the threshold for a rule
-worth having. Rule 15 cost nothing only because the agent that broke it noticed, and
-rule 16 is the only one whose evidence is a count.
+worth having. Rule 15 cost nothing only because the agent that broke it noticed; rules 16
+and 17 are the only ones whose evidence is a count, and they are the same finding at two
+levels: the author of a thing is the worst person to check it.
 
 ### 1. A red baseline stops everything
 
@@ -244,6 +245,40 @@ different hole than the one claimed, and another audit round was needed to find 
 that produced nothing. A vague brief (_"analyse failures"_) yielded no trace and no report;
 an adversarial one (_"construct the input that should fail it"_) found seven.
 
+### 17. The author of a fix does not verify it
+
+Rule 16 says the author of a **gate** is the worst person to find its hole. This is the same
+finding one level up, and it took a count to see it:
+
+| Shipped                      | Its hole                                                   | Found by                       |
+| ---------------------------- | ---------------------------------------------------------- | ------------------------------ |
+| `check:selftests`            | documented as a chain step, never added                    | an audit                       |
+| the pixel tier               | three assertions passed while their subject was **broken** | me — _only because I broke it_ |
+| argument-shape digest        | missed `equal(hp, maxHp)` -> `equal(hp, hp)`               | another agent                  |
+| `check:coverage` direction C | could not see `npm test`                                   | an audit                       |
+| the `NOTICE:` prefix         | two gates invisible to the counter built to see them       | an audit                       |
+| a keyboard-focus check       | broke three assertions below it                            | me, by running it              |
+
+**Six of seven were found by someone who did not write the work.** The one I found myself, I
+found _because I broke it on purpose_ -- which is the whole lesson, applied inconsistently.
+
+**So the practice is a split, not a resolution:**
+
+1. **One agent writes the fix. A different agent writes the check.** The verifier works from
+   the bug report, **against the unfixed tree**, and must paste the raw output of its check
+   FAILING before it finishes. It must not be shown the fix.
+2. **The conductor verifies both.** Their claims are claims; the gate output is the result.
+3. **If a check cannot be watched failing, the change is REVERTED, not described.**
+   "Reasoned from an audit's demonstration" is not a demonstration. This happened on F6 --
+   `check-selftests` counting a crash as a watched failure -- and the fix was backed out
+   rather than shipped with a confident message.
+
+**Why this is a rule and not a preference:** every one of the six above was reported by its
+author as working. Not one was a lie; each was a check run against the case its author had in
+mind. **The gap is structural, and no amount of care closes it.**
+
+`docs/AUDITS.md` has the brief templates for both halves.
+
 ## Before you commit
 
 ```bash
@@ -274,9 +309,16 @@ measurement is 0` — because the measurement runs the suites and they cannot lo
 assertions and the generated-data drift check — is unverified on your machine**, and
 `verify` says so in its "checked nothing" list. That is a declared gap, not a pass.
 
-**And in CI it is currently always that case** — `.github/` does not install Godot, so
-`check:godot` and `check:pixels` both NOTICE and exit 0 on every run. The Godot port is
-enforced by whichever contributor happens to have Godot on PATH. Filed as a declared gap.
+**CI installs Godot 4.7.2 and runs the import**, so the required check DOES enforce the
+port. Until recently it did not — `.github/` mentioned Godot nowhere, so `check:godot`
+printed NOTICE and exited 0 on every run and the port was enforced only by whichever
+contributor happened to have Godot on PATH. A tooling audit proved it by setting
+`CONFIG.VERSION` to `9.9.9` and getting "all 23 gates passed" under CI's PATH. **The version
+is pinned deliberately**: `godotAssertionFloors` are exact per-suite counts derived from one
+particular Godot's output format.
+
+`check:pixels` still NOTICEs in CI — it needs a DISPLAY and the runner has none. **That one
+is a live declared gap**, and the browser tier's `xvfb` is the shape of the fix.
 
 **Re-run `npx playwright install chromium` after any Playwright upgrade.** The
 browser is versioned with the library, so a bump leaves the old binary in place
