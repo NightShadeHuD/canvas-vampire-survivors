@@ -66,5 +66,12 @@ if (verdict[1] === 'FAIL') {
 }
 
 const ok = (out.match(/^ {2}ok {3}/gm) ?? []).length;
-const skipped = (out.match(/^ {2}SKIP/gm) ?? []).length;
-console.log(`check-pixels: ${ok} pixel property(ies) hold, ${skipped} declared NOT IMPLEMENTED.`);
+const measured = (out.match(/^ {2}----/gm) ?? []).length;
+// A NOTICE, and it exits 0 only because NOTHING HERE CAN FAIL YET. The wording is chosen so
+// it cannot be mistaken for a pass: a reader who sees "MEASURED, NOT VERIFIED" knows this is
+// scaffolding rather than coverage. The moment any of it can assert, that changes.
+console.log(
+    `check-pixels: NOTICE — ${ok} setup check(s) pass and ${measured} pixel difference(s) were ` +
+        'MEASURED. **Nothing is asserted yet** (there is no deterministic frame), so this tier ' +
+        'verifies nothing and must not be counted as coverage.'
+);
