@@ -143,6 +143,42 @@ func _init() -> void:
 			"%s still answers the ARROW key too" % action
 		)
 
+	# THE VIEW STOPS AT THE ARENA EDGE.
+	#
+	# Two ways to see outside the world, and both are wrong for the same reason: the spawn
+	# ring sits OUTSIDE the arena on purpose (spawning off-screen is right), so anything
+	# that widens the view past the floor shows a player enemies before they arrive -- and
+	# shows them against the engine's default grey.
+	#
+	# A player reported exactly that: a grey edge, with foes walking in on it.
+	#
+	# The camera is limited rather than the arena being enlarged, because the arena size is
+	# the ORIGINAL's and the port's job is to reproduce it. `Camera2D.limit_*` is the
+	# mechanism Godot provides, and it is applied to the final position, after the lerp and
+	# the smoothing that this camera does in two stages.
+	var cam: Camera2D = main.camera
+	Check.unchanged(cam.limit_left, 0, "the camera stops at the arena's LEFT edge")
+	Check.unchanged(cam.limit_top, 0, "and its TOP edge")
+	Check.unchanged(cam.limit_right, int(Config.ARENA_WIDTH), "and its RIGHT edge")
+	Check.unchanged(cam.limit_bottom, int(Config.ARENA_HEIGHT), "and its BOTTOM edge")
+	# A limit narrower than the viewport would show the grey on the OPPOSITE side, so the
+	# arena has to be at least as big as the window. Asserted rather than assumed, because
+	# shrinking the arena is a change somebody might make for a different reason.
+	var window := Vector2(
+		float(ProjectSettings.get_setting("display/window/size/viewport_width")),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height"))
+	)
+	Check.at_least(float(Config.ARENA_WIDTH), window.x, "the arena is wider than the window")
+	Check.at_least(float(Config.ARENA_HEIGHT), window.y, "and taller")
+
+	# AND THE DIM LEAVES THE GAME READABLE. The picker is a modal, and the world behind it
+	# is what a player is choosing an upgrade FOR. 0.82 alpha was nearly opaque.
+	var shade := main.get_node_or_null("Picker/Shade") as ColorRect
+	Check.unchanged(shade != null, true, "the modal dim exists")
+	if shade != null:
+		Check.at_most(shade.color.a, 0.6, "and leaves the world readable through it")
+		Check.at_least(shade.color.a, 0.15, "while still separating the modal from it")
+
 	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
 	for simulated in ["game.shots", "game.enemy_shots", "game.foes", "game.orbs"]:

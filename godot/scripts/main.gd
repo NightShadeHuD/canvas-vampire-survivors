@@ -51,7 +51,11 @@ func _ready() -> void:
 	var shade := ColorRect.new()
 	shade.name = "Shade"
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade.color = Color(0.02, 0.02, 0.04, 0.82)
+	# 0.82 was nearly opaque: the picker came up over a black screen, so a player choosing
+	# an upgrade could not see the fight they were choosing it for. A dim is meant to move
+	# the eye to the panel, not to hide the game -- and the picker is already a solid panel
+	# with its own contrast.
+	shade.color = Color(0.02, 0.02, 0.04, 0.45)
 	# HIDDEN BY DEFAULT, and it was not. The shade exists to dim the world BEHIND a modal,
 	# but nothing ever hid it, so every frame of the game -- title screen and gameplay
 	# alike -- ran under 82% black. Measured before the fix: hiding it changed all
@@ -110,6 +114,17 @@ func _start_run() -> void:
 	# Aim the camera at the hero before the first frame is drawn, or the first frame
 	# is the black corner the original bug produced.
 	camera.position = Vector2(game.hero.x, game.hero.y)
+	# STOP AT THE ARENA EDGE. Without this the view runs past the drawn floor whenever the
+	# hero is near a border, and what is outside is the engine's default clear colour --
+	# a grey band, with the spawn ring visible on it. Enemies appear out there BY DESIGN
+	# (spawning off-screen is right); seeing them before they arrive is not.
+	#
+	# Set here rather than per-frame: the limit is a property of the camera, and clamping
+	# the position by hand would fight the lerp below and the smoothing after it.
+	camera.limit_left = 0
+	camera.limit_top = 0
+	camera.limit_right = int(Config.ARENA_WIDTH)
+	camera.limit_bottom = int(Config.ARENA_HEIGHT)
 	camera.make_current()
 
 func _show_menu(visible_now: bool) -> void:
