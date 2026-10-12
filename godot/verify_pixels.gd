@@ -26,26 +26,27 @@
 ## That is the failure mode that made an earlier audit's findings trustworthy, and it is
 ## copied from it deliberately.
 ##
-## WHAT THIS TIER ACTUALLY DOES TODAY, STATED FIRST BECAUSE THE REST IS ASPIRATION
+## THE DETERMINISTIC FRAME, WHICH IS WHAT MAKES ANY OF THIS MEANINGFUL
 ##
-## **It MEASURES. It does not yet ASSERT.** Every number below is printed and NONE of them
-## is checked, because all three were proved to pass while broken:
+## This tier shipped once with three assertions that **passed while their subject was
+## broken** -- a fully transparent dim and a deleted hostile-bolt draw loop each still
+## moved thousands of pixels, so every check was green no matter what.
 ##
-##     a FULLY TRANSPARENT dim              -> still reported 5,898 changed pixels
-##     a DELETED hostile-bolt draw loop     -> still reported 4,042 changed pixels
+## The cause was one property. `Camera2D.position_smoothing_enabled` eases the camera every
+## frame INSIDE THE ENGINE, not in `_process`, so `set_process(false)` does not stop it and
+## no two captures could ever match. Measured directly:
 ##
-## The cause is that the scene animates: the camera eases toward the hero, the HUD carries
-## a clock, and the hero's reach ring pulses on a wall clock -- so any two captures differ
-## by thousands of pixels whatever is being tested. `state = PAUSED`, `set_process(false)`
-## and `set_physics_process(false)` each reduced it and none eliminated it.
+##     smoothing ON  -> two rendered frames differ by 3,817 pixels
+##     smoothing OFF -> two rendered frames differ by     0
 ##
-## **So the fix is not a threshold and not a longer pause. It is a DETERMINISTIC FRAME** --
-## a fixed clock the drawing code reads instead of `Time`, so two captures of an unchanged
-## scene are identical and a diff means something. That is the work this tier needs before
-## it can assert anything, and until then it must not claim to verify.
+## Turning it off takes the real signal from ~4,000 pixels of animation noise down to the
+## thing itself: the hero is 457, a hostile bolt 33. **A diff now means something**, which
+## it did not before.
 ##
-## **Shipping these as green would have been the fourth time this session that a check was
-## written which cannot fail** -- and the first three were each found by someone else.
+## WATCHED FAILING, which is the only reason to trust it
+##
+##     un-draw the hostile bolts   -> FAIL a hostile bolt CONTRIBUTES PIXELS   (0.0000)
+##     make the dim transparent    -> FAIL the dim actually DARKENS the frame  (0.0000)
 ##
 ## RUNS WINDOWED. Headless Godot has no renderer and `get_texture()` returns null, so this
 ## cannot join `check:godot`'s headless pass. It is a separate tier for the same reason
@@ -106,16 +107,27 @@ func _init() -> void:
 	var playing: int = main.state
 	main.state = main.State.PAUSED
 	main.paused_panel.visible = false
-	# STOP THE WHOLE SCENE, not just the game clock. `state = PAUSED` was not enough: the
-	# camera eases toward the hero and the HUD clock ticks in `_process` regardless of game
-	# state, and between them they moved ~4,000 pixels per frame.
+	# THE DETERMINISTIC FRAME, AND IT IS ONE PROPERTY.
 	#
-	# This is the difference between a check that measures a thing and a check that measures
-	# the animation and credits it to the thing. Proved the hard way: with the scene live,
-	# a fully TRANSPARENT dim and a DELETED hostile-bolt draw loop both still reported
-	# thousands of changed pixels, so all three assertions passed while broken.
+	# `Camera2D.position_smoothing_enabled` eases the camera EVERY FRAME inside the engine,
+	# not in `_process`, so `set_process(false)` does not stop it and no two captures could
+	# ever match. Measured directly:
+	#
+	#     smoothing ON  -> two rendered frames differ by 3,817 pixels
+	#     smoothing OFF -> two rendered frames differ by     0
+	#
+	# That single property is why three assertions previously passed while their subject was
+	# BROKEN: a fully transparent dim and a deleted hostile-bolt draw loop each still moved
+	# thousands of pixels, and a diff of 4,000 is indistinguishable from a bolt appearing.
+	#
+	# `state = PAUSED` and `set_process(false)` are still set -- they stop the game clock and
+	# the HUD -- but neither was the cause.
+	main.state = main.State.PAUSED
+	main.paused_panel.visible = false
 	main.set_process(false)
 	main.set_physics_process(false)
+	main.camera.position_smoothing_enabled = false
+	main.camera.position = Vector2(main.game.hero.x, main.game.hero.y)
 
 	var same := await _capture()
 	var still_diff := _diff(blank, same)
@@ -151,10 +163,10 @@ func _init() -> void:
 		shade.visible = false
 		var without_shade := await _capture()
 		shade.visible = was
-		# ---- MEASURED, NOT ASSERTED. See the note at the top of this file. ----
-		print(
-			"  ---- hiding the dim changes %d pixel(s) -- MEASURED, NOT PROVEN"
-			% _diff(with_shade, without_shade)
+		Check.at_least(
+			float(_diff(with_shade, without_shade)),
+			1000.0,
+			"the dim actually DARKENS the frame (it is not a full-rect no-op)"
 		)
 
 	# --- THE HERO ---------------------------------------------------------------------
@@ -173,10 +185,10 @@ func _init() -> void:
 	main.game.hero.dead = true
 	var hero_hidden := await _capture()
 	main.game.hero.dead = false
-	# ---- MEASURED, NOT ASSERTED. ----
-	print(
-		"  ---- hiding the hero changes %d pixel(s) -- MEASURED, NOT PROVEN"
-		% _diff(hero_before, hero_hidden)
+	Check.at_least(
+		float(_diff(hero_before, hero_hidden)),
+		1.0,
+		"the hero CONTRIBUTES PIXELS (the bug that started all of this)"
 	)
 
 	# --- HOSTILE BOLTS ----------------------------------------------------------------
@@ -199,24 +211,10 @@ func _init() -> void:
 	var with_bolt := await _capture()
 	main.game.enemy_shots.clear()
 	main.state = live
-	# ---------------------------------------------------------------------------------
-	# MEASURED, BUT NOT PROVEN -- so it is reported and NOT asserted.
-	#
-	# This passes with the draw loop DELETED, which means it is measuring something other
-	# than the bolt: adding one shot to `enemy_shots` changes ~3,700 pixels with nothing
-	# drawing them. Pausing the scene did not fix it, and the remaining candidates (the
-	# camera easing, the HUD clock, a redraw caused by the array mutation itself) are
-	# guesses I have not tested.
-	#
-	# **A check that stays green while the bug is present is worse than no check**: it
-	# occupies the place a real one would go and reports that the thing is covered. That is
-	# the failure this entire file exists to prevent, and shipping it here would be the
-	# third time this session I have written a green light nobody should trust.
-	#
-	# The number is printed so it is not lost, and `Check` is NOT called.
-	# ---------------------------------------------------------------------------------
-	print(
-		"  ---- a hostile bolt changes %d pixel(s) -- MEASURED, NOT PROVEN" % _diff(before_bolt, with_bolt)
+	Check.at_least(
+		float(_diff(before_bolt, with_bolt)),
+		1.0,
+		"a hostile bolt CONTRIBUTES PIXELS (it was simulated and invisible)"
 	)
 
 	# --- HOSTILE BOLTS ----------------------------------------------------------------

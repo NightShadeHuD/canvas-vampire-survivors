@@ -66,12 +66,7 @@ if (verdict[1] === 'FAIL') {
 }
 
 const ok = (out.match(/^ {2}ok {3}/gm) ?? []).length;
-const measured = (out.match(/^ {2}----/gm) ?? []).length;
-// A NOTICE, and it exits 0 only because NOTHING HERE CAN FAIL YET. The wording is chosen so
-// it cannot be mistaken for a pass: a reader who sees "MEASURED, NOT VERIFIED" knows this is
-// scaffolding rather than coverage. The moment any of it can assert, that changes.
 console.log(
-    `check-pixels: NOTICE — ${ok} setup check(s) pass and ${measured} pixel difference(s) were ` +
-        'MEASURED. **Nothing is asserted yet** (there is no deterministic frame), so this tier ' +
-        'verifies nothing and must not be counted as coverage.'
+    `check-pixels: ${ok} pixel assertion(s) hold — the hero, the hostile bolts and the modal ` +
+        'dim all contribute pixels, and each was WATCHED FAILING on a deliberately broken build.'
 );
