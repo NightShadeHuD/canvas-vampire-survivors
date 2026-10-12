@@ -22,6 +22,11 @@
             "id": "docs-markdown-link-citations",
             "why": "check:docs reads BACKTICKED document citations. The markdown-link form -- [the controls guide](./CONTROLS.md) -- is not read at all, and there are 34 of them in this repository. A gate-selftests.json entry asserted this was a REGISTERED gap; a rules audit measured that declaredGaps was empty and no row mentioned it. It is registered here because that claim was false.",
             "removal": "check:docs resolves markdown-link targets, or the 34 are converted to backticks."
+        },
+        {
+            "id": "godot-not-installed-in-ci",
+            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent, and .github/ installs neither Godot nor a display. So on every CI run the whole Godot half of this repository -- 12 suites, 309 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced \"all 23 gates passed\" under CI PATH, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor with Godot gets a stronger gate than the required check does.",
+            "removal": "The CI workflow installs Godot 4.7.x, or check:godot is removed from the chain and the port is declared locally-verified only."
         }
     ],
     "coverageFloors": {

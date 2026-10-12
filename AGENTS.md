@@ -259,7 +259,24 @@ Setup, once per clone:
 npm install
 npx playwright install chromium   # only needed for the browser gates
 npm run setup                     # installs the git hooks
+godot --headless --path godot --import   # ONLY if Godot is installed — see below
 ```
+
+**The Godot import step is required, and a fresh clone fails without it.** `godot/.godot/`
+holds the `class_name` cache and is gitignored, so until it exists every `verify_*.gd` dies
+with `Parse Error: Identifier "Check" not declared`. **A tooling audit measured that the
+failure surfaces at gate 5, blaming a document** — `claims "godotAssertions" is 309, but the
+measurement is 0` — because the measurement runs the suites and they cannot load. One
+`--import` and the same tree is 23/23.
+
+**If Godot is NOT installed, skip that line and note what it means.** `check:godot` prints
+`NOTICE:` and exits 0, so **the entire Godot half of this repository — 12 suites, 309
+assertions and the generated-data drift check — is unverified on your machine**, and
+`verify` says so in its "checked nothing" list. That is a declared gap, not a pass.
+
+**And in CI it is currently always that case** — `.github/` does not install Godot, so
+`check:godot` and `check:pixels` both NOTICE and exit 0 on every run. The Godot port is
+enforced by whichever contributor happens to have Godot on PATH. Filed as a declared gap.
 
 **Re-run `npx playwright install chromium` after any Playwright upgrade.** The
 browser is versioned with the library, so a bump leaves the old binary in place

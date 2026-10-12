@@ -43,6 +43,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { NOTICE_PREFIX } from './lib/gate-input.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -134,7 +135,10 @@ if (preDirty.length > 0 && !process.argv.includes('--force')) {
     // check. It says so out loud, in the same shape `check:godot` uses when Godot is
     // absent, and CI runs it on a committed tree where it does the real work.
     console.log(
-        `check-selftests: NOTICE — ${preDirty.length} uncommitted path(s), so the gate ` +
+        // `NOTICE:` with a COLON -- `scripts/lib/gate-input.mjs` counts that exact prefix,
+        // and this line said `NOTICE —` with an em dash, so `verify` reported "1 of which
+        // checked nothing" while TWO had. Found by a tooling audit.
+        `check-selftests: ${NOTICE_PREFIX} ${preDirty.length} uncommitted path(s), so the gate ` +
             'self-tests did NOT run. This is not a pass; it is an unchecked gate. Commit ' +
             'and re-run, or pass --force if you are certain there is nothing to lose.\n' +
             preDirty
