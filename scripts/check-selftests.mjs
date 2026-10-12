@@ -90,16 +90,29 @@ const preDirty = execSync('git status --porcelain', { cwd: repoRoot, encoding: '
     .filter((l) => l.trim() && !OWN_PATHS.some((o) => l.includes(o)));
 
 if (preDirty.length > 0 && !process.argv.includes('--force')) {
-    console.error(
-        `check-selftests: REFUSED — ${preDirty.length} uncommitted path(s) are not mine:\n`
+    // A NOTICE, NOT A FAILURE -- and the distinction matters now that this is in the chain.
+    //
+    // The restore is `git checkout HEAD -- .`, which reverts ALL uncommitted changes, so
+    // running on a dirty tree would DESTROY the work in progress. It did once: a
+    // `package.json` edit was silently reverted and only noticed two commands later.
+    //
+    // Failing here would make `npm run verify` refuse for the entire time anyone is
+    // mid-change, which is most of the time -- and a gate that blocks ordinary work is a
+    // gate that gets bypassed. So it reports what it did NOT check and exits 0.
+    //
+    // **The honest cost:** on a dirty tree this proves nothing, exactly like a skipped
+    // check. It says so out loud, in the same shape `check:godot` uses when Godot is
+    // absent, and CI runs it on a committed tree where it does the real work.
+    console.log(
+        `check-selftests: NOTICE — ${preDirty.length} uncommitted path(s), so the gate ` +
+            'self-tests did NOT run. This is not a pass; it is an unchecked gate. Commit ' +
+            'and re-run, or pass --force if you are certain there is nothing to lose.\n' +
+            preDirty
+                .slice(0, 5)
+                .map((d) => `    ${d}`)
+                .join('\n')
     );
-    for (const d of preDirty.slice(0, 8)) console.error(`  ${d}`);
-    console.error(
-        '\n  This script restores with `git checkout HEAD -- .`, which reverts ALL\n' +
-            '  uncommitted changes. Running it now would destroy that work. Commit first,\n' +
-            '  or pass --force if you are certain there is nothing to lose.\n'
-    );
-    process.exit(1);
+    process.exit(0);
 }
 
 const proven = [];
