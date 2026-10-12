@@ -70,6 +70,24 @@
 | Mute audio      | <kbd>M</kbd>                                                 | Settings → Music      | —                     |
 | Help / hotkeys  | <kbd>H</kbd> / <kbd>?</kbd>                                  | "How to Play" button  | —                     |
 
+## Measured figures
+
+Checked by `npm run check:claims` against the thing that produces each one. The prose below
+quotes figures too, and **those are not checked** -- this block is the part that cannot drift
+silently.
+
+<!-- claims:begin -->
+
+| name           | value |
+| -------------- | ----- |
+| `tests`        | 845   |
+| `weapons`      | 11    |
+| `passives`     | 13    |
+| `achievements` | 21    |
+| `unlocks`      | 11    |
+
+<!-- claims:end -->
+
 ## 🚀 Quickstart
 
 ```bash
