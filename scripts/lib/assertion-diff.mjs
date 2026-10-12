@@ -291,12 +291,63 @@ export function compareFiles(parentText, currentText) {
  * @param {string} text the file's contents
  * @returns {string} a short stable digest
  */
+/**
+ * The SHAPE of an assertion's arguments, not their values.
+ *
+ * This is the middle ground between two failures. Hashing VALUES would flag
+ * `assert.equal(hp, 42)` -> `assert.equal(hp, 43)` as a strength change, and a new
+ * expected value is not a strength change. Hashing nothing but the kind misses
+ * `assert.equal(hp, 42)` -> `assert.equal(hp, hp)`, which IS one.
+ *
+ * Shape catches the second and ignores the first:
+ *
+ *   equal(hp, 42)  -> I:L      equal(hp, hp)  -> I:I     CHANGED, correctly
+ *   equal(hp, 42)  -> I:L      equal(q.z, 7)  -> I:L     unchanged, correctly
+ *
+ * @param {string[]} args
+ * @returns {string}
+ */
+export function argumentShape(args) {
+    const list = Array.isArray(args) ? args : [];
+    return list
+        .map((raw) => {
+            const a = String(raw ?? '').trim();
+            if (a === '') return '-';
+            // A bare identifier or member access: the SUBJECT of the claim.
+            if (/^[A-Za-z_$][\w$.\[\]'"]*$/.test(a)) return 'I';
+            // A literal: the expected value.
+            if (/^-?[\d._]+$/.test(a) || /^(true|false|null|undefined|'[^']*'|"[^"]*")$/.test(a))
+                return 'L';
+            // A comparison or arithmetic expression: a PROPERTY rather than a value.
+            // A comparison or arithmetic expression: a PROPERTY, not a value. Single `<`
+            // and `>` included -- they are the commonest comparisons there are, and the
+            // first version of this required a two-character operator and classified
+            // `hp > 0` as unknown.
+            if (/[<>]=?|[=!]=|&&|\|\||[+\-*/%]/.test(a)) return 'X';
+            return 'O';
+        })
+        .join('');
+}
+
 export function assertionDigest(text) {
     const parts = [];
     for (const found of assertions(text)) {
-        // The name, not the arguments: this digest answers "did the STRENGTH
-        // change", and a new expected value is not a strength change.
-        parts.push(`${found.name}/${found.kind}`);
+        // THE KIND, AND ONLY THE KIND. This comment used to say "The name, not the
+        // arguments" -- and `found.name` does not exist, so every assertion in this
+        // repository hashed as `undefined/<kind>` and the digest has always been
+        // kind-only. A comment describing a field nothing reads is the same defect as a
+        // data field nothing reads, which this project has now found seven times.
+        //
+        // What kind-only catches, stated so the limit is known rather than assumed:
+        //
+        //   assert.equal(hp, 42) -> assert.ok(hp > 0)      CAUGHT (kind changed)
+        //   assert.equal(hp, 42) -> assert.equal(hp, hp)   NOT CAUGHT (same kind, weaker
+        //                                                  arguments)
+        //
+        // Values are deliberately excluded -- a new expected value is not a strength
+        // change. Argument SHAPE would be the way to close the second gap, and it is
+        // registered as an open row rather than half-built here.
+        parts.push(`${found.kind}:${argumentShape(found.args)}`);
     }
     // Sorted, so reordering tests is not a change. Counted, so deleting one is.
     parts.sort();
