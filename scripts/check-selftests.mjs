@@ -53,12 +53,42 @@ const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'gate-selftests.jso
 const verifySource = readFileSync(path.join(repoRoot, 'scripts', 'verify.mjs'), 'utf8');
 const allGates = [...verifySource.matchAll(/script: '([^']+)'/g)].map((m) => m[1]);
 
+/**
+ * Undo ONE entry's damage, and nothing else.
+ *
+ * `git checkout HEAD -- .` was the original, and it reverts **every uncommitted change in
+ * the tree** -- not only the ones a break made. That is not a restore, it is a reset, and it
+ * silently destroyed work five times in one session:
+ *
+ *     a `package.json` edit, notices two commands later via check:coverage
+ *     an AGENTS.md header change, noticed by grepping for the text that should be there
+ *     a gate-selftests.json fix, twice, and the same fix a third time
+ *
+ * **Every one was an edit to THIS MECHANISM'S OWN INPUT**, which is the worst place for it:
+ * the way to find out whether a self-test works is to write one and run it, and the run
+ * deleted the thing being tested. The workaround -- edit, commit, then run -- is not a fix,
+ * because the failure is silent and looks like your own mistake.
+ *
+ * So each `run` now restores exactly the paths its own `break` touched, declared in
+ * `touches`, plus anything it `creates`. A path the break did not name is left alone.
+ */
 function restore(entry) {
+    const touched = [...(entry.touches ?? []), ...(entry.creates ?? [])];
+    if (touched.length > 0) {
+        try {
+            execSync('git reset -q', { cwd: repoRoot, stdio: 'pipe' });
+            execSync('git checkout -q HEAD -- ' + touched.map((t) => `'${t}'`).join(' '), {
+                cwd: repoRoot,
+                stdio: 'pipe'
+            });
+        } catch {
+            /* a path that is not tracked cannot be checked out; creates handles it below */
+        }
+    }
     try {
         execSync('git reset -q', { cwd: repoRoot, stdio: 'pipe' });
-        execSync('git checkout -q HEAD -- .', { cwd: repoRoot, stdio: 'pipe' });
     } catch {
-        /* best effort; the status check below reports a failure to restore */
+        /* best effort */
     }
     for (const rel of entry.creates ?? []) {
         const full = path.join(repoRoot, rel);

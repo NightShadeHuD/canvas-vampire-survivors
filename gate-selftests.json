@@ -1,10 +1,11 @@
 [
     {
         "gate": "check:claims",
-        "break": "node scripts/edit.mjs docs/SHORTCUTS.md --anchor '| `strictNullChecks` | 0 | 225 |' --replace '| `strictNullChecks` | 7 | 225 |'",
+        "break": "node scripts/edit.mjs docs/SHORTCUTS.md --anchor '| `strictNullChecks` | 0   | 225  |' --replace '| `strictNullChecks` | 7   | 225  |'",
         "creates": [],
         "run": "node scripts/check-claims.mjs",
-        "why": "A register stating a number the gate measured differently is the failure this was ported for: strictNullChecks in src/ was reported as ZERO for seven consecutive rounds after it had gone back to seven. This break reproduces it."
+        "why": "A register stating a number the gate measured differently is the failure this was ported for: strictNullChecks in src/ was reported as ZERO for seven consecutive rounds after it had gone back to seven. This break reproduces it.",
+        "touches": ["docs/SHORTCUTS.md"]
     },
     {
         "gate": "check:hygiene",
@@ -18,7 +19,8 @@
         "break": "printf 'import { execSync } from \\\"node:child_process\\\";\\nexecSync(`sed -i \\\"s/x/y/\\\" godot/scripts/player.gd`);\\n' > scripts/probe-bulk.mjs && git add -f scripts/probe-bulk.mjs",
         "creates": ["scripts/probe-bulk.mjs"],
         "run": "node scripts/check-destructive.mjs",
-        "why": "Rule 6's mechanical half did not cover the half being transformed: SOURCE_EXTENSION listed only JS/TS, so a committed `sed -i` against the Godot source was invisible. Rule 6 is the rule broken most often here, so its only mechanism must reach the port."
+        "why": "Rule 6's mechanical half did not cover the half being transformed: SOURCE_EXTENSION listed only JS/TS, so a committed `sed -i` against the Godot source was invisible. Rule 6 is the rule broken most often here, so its only mechanism must reach the port.",
+        "touches": []
     },
     {
         "gate": "check:suppressions",
@@ -32,7 +34,8 @@
         "break": "node scripts/edit.mjs test/stages_daily.test.ts --anchor \"assert.notEqual(cyrb53('2026-04-25'), cyrb53('2026-04-26'));\" --replace \"assert.equal(cyrb53('2026-04-25'), cyrb53('2026-04-25'));\"",
         "creates": [],
         "run": "node scripts/check-assertions.mjs",
-        "why": "A tautology is an absent assertion wearing a real one's clothes. The digest cannot see it -- equal(hp, maxHp) and equal(hp, hp) have the same argument shape -- so it needs its own rule."
+        "why": "A tautology is an absent assertion wearing a real one's clothes. The digest cannot see it -- equal(hp, maxHp) and equal(hp, hp) have the same argument shape -- so it needs its own rule.",
+        "touches": ["test/stages_daily.test.ts"]
     },
     {
         "gate": "check:docs",
@@ -50,28 +53,31 @@
     },
     {
         "gate": "check:register",
-        "break": "node scripts/edit.mjs docs/SHORTCUTS.md --anchor '| 1 |' --replace '| 9 |'",
+        "break": "node scripts/edit.mjs docs/SHORTCUTS.md --anchor '| 6     | Toolchain' --replace '| 12    | Toolchain'",
         "creates": [],
         "run": "node scripts/check-register.mjs",
-        "why": "A renumbered row leaves a gap in a register whose whole value is that every known gap is enumerated. Demonstrated by the gate auditor: 'has no row 6', exit 1."
+        "why": "A renumbered row leaves a gap in a register whose whole value is that every known gap is enumerated. Demonstrated by the gate auditor: 'has no row 6', exit 1.",
+        "touches": ["docs/SHORTCUTS.md"]
     },
     {
         "gate": "check:baseline",
         "break": "printf '\\ntest(\\\"probe baseline\\\", () => { assert.equal(1, 2); });\\n' >> test/claims.test.ts",
         "creates": [],
         "run": "node scripts/check-baseline.mjs",
-        "why": "A NEW failure must be reported as new rather than folded into a recorded count. Demonstrated by the gate auditor: 'NEW FAILURE', exit 1."
+        "why": "A NEW failure must be reported as new rather than folded into a recorded count. Demonstrated by the gate auditor: 'NEW FAILURE', exit 1.",
+        "touches": ["test/claims.test.ts"]
     },
     {
         "gate": "check:suite",
         "break": "node scripts/edit.mjs test/claims.test.ts --anchor \"test('claims: a row between the markers is read'\" --replace \"test.skip('claims: a row between the markers is read'\"",
         "creates": [],
         "run": "node scripts/check-suite.mjs",
-        "why": "A skipped test is a test that stopped being run while the count stayed plausible. Demonstrated by the gate auditor with a test.skip: exit 1."
+        "why": "A skipped test is a test that stopped being run while the count stayed plausible. Demonstrated by the gate auditor with a test.skip: exit 1.",
+        "touches": ["test/claims.test.ts"]
     },
     {
         "gate": "check:types",
-        "break": "printf 'export const probe: any = 1 as any;\\nexport const probe2: any = 2 as any;\\n' > src/probe-any.ts && git add -f src/probe-any.ts",
+        "break": "printf 'export const p1: any = 1 as any;\\nexport const p2: any = 1 as any;\\nexport const p3: any = 1 as any;\\nexport const p4: any = 1 as any;\\nexport const p5: any = 1 as any;\\nexport const p6: any = 1 as any;\\nexport const p7: any = 1 as any;\\nexport const p8: any = 1 as any;\\n' > src/probe-any.ts && git add -f src/probe-any.ts",
         "creates": ["src/probe-any.ts"],
         "run": "node scripts/check-types.mjs",
         "why": "A ceiling that cannot refuse a rise is not a ceiling. Demonstrated by the gate auditor: eight `any`s took it to 135 against a ceiling of 131, exit 1."
@@ -104,7 +110,8 @@
         "break": "node scripts/edit.mjs godot/data/config.gd --anchor 'CANVAS_WIDTH := 1200' --replace 'CANVAS_WIDTH := 9999'",
         "creates": [],
         "run": "node scripts/check-godot.mjs",
-        "why": "A gate that REGENERATES the thing it checks can never fail. This one generates to a temp directory and diffs, so corrupting a committed generated value must be refused. It was not, before rule 13: the check rewrote the file and reported ok."
+        "why": "A gate that REGENERATES the thing it checks can never fail. This one generates to a temp directory and diffs, so corrupting a committed generated value must be refused. It was not, before rule 13: the check rewrote the file and reported ok.",
+        "touches": ["godot/data/config.gd"]
     },
     {
         "gate": "lint",
@@ -132,6 +139,7 @@
         "break": "node scripts/edit.mjs tsconfig.json --anchor '\"strictNullChecks\": false' --replace '\"strictNullChecks\": true'",
         "creates": [],
         "run": "node scripts/check-strict.mjs",
-        "why": "A ceiling that may only fall must refuse a RISE. Turning a flag on when the ceiling says it is off is a change the baseline has to record deliberately."
+        "why": "A ceiling that may only fall must refuse a RISE. Turning a flag on when the ceiling says it is off is a change the baseline has to record deliberately.",
+        "touches": ["tsconfig.json"]
     }
 ]
