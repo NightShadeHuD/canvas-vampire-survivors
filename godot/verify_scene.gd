@@ -18,6 +18,23 @@ const FRAME := 1.0 / 60.0
 
 ## `String.contains` via `find`, because GDScript has no `contains` on String and a
 ## missing method is a runtime error rather than a failed check.
+## Whether `action` answers a specific key, by PHYSICAL code -- layout-independent, which
+## is the whole point of binding WASD physically.
+func _has_key(action: String, keycode: int) -> bool:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey and event.physical_keycode == keycode:
+			return true
+	return false
+
+
+## Whether `action` answers an ARROW key, which is a LOGICAL keycode rather than physical.
+func _has_arrow(action: String) -> bool:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey and event.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]:
+			return true
+	return false
+
+
 func contains(haystack: String, needle: String) -> bool:
 	return haystack.find(needle) != -1
 
@@ -97,6 +114,35 @@ func _init() -> void:
 	# screen. A pixel diff can, and that is what a behavioural audit used to find the bolts.
 	# This is the cheap half -- it fails the moment the loop is deleted, which is the
 	# mistake actually made -- and it is honest about being the cheap half.
+	# THE KEYS THE GAME ADVERTISES ARE ACTUALLY MAPPED.
+	#
+	# `main.gd` reads `ui_up/ui_down/ui_left/ui_right`, and Godot's BUILT-IN bindings for
+	# those are the ARROW KEYS. There was no `[input]` section in `project.godot` at all,
+	# so the HUD printed "WASD / arrows to move" -- in the game and in the how-to screen --
+	# while WASD did nothing. Reported by a player, not by any of 280 assertions.
+	#
+	# THE TEST SEAM IS WHY. Every suite drives movement through `_input_dir_override`,
+	# which exists because a headless test has no hardware -- and that override bypasses
+	# `Input.is_action_pressed` entirely, so the real input path was never exercised by
+	# anything. A seam that makes a thing testable can also make it untested; this checks
+	# the CONFIGURATION rather than the keypress, which is the half that can fail silently.
+	var advertised := {"ui_up": KEY_W, "ui_down": KEY_S, "ui_left": KEY_A, "ui_right": KEY_D}
+	for action in advertised:
+		Check.unchanged(InputMap.has_action(action), true, "the action %s exists" % action)
+		Check.unchanged(
+			_has_key(action, advertised[action]),
+			true,
+			"%s is bound to the key the HUD advertises" % action
+		)
+	# And the arrow keys must SURVIVE. Declaring an action in `[input]` REPLACES its
+	# built-in binding, so adding WASD is exactly the edit that can silently remove them.
+	for action in ["ui_up", "ui_down", "ui_left", "ui_right"]:
+		Check.unchanged(
+			_has_arrow(action),
+			true,
+			"%s still answers the ARROW key too" % action
+		)
+
 	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
 	for simulated in ["game.shots", "game.enemy_shots", "game.foes", "game.orbs"]:

@@ -322,7 +322,7 @@
     "godotAssertionFloors": {
         "res://verify_data.gd": 8,
         "res://verify_slice.gd": 11,
-        "res://verify_scene.gd": 46,
+        "res://verify_scene.gd": 58,
         "res://verify_play.gd": 14,
         "res://verify_xp.gd": 26,
         "res://verify_weapons.gd": 19,
