@@ -1,0 +1,183 @@
+#!/usr/bin/env node
+/**
+ * @file scripts/check-selftests.mjs
+ * @description Does every gate have input that makes it FAIL?
+ *
+ * PORTED FROM `agent-scaffold/mechanisms/check_selftests.py`, whose docstring names this
+ * project's own four findings as the reason it exists:
+ *
+ *     a gate that regenerated the thing it was checking, so it could not fail
+ *     a suite that printed FAIL and reported PASS
+ *     a runtime error did not fail a suite
+ *     a gate counting one directory while the product's other half went unchecked
+ *
+ * **Every one was found by someone OTHER than the person who wrote the gate.** That is
+ * rule 16; this is rule 11 made mechanical rather than remembered.
+ *
+ * WHAT IT IS NOT, stated first because the honest version is the useful one: it cannot
+ * invent a falsifying input for arbitrary logic, and it does not try. It makes the
+ * DECLARATION mandatory -- a gate with no self-test is reported as UNPROVEN rather than
+ * assumed sound, and a declared self-test is RUN, so "this can fail" is verified rather
+ * than asserted. The intelligence stays with the person writing the gate.
+ *
+ * A self-test that leaves its gate GREEN is a failure of the self-test: it means the gate
+ * cannot fail on that input, which is the finding.
+ *
+ * ---------------------------------------------------------------------------
+ * RESTORING, WHICH I GOT WRONG TWICE
+ *
+ * A break that creates a file and `git add`s it is STAGED, and `git checkout HEAD -- .`
+ * does not unstage -- so the probe survived and the run failed while blaming the break.
+ * Fixed with `git reset` first.
+ *
+ * Then `git clean -fdq -- scripts` **deleted this script**, because the script itself was
+ * a new untracked file in `scripts/`. A restore that removes more than the break created
+ * is worse than no restore.
+ *
+ * So each entry DECLARES what it creates (`creates`), and the restore removes exactly
+ * those paths and nothing else. `git clean` is not used at all.
+ * ---------------------------------------------------------------------------
+ */
+
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(here, '..');
+const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'gate-selftests.json'), 'utf8'));
+
+// The gates `verify.mjs` runs, so a gate with NO self-test can be NAMED rather than
+// silently omitted. A ledger that only lists what it already knows cannot show a gap.
+const verifySource = readFileSync(path.join(repoRoot, 'scripts', 'verify.mjs'), 'utf8');
+const allGates = [...verifySource.matchAll(/script: '([^']+)'/g)].map((m) => m[1]);
+
+function restore(entry) {
+    try {
+        execSync('git reset -q', { cwd: repoRoot, stdio: 'pipe' });
+        execSync('git checkout -q HEAD -- .', { cwd: repoRoot, stdio: 'pipe' });
+    } catch {
+        /* best effort; the status check below reports a failure to restore */
+    }
+    for (const rel of entry.creates ?? []) {
+        const full = path.join(repoRoot, rel);
+        if (existsSync(full)) rmSync(full, { force: true });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// REFUSE TO RUN ON A DIRTY TREE.
+//
+// The restore is `git checkout HEAD -- .`, which reverts EVERY uncommitted change -- not
+// only the ones a break made. Running this mid-work therefore DESTROYS the work in
+// progress, and it did: an edit to `package.json` made earlier in the same session was
+// silently reverted by a run of this script, and the only reason it was noticed is that
+// `check:coverage` then reported a command that did not exist.
+//
+// A self-test that can destroy uncommitted work is worse than no self-test, because the
+// damage is invisible and lands on the person least able to tell it apart from their own
+// mistake. So it does not run at all unless the tree is clean apart from its own files.
+// ---------------------------------------------------------------------------
+const OWN_PATHS = ['gate-selftests.json', 'scripts/check-selftests.mjs'];
+const preDirty = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .filter((l) => l.trim() && !OWN_PATHS.some((o) => l.includes(o)));
+
+if (preDirty.length > 0 && !process.argv.includes('--force')) {
+    console.error(
+        `check-selftests: REFUSED — ${preDirty.length} uncommitted path(s) are not mine:\n`
+    );
+    for (const d of preDirty.slice(0, 8)) console.error(`  ${d}`);
+    console.error(
+        '\n  This script restores with `git checkout HEAD -- .`, which reverts ALL\n' +
+            '  uncommitted changes. Running it now would destroy that work. Commit first,\n' +
+            '  or pass --force if you are certain there is nothing to lose.\n'
+    );
+    process.exit(1);
+}
+
+const proven = [];
+const failures = [];
+const skipped = [];
+
+for (const entry of manifest) {
+    if (entry.incomplete) {
+        skipped.push(`${entry.gate}: ${entry.why}`);
+        restore(entry);
+        continue;
+    }
+
+    let broke = true;
+    try {
+        execSync(entry.break, { cwd: repoRoot, stdio: 'pipe' });
+    } catch {
+        broke = false;
+    }
+    if (!broke) {
+        failures.push(`${entry.gate}: its BREAK command itself failed to run`);
+        restore(entry);
+        continue;
+    }
+
+    let green = false;
+    try {
+        execSync(entry.run, { cwd: repoRoot, stdio: 'pipe' });
+        green = true;
+    } catch {
+        green = false;
+    }
+    restore(entry);
+
+    if (green) {
+        failures.push(
+            `${entry.gate}: the gate stayed GREEN on a deliberately broken input.\n      ${entry.why}`
+        );
+    } else {
+        proven.push(entry.gate);
+    }
+}
+
+const declaredGates = new Set(manifest.map((s) => s.gate));
+const unproven = allGates.filter((g) => !declaredGates.has(g));
+
+// The mechanism's OWN files are excluded. They are new when this is first committed and
+// a break never touches them, so counting them would fail the run on the author's own
+// uncommitted work rather than on a restore failure -- a false alarm in the one check
+// whose whole job is to notice a real mess.
+const OWN = OWN_PATHS;
+const dirty = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .filter((l) => l.trim() && !l.includes('node_modules') && !OWN.some((o) => l.includes(o)));
+
+console.log(
+    `check-selftests: ${proven.length} gate(s) WATCHED FAILING, ${unproven.length} unproven, ` +
+        `${skipped.length} self-test(s) declared incomplete, of ${allGates.length} in the chain.`
+);
+for (const g of unproven) {
+    console.log(`  UNPROVEN   ${g} — no self-test declares an input that makes it fail`);
+}
+for (const s of skipped) console.log(`  INCOMPLETE ${s}`);
+
+if (dirty.length > 0) {
+    console.error(`\ncheck-selftests: FAILED — ${dirty.length} path(s) left modified by a break:`);
+    for (const d of dirty.slice(0, 8)) console.error(`  ${d}`);
+    console.error('\n  A self-test that leaves the tree dirty is worse than no self-test.');
+    process.exit(1);
+}
+
+if (failures.length > 0) {
+    console.error('\ncheck-selftests: FAILED\n');
+    for (const f of failures) console.error(`  ${f}\n`);
+    process.exit(1);
+}
+
+if (unproven.length > 0) {
+    // A NOTICE, not a failure. Failing would make the honest answer -- "nobody has watched
+    // this one fail" -- the expensive one, and the ledger would fill with plausible
+    // entries instead of real ones. The count prints every run so it cannot be forgotten.
+    console.log(
+        `\ncheck-selftests: NOTICE — ${unproven.length} gate(s) have never been watched ` +
+            'failing. Rule 11: a gate nobody has watched fail is a gate nobody knows works.'
+    );
+}

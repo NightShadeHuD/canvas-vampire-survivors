@@ -96,6 +96,7 @@ It runs, in order, and stops at the first failure:
 | Lint               | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold             |
 | Coverage           | `npm run check:coverage`       | Lint, format and test discovery actually reach every file               |
 | Typecheck          | `npm run typecheck`            | The TypeScript config is valid and the tree parses                      |
+| Gate self-tests    | `npm run check:selftests`      | Every gate has input that makes it FAIL                                 |
 | Register numbers   | `npm run check:claims`         | The figures the register states match what the gates measured           |
 | Strict flags       | `npm run check:strict`         | Enabled strict flags stay on, and the two outstanding flags do not rise |
 | Format             | `npm run format:check`         | Code matches the project's Prettier contract                            |
