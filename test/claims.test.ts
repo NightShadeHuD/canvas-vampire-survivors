@@ -87,5 +87,24 @@ test('claims: a figure NOTHING measures is a failure, not a skip', () => {
     const claims = parseClaims(wrap(['| `someFutureFlag` | 1 | 2 |']));
     const v = judgeClaims(claims, { noImplicitAny: { src: 168, test: 360 } });
     assert.equal(v.ok, false);
-    assert.match(v.reasons[0], /no gate measures it/);
+    // The message changed when a MISSING name was separated from an UNMEASURED one:
+    // `!want` conflated a registry with no such entry and an entry whose tool is absent,
+    // so a runner without Godot read as "no gate measures this".
+    assert.match(v.reasons[0], /no measurement in the registry produces it/);
+});
+
+test('claims: an UNMEASURED figure is reported, not compared', () => {
+    // `undefined` -- the registry has no such name. `null` -- it has one and its tool is
+    // absent. The first version treated both as "no gate measures it", which is wrong for
+    // the second and was found by CI running without Godot.
+    const claims = parseClaims(wrap(['| `godotAssertions` | 307 |']));
+    // `null` is the registry's "a tool is absent" value, which the declared type did not
+    // admit -- `check:strict` caught the widening as 226 in test/ against a ceiling of 225.
+    const v = judgeClaims(claims, { godotAssertions: null } as unknown as Record<
+        string,
+        { src: number; test: number }
+    >);
+    assert.equal(v.ok, true, 'an absent tool is not a wrong number');
+    assert.equal(v.unmeasured.length, 1, 'and it is reported rather than skipped silently');
+    assert.match(v.unmeasured[0], /needs a tool that is not here/);
 });

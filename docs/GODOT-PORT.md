@@ -1,5 +1,22 @@
 # The Godot port
 
+## Measured figures
+
+Checked by `npm run check:claims` against the thing that produces each one. The sections
+below quote numbers too, and **those are not checked** -- this block is the part that cannot
+drift silently.
+
+<!-- claims:begin -->
+
+| name              | value |
+| ----------------- | ----- |
+| `godotSuites`     | 12    |
+| `godotAssertions` | 307   |
+| `weapons`         | 11    |
+| `achievements`    | 21    |
+
+<!-- claims:end -->
+
 **Status: playable, and still short of the original.** The data layer, the vertical slice,
 XP and the level-up pick, every weapon and passive and enemy archetype, the achievements, the
 difficulty curve, persistence and a pixel tier are ported and verified — each section below

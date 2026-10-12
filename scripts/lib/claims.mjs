@@ -117,18 +117,34 @@ export function parseClaims(text) {
  *
  * @param {Claim[]} claims
  * @param {Record<string, {src: number, test: number}>} measured
- * @returns {{ok: boolean, reasons: string[], checked: number}}
+ * @returns {{ok: boolean, reasons: string[], unmeasured: string[], checked: number}}
  */
 export function judgeClaims(claims, measured) {
     const reasons = [];
+    /** Claims whose tool is absent. Reported separately, because absent is not wrong. */
+    const unmeasured = [];
 
     for (const c of claims) {
         const want = measured?.[c.gate];
-        if (!want) {
+        // `undefined` means the registry has no such name -- a claim nothing can check.
+        // `null` means it HAS one and its tool is absent -- reported separately below.
+        // `!want` conflated them, so a missing Godot read as "no gate measures this".
+        // COULD NOT BE MEASURED, which is not the same as WRONG -- and it must be checked
+        // BEFORE anything dereferences `want`. A tool this claim needs is absent, so no
+        // comparison is possible, and reporting a mismatch would be inventing a number.
+        //
+        // This sat inside the single-number branch first, so a claim with a registry entry
+        // of `null` fell through to `want.src` and threw on the null. Found by its own test.
+        if (want === null) {
+            unmeasured.push(`line ${c.line}: "${c.gate}" needs a tool that is not here`);
+            continue;
+        }
+
+        if (want === undefined) {
             reasons.push(
-                `line ${c.line}: the document states a figure for \`${c.gate}\`, but no gate ` +
-                    'measures it. A claim nothing measures cannot be checked, which is how a ' +
-                    'number becomes folklore.'
+                `line ${c.line}: the document states a figure for \`${c.gate}\`, but no ` +
+                    'measurement in the registry produces it. A claim nothing can check is ' +
+                    'how a number becomes folklore.'
             );
             continue;
         }
@@ -159,5 +175,5 @@ export function judgeClaims(claims, measured) {
         }
     }
 
-    return { ok: reasons.length === 0, reasons, checked: claims.length };
+    return { ok: reasons.length === 0, reasons, unmeasured, checked: claims.length };
 }
