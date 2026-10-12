@@ -12,6 +12,27 @@ Before this file existed, `declaredGaps` was an empty array with no field for a
 ceiling or a trigger, the eight `suppressionCeilings` were bare numbers, and every
 shortcut below lived in prose that nothing read.
 
+## Measured figures
+
+**Machine-readable, and checked by `npm run check:claims` against the ceilings in
+`quality-baseline.json`.** Those ceilings are only ever written by a gate that MEASURED
+the value, so this compares a document against a measurement rather than against a
+second hand-written number.
+
+The prose in the register explains WHY these are what they are. This block is what makes
+the numbers CHECKABLE, because prose that happens to contain figures cannot be parsed
+without also matching the historical ones -- "375 -> 0" is a legitimate sentence, and a
+gate that flagged it would be switched off within a week.
+
+<!-- claims:begin -->
+
+| flag               | src | test |
+| ------------------ | --- | ---- |
+| `noImplicitAny`    | 168 | 360  |
+| `strictNullChecks` | 0   | 225  |
+
+<!-- claims:end -->
+
 ## Register
 
 | #     | Area              | Location                                                         | Ceiling accepted                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Revisit trigger                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Status          |
