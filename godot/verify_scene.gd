@@ -50,7 +50,9 @@ func _init() -> void:
 	# The menu is what the player sees FIRST. It existed in the original and did not
 	# exist here, which is why the port "didn't look like the source material".
 	Check.unchanged(main.get_node_or_null("Menu") != null, true, "there IS a menu")
-	Check.unchanged(main.get_node_or_null("Menu/Title") != null, true, "and a title")
+	# The TEXT, not just the node. Existence alone passes on an empty label, which is
+	# the kind of check that looks like coverage and is not.
+	Check.unchanged(main.get_node("Menu/Title").text, "SURVIVOR", "and the title reads SURVIVOR")
 	Check.unchanged(main.get_node_or_null("Menu/Start") != null, true, "and a way to start")
 	Check.unchanged(main.state, main.State.MENU, "it is shown first")
 	Check.unchanged(main.menu.visible, true, "and is visible")
