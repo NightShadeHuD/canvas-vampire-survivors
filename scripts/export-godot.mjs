@@ -27,7 +27,7 @@
  * @module scripts/export-godot
  */
 
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { configFile, gdFile } from './lib/godot-data.mjs';
@@ -46,8 +46,16 @@ export async function exportGodot(outDir = OUT_DIR) {
     const data = await import(path.join(repoRoot, 'src', 'data.ts'));
     const report = { skipped: [] };
 
-    rmSync(outDir, { recursive: true, force: true });
+    // REMOVE ONLY WHAT THIS GENERATES, not the whole directory.
+    //
+    // `rmSync(outDir, { recursive: true })` wiped Godot's `.gd.uid` sidecar files,
+    // which are TRACKED -- so every export deleted four files and the next `--import`
+    // recreated them, churning the working tree for nothing. Godot 4.4+ writes those
+    // uids and owns them; this tool owns only the `.gd` files it emits.
     mkdirSync(outDir, { recursive: true });
+    for (const existing of readdirSync(outDir)) {
+        if (existing.endsWith('.gd')) rmSync(path.join(outDir, existing), { force: true });
+    }
 
     const files = [];
 
@@ -70,7 +78,20 @@ export async function exportGodot(outDir = OUT_DIR) {
     );
     files.push('difficulty.gd');
 
-    for (const name of TABLES) {
+    // EVERY top-level export is considered, not just the ones on the list.
+    //
+    // `TABLES` used to be the whole story, so a new export in `src/data.ts` was never
+    // looked at, never ported, and never reported -- the "data declares what the code
+    // ignores" bug, inside the tool built to prevent it. Proved by adding
+    // `export const UNPORTABLE = { probe: () => 1 }` and watching the worklist stay at
+    // 22 while the table went unported.
+    //
+    // The list still decides ORDER, because later tables reference earlier ones. It no
+    // longer decides SCOPE.
+    const unlisted = Object.keys(data).filter((k) => !TABLES.includes(k));
+    const ordered = [...TABLES.filter((t) => data[t] !== undefined), ...unlisted];
+
+    for (const name of ordered) {
         const value = data[name];
         if (value === undefined) {
             report.skipped.push({ at: name, why: 'not exported by src/data.ts' });
