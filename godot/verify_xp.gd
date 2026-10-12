@@ -117,7 +117,13 @@ func _applying_a_pick_changes_the_hero() -> void:
 func _a_multi_level_orb_owes_a_pick_each() -> void:
 	# One orb big enough for two levels must leave TWO picks owed, or the player is
 	# silently robbed of a choice.
-	var h := Hero.new(0, 0)
-	var gained := h.gain_exp(50.0 + 60.0)
-	Check.unchanged(gained, 2, "one orb can grant two levels")
-	Check.unchanged(h.level, 3, "and the hero is level 3")
+	# A `Game`, not a bare `Hero`. `pending_picks` lives on `Game` and is what the run
+	# PAUSES on -- so a test named "owes a pick each" that never read it was asserting
+	# the XP curve and calling it the pick queue.
+	var g := Game.without_spawns()
+	g.orbs.append(Orb.new(g.hero.x, g.hero.y, 50 + 60))
+	g.step(1.0 / 60.0, Vector2.ZERO)
+	Check.unchanged(g.hero.level, 3, "one orb can grant two levels")
+	Check.unchanged(g.pending_picks, 2, "and the run OWES a pick for each of them")
+	g.pending_picks -= 1
+	Check.unchanged(g.pending_picks, 1, "spending one pick leaves the other owed")

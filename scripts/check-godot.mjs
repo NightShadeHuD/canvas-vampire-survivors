@@ -201,6 +201,31 @@ const checks = [
     ['res://verify_achievements.gd', 'EVERY achievement is reachable and fires on its boundary']
 ];
 
+// ---------------------------------------------------------------------------
+// ASSERTION FLOORS: how many verdicts each suite printed.
+//
+// `check-assertions.mjs` diffs `test/*.test.ts` to catch a WEAKENED assertion -- and it
+// never looked at a single `.gd` file, so a `Check.*` call deleted from a Godot suite
+// was invisible to every gate in this repository. Found by a subagent that noticed the
+// gate passed its own refactor without ever inspecting it.
+//
+// A FLOOR, not a ceiling: every other metric here may only fall, but for assertions a
+// FALL is the bad direction. Counting `ok` lines is deliberate -- the suites already
+// print them, so this measures what the suites REPORT rather than what their source
+// looks like, and a `Check.*` inside a comment counts for nothing.
+// ---------------------------------------------------------------------------
+const baselineFile = JSON.parse(readFileSync(path.join(repoRoot, 'quality-baseline.json'), 'utf8'));
+const floors = baselineFile.godotAssertionFloors;
+if (!floors || Object.keys(floors).length === 0) {
+    console.error(
+        'check-godot: FAILED — no `godotAssertionFloors` in quality-baseline.json. Without ' +
+            'recorded counts, a suite whose assertions were deleted reports the same PASS as ' +
+            'one that was never weakened.'
+    );
+    process.exit(1);
+}
+
+const verdicts = {};
 let failed = false;
 for (const [script, what] of checks) {
     let out = '';
@@ -221,9 +246,17 @@ for (const [script, what] of checks) {
         /SCRIPT ERROR|Parse Error|Invalid access|Invalid call|nonexistent function/i.test(out);
     const pass = out.includes('PASS') && !errored;
     if (!pass) failed = true;
+    // Count the verdicts this suite actually printed.
+    const ok_lines = (out.match(/^ {2}ok {3}/gm) ?? []).length;
+    verdicts[script] = ok_lines;
+    const floor = floors[script];
+    const weak = floor !== undefined && ok_lines < floor;
+    if (weak) failed = true;
+
     console.log(
-        `check-godot: ${pass ? 'ok  ' : 'FAIL'} ${script} — ${what}` +
-            (errored ? '  [runtime error]' : '')
+        `check-godot: ${pass && !weak ? 'ok  ' : 'FAIL'} ${script} — ${what}` +
+            (errored ? '  [runtime error]' : '') +
+            (weak ? `  [assertions FELL to ${ok_lines}, floor ${floor}]` : '')
     );
     if (!pass) {
         console.error(
@@ -235,6 +268,30 @@ for (const [script, what] of checks) {
         );
     }
 }
+
+// A suite that fell is reported with its numbers, and `--update` ratchets FLOORS UP
+// only. Lowering one is a deliberate edit to the baseline, exactly like a ceiling.
+const fell = Object.entries(verdicts).filter(([s, n]) => floors[s] !== undefined && n < floors[s]);
+const rose = Object.entries(verdicts).filter(([s, n]) => floors[s] !== undefined && n > floors[s]);
+
+if (process.argv.includes('--update') && fell.length === 0) {
+    if (rose.length > 0) {
+        for (const [s, n] of rose) baselineFile.godotAssertionFloors[s] = n;
+        writeBaseline(path.join(repoRoot, 'quality-baseline.json'), baselineFile);
+        console.log(`check-godot: raised ${rose.length} assertion floor(s)`);
+    }
+} else if (rose.length > 0) {
+    console.log(
+        `check-godot: NOTICE: ${rose.length} suite(s) assert MORE than their floor. ` +
+            'Run `npm run check:godot -- --update` to raise it.'
+    );
+}
+
+const total = Object.values(verdicts).reduce((a, b) => a + b, 0);
+console.log(
+    `check-godot: ${total} assertion(s) across ${Object.keys(verdicts).length} suite(s) ` +
+        `(floors total ${Object.values(floors).reduce((a, b) => a + b, 0)}).`
+);
 
 if (failed) {
     console.error('\ncheck-godot: FAILED — the Godot project does not behave as documented.');

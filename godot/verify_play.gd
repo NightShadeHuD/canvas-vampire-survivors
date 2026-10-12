@@ -61,9 +61,11 @@ func _init() -> void:
 	var long_run := Game.new(0.05)
 	Check.over(60 * 120, func(_i): long_run.step(FRAME, Vector2(1, 0)))
 	Check.at_most(float(long_run.foes.size()), float(Config.MAX_ENEMIES), "foes stay under MAX_ENEMIES")
-	# NOTE: `foes.size() >= 0` is true of every array, so this asserts only that the run
-	# above did not crash the scene. Kept as it was; it is not a claim about behaviour.
-	Check.at_least(float(main.game.foes.size()), 0.0, "the scene survived the whole run")
+	# This used to be `foes.size() >= 0`, which is true of every array -- a check that
+	# could not fail, so the 90s window proved nothing about surviving it. These assert
+	# what a crash or a stalled spawner WOULD break.
+	Check.at_least(main.game.elapsed, 1.0, "the scene is still simulating after the run")
+	Check.at_least(float(foe_peak.value), 1.0, "and foes appeared during it")
 
 	# The level-up pause, exercised through the SCENE rather than a fresh Game.
 	# Without this the play test would pass whether or not the pause worked, because

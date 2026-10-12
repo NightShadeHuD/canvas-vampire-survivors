@@ -311,5 +311,18 @@
         "test/weapons-core.test.ts": "9be28a0fb43d1d7d",
         "test/weapons.test.ts": "7a6721d5afca9d4f"
     },
-    "_portCeilingsNote": "Raised 319 -> 321 for the strictNullChecks work, and the reason is a real interaction rather than noise: `Number.isFinite(height)` does not narrow `number | undefined`, so the fix is an explicit `height !== undefined` check -- and `undefined` is itself a port hazard, because GDScript has only `null`. Making the code null-safe for TypeScript therefore adds sites the Godot port must rewrite. Both ceilings may still only fall, and the SILENT total is unchanged at 8."
+    "_portCeilingsNote": "Raised 319 -> 321 for the strictNullChecks work, and the reason is a real interaction rather than noise: `Number.isFinite(height)` does not narrow `number | undefined`, so the fix is an explicit `height !== undefined` check -- and `undefined` is itself a port hazard, because GDScript has only `null`. Making the code null-safe for TypeScript therefore adds sites the Godot port must rewrite. Both ceilings may still only fall, and the SILENT total is unchanged at 8.",
+    "godotAssertionFloors": {
+        "res://verify_data.gd": 8,
+        "res://verify_slice.gd": 11,
+        "res://verify_scene.gd": 29,
+        "res://verify_play.gd": 14,
+        "res://verify_xp.gd": 26,
+        "res://verify_weapons.gd": 16,
+        "res://verify_passives.gd": 20,
+        "res://verify_invariants.gd": 11,
+        "res://verify_archetypes.gd": 19,
+        "res://verify_assertions.gd": 50,
+        "res://verify_achievements.gd": 35
+    }
 }
