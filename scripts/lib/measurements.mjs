@@ -24,6 +24,18 @@
  */
 
 import { execFileSync } from 'node:child_process';
+
+/** Whether a tool this registry needs is on PATH. */
+function hasCommand(cmd) {
+    try {
+        // `which`, not `command -v` in a shell. Passing args with `shell: true` is
+        // deprecated for the escaping reason Node gives, and `which` is a real binary.
+        execFileSync('which', [cmd], { stdio: 'pipe' });
+        return true;
+    } catch {
+        return false;
+    }
+}
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -75,6 +87,13 @@ export function measurements(repoRoot) {
          * the number `docs/GODOT-PORT.md` quotes in almost every section.
          */
         godotAssertions: () => {
+            // NULL WHERE GODOT IS ABSENT, not a throw.
+            //
+            // CI proved this the first time it ran there: `spawnSync godot ENOENT` took
+            // `check:claims` down, because a measurement that needs a tool crashes where the
+            // tool is missing. Same defect the self-test ledger had, same fix -- **a thing
+            // that could not be measured is not a thing that failed.**
+            if (!hasCommand('godot')) return null;
             const checks = [
                 'verify_data',
                 'verify_slice',
@@ -91,17 +110,25 @@ export function measurements(repoRoot) {
             ];
             let total = 0;
             for (const c of checks) {
-                const out = execFileSync(
-                    'godot',
-                    [
-                        '--headless',
-                        '--path',
-                        path.join(repoRoot, 'godot'),
-                        '--script',
-                        `res://${c}.gd`
-                    ],
-                    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 }
-                );
+                // A NON-ZERO EXIT IS DATA, not an error. `execFileSync` throws when a suite
+                // fails, and the first version let that take `check:claims` down -- so a
+                // failing suite crashed the measurement instead of contributing its count.
+                let out = '';
+                try {
+                    out = execFileSync(
+                        'godot',
+                        [
+                            '--headless',
+                            '--path',
+                            path.join(repoRoot, 'godot'),
+                            '--script',
+                            `res://${c}.gd`
+                        ],
+                        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 }
+                    );
+                } catch (err) {
+                    out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+                }
                 total += (out.match(/^ {2}ok {3}/gm) ?? []).length;
             }
             return total;

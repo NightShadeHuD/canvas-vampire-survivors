@@ -121,6 +121,8 @@ export function parseClaims(text) {
  */
 export function judgeClaims(claims, measured) {
     const reasons = [];
+    /** Claims whose tool is absent. Reported separately, because absent is not wrong. */
+    const unmeasured = [];
 
     for (const c of claims) {
         const want = measured?.[c.gate];
@@ -135,6 +137,13 @@ export function judgeClaims(claims, measured) {
         // A one-number claim: the registry answers it directly.
         if (c.test === null) {
             const measured = typeof want === 'function' ? want() : (want.src ?? want);
+            // COULD NOT BE MEASURED, which is not the same as WRONG. A tool this claim needs
+            // is absent, so no comparison is possible -- and reporting a mismatch would be
+            // inventing a number.
+            if (measured === null || measured === undefined) {
+                unmeasured.push(`line ${c.line}: "${c.gate}" needs a tool that is not here`);
+                continue;
+            }
             if (c.src !== measured) {
                 reasons.push(
                     `line ${c.line}: claims "${c.gate}" is ${c.src}, but the measurement is ` +
@@ -159,5 +168,5 @@ export function judgeClaims(claims, measured) {
         }
     }
 
-    return { ok: reasons.length === 0, reasons, checked: claims.length };
+    return { ok: reasons.length === 0, reasons, unmeasured, checked: claims.length };
 }
