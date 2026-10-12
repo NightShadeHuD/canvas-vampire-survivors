@@ -127,3 +127,47 @@ test('destructive-edit: a shell redirection into a source file is refused', () =
 test('destructive-edit: writing build output directly is still fine', () => {
     assert.deepEqual(scan("writeFileSync('dist/main.js', text)"), []);
 });
+
+test('destructive-edit: the PORT is source too', async () => {
+    // The extension list was written before the Godot port existed, so a committed
+    // `sed -i` against `godot/` was invisible -- rule 6's MECHANICAL half did not cover
+    // the half of the codebase the port is transforming. Found by an audit that put a
+    // `sed -i` on `godot/scripts/hero.gd` into a committed script and watched it pass,
+    // then changed the target to `src/data.ts` and watched it fail.
+    const { findDestructiveEdits } = await import('../scripts/lib/destructive-edit.mjs');
+
+    for (const target of [
+        'godot/scripts/hero.gd',
+        'godot/scenes/main.tscn',
+        'godot/data/config.gd'
+    ]) {
+        const findings = findDestructiveEdits(
+            'probe.mjs',
+            `execSync(\`sed -i "s/x/y/" ${target}\`);`
+        );
+        assert.ok(findings.length > 0, `${target} must be treated as source`);
+    }
+
+    // `.ts` still caught, so the widening did not replace the old behaviour.
+    assert.ok(
+        findDestructiveEdits('probe.mjs', 'execSync(`sed -i "s/x/y/" src/data.ts`);').length > 0
+    );
+});
+
+test('destructive-edit: GDScript suppressions are a tracked family', async () => {
+    // `@warning_ignore` is GDScript's analogue of `eslint-disable` -- a warning silenced
+    // rather than fixed -- and it was entirely unread, because the source extension list
+    // was written before the port existed. A whole family could grow without limit while
+    // the gate reported every ceiling matched exactly.
+    //
+    // The first attempt used the `directive(...)` helper, which expects the directive in a
+    // COMMENT. GDScript's is an ANNOTATION on the line above, so the helper found zero
+    // hits on a file that plainly contained one.
+    const { scanText } = await import('../scripts/lib/suppression-scanner.mjs');
+
+    const gd = '@warning_ignore("unused_parameter")\nfunc f(x):\n\treturn x\n';
+    assert.equal(scanText(gd).counts['warning-ignore'], 1, 'a GDScript suppression is seen');
+
+    // And a `.gd` file with none is not falsely flagged.
+    assert.equal(scanText('func f(x):\n\treturn x\n').counts['warning-ignore'], 0);
+});

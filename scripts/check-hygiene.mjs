@@ -53,7 +53,20 @@ function trackedFiles() {
     return files;
 }
 
-const TEXT_EXT = /\.(js|mjs|cjs|jsx|ts|tsx|mts|cts|json|html|css|md|yml|yaml|sh|txt)$/;
+// EVERY text file this project tracks, including the port's own formats.
+//
+// The list was written before the Godot port existed, so `.gd`, `.tscn`, `.godot` and
+// `.uid` were never read -- a committed merge conflict or an AWS key in `godot/` passed
+// while the pass line said "275 tracked files checked". Found by an audit that put an
+// unfinished merge and a fake credential in a `.gd` file and watched it go green.
+//
+// Extensionless files are read too: the hooks, `.gitignore`, `.editorconfig` and
+// `LICENSE` are text and are tracked, and a conflict marker in a hook is exactly as bad
+// as one in a source file.
+const TEXT_EXT =
+    /\.(js|mjs|cjs|jsx|ts|tsx|mts|cts|json|html|css|md|yml|yaml|sh|txt|gd|tscn|tres|godot|uid|cfg|toml|ini|gitignore|editorconfig|svg)$/;
+const TEXTLESS =
+    /(^|\/)(\.gitignore|\.editorconfig|\.prettierignore|LICENSE|CODEOWNERS)$|\.githooks\//;
 
 /** Read a file as text, or null if it cannot be decoded (binary). */
 function readText(abs) {
@@ -68,7 +81,12 @@ const problems = [];
 const note = (check, rel, detail) => problems.push({ check, rel, detail });
 
 const files = trackedFiles();
-const textFiles = files.filter((f) => TEXT_EXT.test(f.rel));
+const textFiles = files.filter((f) => TEXT_EXT.test(f.rel) || TEXTLESS.test(f.rel));
+
+// The pass line must report what was READ, not what was TRACKED. It said "275 tracked
+// files checked" while reading 183 of them -- a claim of coverage the gate did not have,
+// which is worse than the gap itself because a reader stops looking.
+const unread = files.length - textFiles.length;
 
 // ---------------------------------------------------------------------------
 // 1. Merge conflict markers
@@ -155,7 +173,16 @@ for (const { rel, size } of files) {
 // ---------------------------------------------------------------------------
 if (problems.length === 0) {
     console.log(
-        `check-hygiene: clean — ${files.length} tracked files checked ` +
+        `check-hygiene: clean — ${textFiles.length} text file(s) read of ${files.length} tracked` +
+            // NAMED, not merely counted. "Named below" without a list is the same
+            // overstatement one size smaller.
+            (unread > 0
+                ? ` (${unread} not read: ${files
+                      .filter((f) => !textFiles.includes(f))
+                      .map((f) => f.rel)
+                      .join(', ')})`
+                : '') +
+            ' ' +
             `(conflicts, focused tests, debug logs, secrets, size).`
     );
     process.exit(0);

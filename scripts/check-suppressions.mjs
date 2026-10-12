@@ -38,7 +38,11 @@ const baselinePath = path.join(repoRoot, 'quality-baseline.json');
 
 /** File extensions we consider source. Docs are excluded: they legitimately
  *  *describe* these patterns, and counting prose would be noise. */
-const SOURCE_EXT = /\.(js|mjs|cjs|jsx|ts|tsx|mts|cts)$/;
+// `.gd` too: GDScript has suppressions of its own and they were entirely unread.
+//
+// `@warning_ignore` is the direct analogue of `eslint-disable` -- a place a warning is
+// silenced rather than fixed -- so it gets a rule and a ceiling like every other.
+const SOURCE_EXT = /\.(js|mjs|cjs|jsx|ts|tsx|mts|cts|gd)$/;
 
 const args = new Set(process.argv.slice(2));
 const reportOnly = args.has('--report');
