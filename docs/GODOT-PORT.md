@@ -1,6 +1,11 @@
 # The Godot port
 
-**Status: started.** The data layer is ported and verified. Nothing else is.
+**Status: playable, and still short of the original.** The data layer, the vertical slice,
+XP and the level-up pick, every weapon and passive and enemy archetype, the achievements, the
+difficulty curve, persistence and a pixel tier are ported and verified — each section below
+records what it proves. **What is genuinely NOT ported is listed at the end of this file**,
+and it is shorter than this sentence used to claim: the line above said "Nothing else is" for
+several rounds while the same document described seven finished suites beneath it.
 
 ## What exists, and what proved it
 
@@ -516,7 +521,10 @@ them. Still to do:
 - **Core logic** — `entities.ts` (924), `weapons.ts` (462), `main.ts` (1,919)
 - **Presentation** — `ui.ts` (1,242), `game-render.ts`, `entity-render.ts`
 - **Platform** — `input.ts` (435), `storage.ts` (361), `audio.ts`
-- **The 21 achievement conditions**
+- ~~**The 21 achievement conditions**~~ — **DONE.** All 21 are implemented in
+  `godot/scripts/achievements.gd` and `verify_achievements.gd` asserts every one is present
+  and fires on its boundary. Left in place struck through, because a to-do list that keeps
+  a finished item without saying so is how this line read as current for several rounds.
 
 `npm run check:ports` measures the size of that transform: **319 sites the
 TypeScript-to-GDScript converter refuses, plus 8 that convert and behave

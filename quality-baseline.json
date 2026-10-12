@@ -17,7 +17,13 @@
         "blockingViolations": 0,
         "nodes": 0
     },
-    "declaredGaps": [],
+    "declaredGaps": [
+        {
+            "id": "docs-markdown-link-citations",
+            "why": "check:docs reads BACKTICKED document citations. The markdown-link form -- [the controls guide](./CONTROLS.md) -- is not read at all, and there are 34 of them in this repository. A gate-selftests.json entry asserted this was a REGISTERED gap; a rules audit measured that declaredGaps was empty and no row mentioned it. It is registered here because that claim was false.",
+            "removal": "check:docs resolves markdown-link targets, or the 34 are converted to backticks."
+        }
+    ],
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
@@ -57,7 +63,7 @@
                 "functions": 100
             },
             "scripts/lib/godot-data.mjs": {
-                "lines": 72.79,
+                "lines": 73.38,
                 "branches": 88,
                 "functions": 50
             },

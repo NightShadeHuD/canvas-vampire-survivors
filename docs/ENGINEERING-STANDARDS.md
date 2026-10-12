@@ -291,7 +291,7 @@ body, and an inference is what a port cannot afford to get wrong.
 `check:types` measures it and holds a ceiling that may only fall:
 
 ```
-check-types: 118 use(s) of `any` across 28 of 62 file(s) (ceiling 118)
+check-types: 127 use(s) of `any` across 29 of 70 file(s) (ceiling 131)
   — 57 cast, 30 record, 19 annotation, 8 array, 4 generic
 ```
 
@@ -373,7 +373,7 @@ Two states look identical from the outside and must never be conflated:
 - **Nothing to check yet** — a project with no shortcut register has genuinely
   declared no shortcuts. That is a **notice**, printed with a `NOTICE:` prefix
   and counted by `verify`, so a run ends with either
-  `all 15 gates passed, and every one checked something` or a list of the gates
+  `all 23 gates passed, and every one checked something` or a list of the gates
   that checked nothing and the rule each does not yet apply to.
 
 Adopted from the agent-scaffold method, whose closing line is the model:

@@ -28,9 +28,9 @@
   <a href="./CONTRIBUTING.md"><img alt="Issues welcome" src="https://img.shields.io/badge/issues-welcome-brightgreen.svg"></a>
   <a href="./package.json"><img alt="Zero runtime deps" src="https://img.shields.io/badge/runtime%20deps-0-informational.svg"></a>
   <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"><img alt="Made with TypeScript" src="https://img.shields.io/badge/made%20with-TypeScript-3178c6.svg"></a>
-  <a href="./test"><img alt="Tests: 512" src="https://img.shields.io/badge/tests-512-success.svg"></a>
+  <a href="./test"><img alt="Tests: 845" src="https://img.shields.io/badge/tests-845-success.svg"></a>
   <a href="./src/stages.ts"><img alt="Stages: 3" src="https://img.shields.io/badge/stages-3-blueviolet.svg"></a>
-  <a href="./src/data.ts"><img alt="Weapons: 10" src="https://img.shields.io/badge/weapons-10-orange.svg"></a>
+  <a href="./src/data.ts"><img alt="Weapons: 11" src="https://img.shields.io/badge/weapons-11-orange.svg"></a>
   <a href="./docs/JOURNEY.md"><img alt="Journey: 16 iterations" src="https://img.shields.io/badge/journey-16%20iters-lightgrey.svg"></a>
 </p>
 
@@ -52,7 +52,7 @@
 
 |                                                                  |                                                               |                                                                |
 | ---------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
-| 🧩 **Modular ES modules**<br/>Tiny readable files under `src/`.  | 🎨 **HTML5 Canvas**<br/>Fixed-step sim, smooth 60+ fps.       | 📦 **Zero runtime deps**<br/>No bundler, no build step.        |
+| 🧩 **Modular ES modules**<br/>Tiny readable files under `src/`.  | 🎨 **HTML5 Canvas**<br/>Fixed-step sim, smooth 60+ fps.       | 📦 **Zero runtime deps**<br/>A build step, but no bundler.     |
 | 🌐 **i18n built-in**<br/>EN + 简体中文 ship by default.          | 🎮 **Keyboard / touch / pad**<br/>All inputs first-class.     | 💾 **Local saves**<br/>`localStorage`, no backend.             |
 | ⚙️ **Settings panel**<br/>Volume, language, motion.              | ♿ **Accessibility-aware**<br/>Reduced motion, high contrast. | 🧪 **Lint + format ready**<br/>ESLint, Prettier, CI on PR.     |
 | 🕹️ **Roguelite loop**<br/>10 weapons w/ evolutions, 10 passives. | 👑 **Bosses & waves**<br/>Director with 10 named windows.     | 🏆 **Achievements & runs**<br/>12 unlocks, top-10 leaderboard. |
@@ -169,13 +169,13 @@ flowchart TD
 
 ## 🧱 Stack
 
-| Layer       | Tooling                                                         |
-| ----------- | --------------------------------------------------------------- |
-| Runtime     | **Vanilla JS** (ES2022 modules) · **HTML5 Canvas** · Web Audio  |
-| Persistence | `localStorage` (graceful in-memory fallback)                    |
-| Mobile      | Virtual joystick · Touch edge double-tap · PWA manifest         |
-| Tooling     | **ESLint 9** (flat config) · **Prettier 3** · GitHub Actions CI |
-| Hosting     | **GitHub Pages** (auto-deploy from `main`) · Service Worker     |
+| Layer       | Tooling                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| Runtime     | **Vanilla JS** (ES2022 modules) · **HTML5 Canvas** · Web Audio   |
+| Persistence | `localStorage` (graceful in-memory fallback)                     |
+| Mobile      | Virtual joystick · Touch edge double-tap · PWA manifest          |
+| Tooling     | **ESLint 10** (flat config) · **Prettier 3** · GitHub Actions CI |
+| Hosting     | **GitHub Pages** (auto-deploy from `main`) · Service Worker      |
 
 ## 🆕 What's new
 

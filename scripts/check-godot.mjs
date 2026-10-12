@@ -153,9 +153,20 @@ if (worklist.length < ceiling.total) {
         );
     }
 }
+// NOT "remaining". 21 of the 22 are the achievement CONDITIONS, which are function-valued
+// BY CONSTRUCTION -- a converter can never turn a function into GDScript, so those values
+// will be in this list forever however much work is done. Calling them "remaining" is false
+// and was measured false by an audit: all 21 conditions exist in `achievements.gd` and
+// `verify_achievements.gd` asserts every one is present.
+//
+// The distinction that matters is "work a person still has to do" versus "a category the
+// generator cannot cover". The ceiling still catches a NEW unconvertible value -- that half
+// works -- but the word was promising something the number does not mean.
+const functionValued = worklist.filter((s) => /needs a hand-written/.test(s.why)).length;
 console.log(
-    `check-godot: ok   ${'port worklist'} — ${worklist.length} hand-port(s) remaining ` +
-        `(ceiling ${ceiling.total})`
+    `check-godot: ok   port worklist — ${worklist.length} value(s) the converter cannot ` +
+        `express (${functionValued} function-valued by construction, ` +
+        `${worklist.length - functionValued} other), ceiling ${ceiling.total}`
 );
 
 if (drifted.length > 0) {

@@ -27,7 +27,10 @@
  * cannot hold a lambda in a Dictionary any more than JSON can.
  *
  * The tempting move is to skip those quietly. Instead every one is COUNTED and
- * REPORTED, because that report is the port's actual worklist: it says exactly
+ * REPORTED, because that report names every value the converter could not express -- and
+ * **most of them are not work**: the achievement conditions are function-valued by
+ * construction, so a generator can never cover them. The list catches a NEW unconvertible
+ * value, which is its real job; it does not measure how much porting is left.
  * which achievements still need a hand-written `func`. A generator that silently
  * dropped them would look finished and be hollow.
  *
