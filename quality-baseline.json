@@ -323,6 +323,7 @@
         "res://verify_invariants.gd": 11,
         "res://verify_archetypes.gd": 19,
         "res://verify_assertions.gd": 50,
-        "res://verify_achievements.gd": 35
+        "res://verify_achievements.gd": 35,
+        "res://verify_save.gd": 21
     }
 }
