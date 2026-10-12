@@ -230,13 +230,24 @@ const verdicts = {};
 let failed = false;
 for (const [script, what] of checks) {
     let out = '';
+    let exitCode = 1;
     try {
         out = execFileSync('godot', ['--headless', '--path', godotDir, '--script', script], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'pipe']
         });
+        exitCode = 0;
     } catch (err) {
         out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+        // THE EXIT CODE, WHICH WAS BEING DISCARDED. `execFileSync` throws on a non-zero
+        // exit and the catch took only the output, so the suite's own verdict never
+        // reached the decision -- and the decision was a SUBSTRING SEARCH for "PASS".
+        //
+        // Proved by an audit: `verify_passives.gd` prints the label "Evasion caps at
+        // PASSIVE_MAX_STACK", which CONTAINS "PASS". Inverting `cooldown_mult()` so
+        // Cooldown lengthens the timer printed `verify_passives: FAIL` and the gate's
+        // predicate still evaluated true -- only the assertion-count floor stopped it.
+        exitCode = typeof err.status === 'number' ? err.status : 1;
     }
     // A runtime ERROR is a failure even when the script prints PASS and Godot exits 0.
     // GDScript does not fail a suite on an uncaught error: it prints a stack trace and
@@ -245,7 +256,29 @@ for (const [script, what] of checks) {
     // this project keeps having to remove.
     const errored =
         /SCRIPT ERROR|Parse Error|Invalid access|Invalid call|nonexistent function/i.test(out);
-    const pass = out.includes('PASS') && !errored;
+    // THE VERDICT LINE, not a substring of the whole output.
+    //
+    // `out.includes('PASS')` is satisfied by any label containing those four letters,
+    // and `verify_achievements.gd` printed an UNCONDITIONAL "PASS" (its `ok` is never
+    // assigned false) so its verdict could not fail at all. This reads the one line the
+    // suite exists to emit, anchored at the start of a line and ending the line:
+    //
+    //     verify_passives: FAIL
+    //
+    // A suite that prints no verdict is a FAILURE, not a pass -- silence must never be
+    // greener than a verdict.
+    const verdict = new RegExp(
+        `^${script.slice('res://'.length, -'.gd'.length)}: (PASS|FAIL)$`,
+        'm'
+    ).exec(out);
+    const verdictOk = verdict !== null && verdict[1] === 'PASS';
+    const pass = verdictOk && exitCode === 0 && !errored;
+    if (verdict === null) {
+        console.error(
+            `check-godot: ${script} printed NO verdict line. A suite that reports nothing ` +
+                'must not be treated as passing.'
+        );
+    }
     if (!pass) failed = true;
     // Count the verdicts this suite actually printed.
     const ok_lines = (out.match(/^ {2}ok {3}/gm) ?? []).length;
