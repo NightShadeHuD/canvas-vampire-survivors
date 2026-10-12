@@ -43,6 +43,19 @@ export const RULES = [
         source: directive('@ts-expect-error')
     },
     { id: 'eslint-disable', label: 'eslint-disable', source: directive('eslint-disable') },
+    // GDScript's own suppression, and the direct analogue of `eslint-disable`: a warning
+    // silenced rather than fixed. It was invisible because the source extension list was
+    // written before the port existed, so a whole family could grow without limit while
+    // the gate reported every ceiling matched exactly.
+    {
+        id: 'warning-ignore',
+        label: '@warning_ignore',
+        // A RAW pattern, not `directive(...)`. That helper expects the directive to sit in
+        // a comment -- which is how the TypeScript ones work -- while GDScript's is an
+        // ANNOTATION on the line above the declaration. Using the helper found zero hits
+        // on a file that plainly contained one, which is how this was caught.
+        source: String.raw`@warning_ignore\s*\(`
+    },
     { id: 'debugger', label: 'debugger statement', source: String.raw`^\s*debugger\s*;?\s*$` },
     {
         id: 'test-skip',

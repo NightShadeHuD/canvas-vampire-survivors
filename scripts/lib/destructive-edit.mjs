@@ -77,7 +77,12 @@ export const DESTRUCTIVE_PATTERNS = [
  * middle there. A filter that only sees one spelling of the same act is a
  * filter that reports nothing on the other.
  */
-const SOURCE_EXTENSION = /\.(?:ts|js|mjs|cjs|jsx|tsx)\b/;
+// `.gd` IS SOURCE. The list was written before the Godot port existed, so a committed
+// `sed -i` against `godot/` was invisible -- rule 6's MECHANICAL half did not cover the
+// half of the codebase the port is actually transforming. Found by an audit that put a
+// `sed -i` on `godot/scripts/hero.gd` into a committed script and watched it pass, then
+// changed the target to `src/data.ts` and watched it fail.
+const SOURCE_EXTENSION = /\.(?:ts|js|mjs|cjs|jsx|tsx|gd|tscn|tres)\b/;
 
 /**
  * Paths whose contents are generated, so rewriting them is a different act.
