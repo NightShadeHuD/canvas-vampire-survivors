@@ -211,27 +211,27 @@ Rules for gaps:
 
 ## 6. Enforcement map
 
-| Rule                        | Mechanism                          | Runs           |
-| --------------------------- | ---------------------------------- | -------------- |
-| Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI   |
-| Isolation                   | `scripts/check-isolation.mjs`      | pre-commit, CI |
-| Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI |
-| Type coverage               | `scripts/check-types.mjs`          | pre-commit, CI |
-| Port hazards                | `scripts/check-ports.mjs`          | pre-commit, CI |
-| Style + format              | eslint, prettier                   | pre-commit, CI |
-| Destructive edits           | `scripts/check-destructive.mjs`    | pre-push, CI   |
-| Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI   |
-| Assertion strength          | `scripts/check-assertions.mjs`     | pre-push, CI   |
-| Shortcut register           | `scripts/check-register.mjs`       | pre-push, CI   |
-| Rule documents              | `scripts/check-docs.mjs`           | pre-push, CI   |
-| TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI   |
-| Strict flags                | `scripts/check-strict.mjs`         | pre-push, CI   |
-| Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI   |
-| Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI   |
-| Hermetic tests              | `scripts/check-clocks.mjs`         | pre-push, CI   |
-| No debug leftovers          | `scripts/check-hygiene.mjs`        | pre-commit, CI |
-| Reviewed before merge       | PR template + branch protection    | GitHub         |
-| Everything at once          | `npm run verify`                   | pre-push, CI   |
+| Rule                        | Mechanism                          | Runs              |
+| --------------------------- | ---------------------------------- | ----------------- |
+| Tests pass, no new failures | `scripts/check-baseline.mjs`       | pre-push, CI      |
+| Isolation                   | `scripts/check-isolation.mjs`      | CI (via `verify`) |
+| Suppressions bounded        | `scripts/check-suppressions.mjs`   | pre-commit, CI    |
+| Type coverage               | `scripts/check-types.mjs`          | CI (via `verify`) |
+| Port hazards                | `scripts/check-ports.mjs`          | CI (via `verify`) |
+| Style + format              | eslint, prettier                   | pre-commit, CI    |
+| Destructive edits           | `scripts/check-destructive.mjs`    | pre-push, CI      |
+| Suite mandates              | `scripts/check-suite.mjs`          | pre-push, CI      |
+| Assertion strength          | `scripts/check-assertions.mjs`     | pre-push, CI      |
+| Shortcut register           | `scripts/check-register.mjs`       | pre-push, CI      |
+| Rule documents              | `scripts/check-docs.mjs`           | pre-push, CI      |
+| TypeScript compiles         | `tsc` via `npm run build`          | pre-push, CI      |
+| Strict flags                | `scripts/check-strict.mjs`         | pre-push, CI      |
+| Coverage is real            | `scripts/check-coverage.mjs`       | pre-push, CI      |
+| Coverage only rises         | `scripts/check-coverage-floor.mjs` | pre-push, CI      |
+| Hermetic tests              | `scripts/check-clocks.mjs`         | pre-push, CI      |
+| No debug leftovers          | `scripts/check-hygiene.mjs`        | pre-commit, CI    |
+| Reviewed before merge       | PR template + branch protection    | GitHub            |
+| Everything at once          | `npm run verify`                   | pre-push, CI      |
 
 ### Why "lint coverage is real" is its own rule
 

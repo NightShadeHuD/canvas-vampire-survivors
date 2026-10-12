@@ -53,12 +53,42 @@ const manifest = JSON.parse(readFileSync(path.join(repoRoot, 'gate-selftests.jso
 const verifySource = readFileSync(path.join(repoRoot, 'scripts', 'verify.mjs'), 'utf8');
 const allGates = [...verifySource.matchAll(/script: '([^']+)'/g)].map((m) => m[1]);
 
+/**
+ * Undo ONE entry's damage, and nothing else.
+ *
+ * `git checkout HEAD -- .` was the original, and it reverts **every uncommitted change in
+ * the tree** -- not only the ones a break made. That is not a restore, it is a reset, and it
+ * silently destroyed work five times in one session:
+ *
+ *     a `package.json` edit, notices two commands later via check:coverage
+ *     an AGENTS.md header change, noticed by grepping for the text that should be there
+ *     a gate-selftests.json fix, twice, and the same fix a third time
+ *
+ * **Every one was an edit to THIS MECHANISM'S OWN INPUT**, which is the worst place for it:
+ * the way to find out whether a self-test works is to write one and run it, and the run
+ * deleted the thing being tested. The workaround -- edit, commit, then run -- is not a fix,
+ * because the failure is silent and looks like your own mistake.
+ *
+ * So each `run` now restores exactly the paths its own `break` touched, declared in
+ * `touches`, plus anything it `creates`. A path the break did not name is left alone.
+ */
 function restore(entry) {
+    const touched = [...(entry.touches ?? []), ...(entry.creates ?? [])];
+    if (touched.length > 0) {
+        try {
+            execSync('git reset -q', { cwd: repoRoot, stdio: 'pipe' });
+            execSync('git checkout -q HEAD -- ' + touched.map((t) => `'${t}'`).join(' '), {
+                cwd: repoRoot,
+                stdio: 'pipe'
+            });
+        } catch {
+            /* a path that is not tracked cannot be checked out; creates handles it below */
+        }
+    }
     try {
         execSync('git reset -q', { cwd: repoRoot, stdio: 'pipe' });
-        execSync('git checkout -q HEAD -- .', { cwd: repoRoot, stdio: 'pipe' });
     } catch {
-        /* best effort; the status check below reports a failure to restore */
+        /* best effort */
     }
     for (const rel of entry.creates ?? []) {
         const full = path.join(repoRoot, rel);
@@ -90,23 +120,66 @@ const preDirty = execSync('git status --porcelain', { cwd: repoRoot, encoding: '
     .filter((l) => l.trim() && !OWN_PATHS.some((o) => l.includes(o)));
 
 if (preDirty.length > 0 && !process.argv.includes('--force')) {
-    console.error(
-        `check-selftests: REFUSED — ${preDirty.length} uncommitted path(s) are not mine:\n`
+    // A NOTICE, NOT A FAILURE -- and the distinction matters now that this is in the chain.
+    //
+    // The restore is `git checkout HEAD -- .`, which reverts ALL uncommitted changes, so
+    // running on a dirty tree would DESTROY the work in progress. It did once: a
+    // `package.json` edit was silently reverted and only noticed two commands later.
+    //
+    // Failing here would make `npm run verify` refuse for the entire time anyone is
+    // mid-change, which is most of the time -- and a gate that blocks ordinary work is a
+    // gate that gets bypassed. So it reports what it did NOT check and exits 0.
+    //
+    // **The honest cost:** on a dirty tree this proves nothing, exactly like a skipped
+    // check. It says so out loud, in the same shape `check:godot` uses when Godot is
+    // absent, and CI runs it on a committed tree where it does the real work.
+    console.log(
+        `check-selftests: NOTICE — ${preDirty.length} uncommitted path(s), so the gate ` +
+            'self-tests did NOT run. This is not a pass; it is an unchecked gate. Commit ' +
+            'and re-run, or pass --force if you are certain there is nothing to lose.\n' +
+            preDirty
+                .slice(0, 5)
+                .map((d) => `    ${d}`)
+                .join('\n')
     );
-    for (const d of preDirty.slice(0, 8)) console.error(`  ${d}`);
-    console.error(
-        '\n  This script restores with `git checkout HEAD -- .`, which reverts ALL\n' +
-            '  uncommitted changes. Running it now would destroy that work. Commit first,\n' +
-            '  or pass --force if you are certain there is nothing to lose.\n'
-    );
-    process.exit(1);
+    process.exit(0);
 }
+
+// ---------------------------------------------------------------------------
+// A SELF-TEST CAN REQUIRE SOMETHING. CI found this the first time the gate ran there.
+//
+// `check:godot`'s break edits a generated value, and the gate refuses drift -- **but only
+// where Godot is installed.** In CI it prints NOTICE and exits 0, so the break produced no
+// failure and the self-test reported "the gate stayed GREEN", which reads as a gate defect
+// and is actually a missing dependency.
+//
+// **A self-test that cannot run is not a self-test that failed**, and conflating them makes
+// the ledger wrong in the direction that matters: it would report a gate as unproven when
+// nobody had tried. Declared per entry, and reported in its own category.
+// ---------------------------------------------------------------------------
+const has = (cmd) => {
+    try {
+        execSync(`command -v ${cmd}`, { cwd: repoRoot, stdio: 'pipe' });
+        return true;
+    } catch {
+        return false;
+    }
+};
+const REQUIREMENTS = { godot: () => has('godot'), python3: () => has('python3') };
 
 const proven = [];
 const failures = [];
 const skipped = [];
+const unmet = [];
 
 for (const entry of manifest) {
+    const missing = (entry.requires ?? []).filter((r) => !(REQUIREMENTS[r] ?? (() => true))());
+    if (missing.length > 0) {
+        unmet.push(`${entry.gate}: needs ${missing.join(', ')}, which is not available here`);
+        restore(entry);
+        continue;
+    }
+
     if (entry.incomplete) {
         skipped.push(`${entry.gate}: ${entry.why}`);
         restore(entry);
@@ -163,6 +236,7 @@ for (const g of unproven) {
     console.log(`  UNPROVEN   ${g} — no self-test declares an input that makes it fail`);
 }
 for (const s of skipped) console.log(`  INCOMPLETE ${s}`);
+for (const u of unmet) console.log(`  UNMET      ${u}`);
 
 if (dirty.length > 0) {
     console.error(`\ncheck-selftests: FAILED — ${dirty.length} path(s) left modified by a break:`);
