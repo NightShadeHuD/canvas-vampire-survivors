@@ -44,9 +44,9 @@
     {
         "gate": "check:coverage",
         "break": "printf '// probe\\n' > src/probe-uncovered.ts && git add -f src/probe-uncovered.ts",
-        "creates": ["src/probe-uncovered.ts"],
+        "creates": ["src/probe-uncovered.jsx"],
         "run": "node scripts/check-coverage.mjs",
-        "why": "ESLint prints NOTHING and exits 0 for a file no config block matches, so `npm run lint` can report success while whole directories are never linted. That is what had happened to scripts/, service-worker.js and game.js."
+        "why": "ESLint prints NOTHING and exits 0 for a file no config block matches, so `npm run lint` can report success while whole directories are never linted. That is what had happened to scripts/, service-worker.js and game.js. THE `creates` FIELD NAMED `.ts` WHILE THE BREAK WROTE `.jsx` UNTIL THIS WAS CAUGHT -- the restore removed a path that did not exist and left the real probe behind, where `check:coverage` found it on the next clean run. A restore is only as good as its list."
     },
     {
         "gate": "check:register",
