@@ -47,14 +47,34 @@ import path from 'node:path';
  * @returns {Record<string, () => number>}
  */
 export function measurements(repoRoot) {
-    const run = (args) => execFileSync(process.execPath, args, { cwd: repoRoot, encoding: 'utf8' });
+    /**
+     * Run a command and return its OUTPUT whether or not it succeeded.
+     *
+     * `execFileSync` throws on a non-zero exit, and **every measurement here runs a command
+     * that exits non-zero when the thing it measures is bad**: `node --test` fails when a
+     * test fails, `godot` fails when a suite fails. The first version let that propagate.
+     *
+     * TWO CI FAILURES from this one shape: `spawnSync godot ENOENT` took the gate down on a
+     * runner without Godot, and then a FAILING TEST did the same on a runner with it.
+     * **A measurement that throws on a bad value cannot report a bad value.**
+     */
+    const run = (args) => {
+        try {
+            return execFileSync(process.execPath, args, { cwd: repoRoot, encoding: 'utf8' });
+        } catch (err) {
+            return `${err.stdout ?? ''}${err.stderr ?? ''}`;
+        }
+    };
 
     const suite = () => {
         const out = run(['--test', 'test/*.test.ts']);
         // The runner prints `ℹ pass 845`, not TAP's `# pass`. A wrong pattern here returns
         // NaN, and NaN !== anything -- so every claim would fail with a number nobody could
         // act on. Measured rather than assumed.
-        return Number(/^\u2139 pass (\d+)$/m.exec(out)?.[1] ?? NaN);
+        const m = /pass (\d+)/.exec(out);
+        // NaN where the report could not be read at all -- reported as unmeasured rather
+        // than compared, because NaN !== NaN would fail every claim with no useful number.
+        return m ? Number(m[1]) : null;
     };
 
     const floor = () =>
@@ -87,6 +107,7 @@ export function measurements(repoRoot) {
          * the number `docs/GODOT-PORT.md` quotes in almost every section.
          */
         godotAssertions: () => {
+            if (!hasCommand('godot')) return null;
             // NULL WHERE GODOT IS ABSENT, not a throw.
             //
             // CI proved this the first time it ran there: `spawnSync godot ENOENT` took

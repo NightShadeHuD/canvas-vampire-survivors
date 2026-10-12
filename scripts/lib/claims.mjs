@@ -117,7 +117,7 @@ export function parseClaims(text) {
  *
  * @param {Claim[]} claims
  * @param {Record<string, {src: number, test: number}>} measured
- * @returns {{ok: boolean, reasons: string[], checked: number}}
+ * @returns {{ok: boolean, reasons: string[], unmeasured: string[], checked: number}}
  */
 export function judgeClaims(claims, measured) {
     const reasons = [];
@@ -126,24 +126,31 @@ export function judgeClaims(claims, measured) {
 
     for (const c of claims) {
         const want = measured?.[c.gate];
-        if (!want) {
+        // `undefined` means the registry has no such name -- a claim nothing can check.
+        // `null` means it HAS one and its tool is absent -- reported separately below.
+        // `!want` conflated them, so a missing Godot read as "no gate measures this".
+        // COULD NOT BE MEASURED, which is not the same as WRONG -- and it must be checked
+        // BEFORE anything dereferences `want`. A tool this claim needs is absent, so no
+        // comparison is possible, and reporting a mismatch would be inventing a number.
+        //
+        // This sat inside the single-number branch first, so a claim with a registry entry
+        // of `null` fell through to `want.src` and threw on the null. Found by its own test.
+        if (want === null) {
+            unmeasured.push(`line ${c.line}: "${c.gate}" needs a tool that is not here`);
+            continue;
+        }
+
+        if (want === undefined) {
             reasons.push(
-                `line ${c.line}: the document states a figure for \`${c.gate}\`, but no gate ` +
-                    'measures it. A claim nothing measures cannot be checked, which is how a ' +
-                    'number becomes folklore.'
+                `line ${c.line}: the document states a figure for \`${c.gate}\`, but no ` +
+                    'measurement in the registry produces it. A claim nothing can check is ' +
+                    'how a number becomes folklore.'
             );
             continue;
         }
         // A one-number claim: the registry answers it directly.
         if (c.test === null) {
             const measured = typeof want === 'function' ? want() : (want.src ?? want);
-            // COULD NOT BE MEASURED, which is not the same as WRONG. A tool this claim needs
-            // is absent, so no comparison is possible -- and reporting a mismatch would be
-            // inventing a number.
-            if (measured === null || measured === undefined) {
-                unmeasured.push(`line ${c.line}: "${c.gate}" needs a tool that is not here`);
-                continue;
-            }
             if (c.src !== measured) {
                 reasons.push(
                     `line ${c.line}: claims "${c.gate}" is ${c.src}, but the measurement is ` +
