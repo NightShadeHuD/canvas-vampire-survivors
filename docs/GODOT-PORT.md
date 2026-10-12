@@ -11,7 +11,7 @@ drift silently.
 | name              | value |
 | ----------------- | ----- |
 | `godotSuites`     | 12    |
-| `godotAssertions` | 307   |
+| `godotAssertions` | 309   |
 | `weapons`         | 11    |
 | `achievements`    | 21    |
 

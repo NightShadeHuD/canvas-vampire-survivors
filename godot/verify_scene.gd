@@ -245,6 +245,13 @@ func _init() -> void:
 
 	# The loop must CLOSE: die, see what happened, play again. Without this the game
 	# stops on death and reads as a crash rather than an ending.
+	# ACCUMULATE WHILE STILL ALIVE. `_process` advances `elapsed` only in the PLAYING state,
+	# so this has to happen BEFORE the kill -- the first version put it after and thirty
+	# frames changed nothing, which its own guard reported immediately.
+	for i in 30:
+		main._process(FRAME)
+	Check.at_least(main.game.elapsed, 0.4, "the run accumulated enough time to tell a reset from noise")
+
 	main.game.hero.hp = 1.0
 	main.game.hero.take_damage(9999.0)
 	main._process(FRAME)
@@ -253,12 +260,27 @@ func _init() -> void:
 	Check.unchanged(main.get_node_or_null("Picker/GameOver/Title") != null, true, "with a title")
 	Check.unchanged(main.get_node_or_null("Picker/GameOver/Again") != null, true, "and a way back")
 
+	# LET THE OLD RUN ACCUMULATE FIRST, or this assertion compares two numbers that are both
+	# one frame and passes or fails on scheduling.
+	#
+	# It did exactly that once, in a full run: `FAIL with a NEW run, not the old one
+	# (0.0167 -> 0.0171)`. Both values are a single FRAME. `elapsed_before` was one frame of
+	# the run that had just died and `main.game.elapsed` was one frame of the run that had
+	# just started, so which was larger depended on sub-frame timing rather than on whether
+	# the restart worked.
+	#
+	# **Rule 10's "floats compared for equality" in a different costume: a MAGNITUDE asserted
+	# where the claim was a RESET.** Half a second of old run makes the comparison mean
+	# something -- 0.5 against 0.0167 is a reset; 0.0171 against 0.0167 is noise.
 	var elapsed_before: float = main.game.elapsed
+
 	main.get_node("Picker/GameOver/Again").emit_signal("pressed")
 	await process_frame
 	Check.unchanged(main.state, main.State.PLAYING, "PLAY AGAIN starts a fresh run")
 	Check.unchanged(main.over.visible, false, "and the summary gets out of the way")
 	Check.fell(elapsed_before, main.game.elapsed, "with a NEW run, not the old one")
+	# And the reset is REAL, not merely smaller: a restart puts the clock near zero.
+	Check.at_most(main.game.elapsed, 0.2, "with the clock near ZERO, not merely smaller")
 	Check.approx(main.game.hero.hp, main.game.hero.max_hp, "and a full-health hero")
 
 	# Esc used to QUIT. A player hits it expecting a menu and loses the run -- the most
