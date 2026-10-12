@@ -236,8 +236,54 @@ const extOf = (f) => {
     // not theoretical — the §2 table used to document `npm run build`, a script
     // that has never existed. A documented-but-absent gate reads as coverage
     // and provides none.
+    //
+    // DIRECTION C: every gate the §2 table presents as part of `verify` is ACTUALLY IN IT.
+    //
+    // Directions A and B together cannot see this. `check:selftests` was documented in §2,
+    // existed in `package.json`, and was in NO chain -- `git log -S` showed it had never
+    // been added to `verify.mjs`. Both directions passed for weeks while the document said
+    // `npm run verify` proved "every gate has been watched failing" and nothing ran it.
+    //
+    // **A row that is documented and exists but is in no chain is invisible to a check that
+    // only asks whether the command exists.** That is the whole failure, and it is why this
+    // direction exists.
+    //
+    // Tier-2 gates are the exception and must SAY SO: `boot-smoke`, `a11y` and the browser
+    // tier need a display, so they run in `verify:all` rather than `verify`. A row that
+    // claims neither chain is a row nobody runs.
+    const tierTwo = new Set(['smoke:boot', 'a11y', 'check:pixels']);
+    // The rows that DESCRIBE a chain rather than naming a gate inside one. `npm run verify`
+    // listed as "pre-push, CI" is the mechanism this check is about, not a member of itself.
+    const describesAChain = new Set(['verify', 'verify:all', 'verify:browser']);
     const documented = new Set([...docSrc.matchAll(/`npm run ([a-z0-9:_-]+)`/gi)].map((m) => m[1]));
     const nonExistent = [...documented].filter((s) => !(s in (pkg.scripts || {})));
+
+    // A §2 row naming a gate, in the column that says which chain runs it.
+    const sectionTwo = docSrc.slice(docSrc.indexOf('## 2.'));
+    const tableRows = [
+        ...sectionTwo.matchAll(
+            /^\|\s*([^|]+?)\s*\|\s*`?npm run ([a-z0-9:_-]+)`?[^|]*\|\s*([^|]*?)\s*\|/gim
+        )
+    ];
+    const notInAnyChain = tableRows
+        .map(([, , script, where]) => ({ script, where: where.trim() }))
+        .filter(({ script, where }) => {
+            if (steps.includes(script) || tierTwo.has(script)) return false;
+            if (describesAChain.has(script)) return false;
+            // An explicit tier-2 mention is a declaration, not an omission.
+            return !/verify:all|tier 2|not in `verify`/i.test(where);
+        });
+
+    if (notInAnyChain.length > 0) {
+        failures.push(
+            `docs: ${notInAnyChain.length} gate(s) are documented in §2 but run in NO chain,\n` +
+                '      so the table presents them as enforcement and nothing runs them:\n' +
+                notInAnyChain
+                    .map((g) => `        npm run ${g.script}   (row says: "${g.where}")`)
+                    .join('\n') +
+                '\n      Add it to scripts/verify.mjs, or say in the row that it is tier 2.'
+        );
+    }
 
     if (steps.length === 0) {
         failures.push('docs: scripts/verify.mjs declares no steps to compare against the docs');
@@ -259,7 +305,10 @@ const extOf = (f) => {
         );
     }
 
-    notes.push(`docs: ${steps.length} verify steps documented, both directions checked`);
+    notes.push(
+        `docs: ${steps.length} verify steps documented, checked in THREE directions ` +
+            '(every step is documented, every documented command exists, and every documented gate is in a chain)'
+    );
 }
 
 // ---------------------------------------------------------------------------
