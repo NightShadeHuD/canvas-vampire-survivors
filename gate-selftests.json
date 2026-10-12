@@ -1,0 +1,137 @@
+[
+    {
+        "gate": "check:claims",
+        "break": "node scripts/edit.mjs docs/SHORTCUTS.md --anchor '| `strictNullChecks` | 0 | 225 |' --replace '| `strictNullChecks` | 7 | 225 |'",
+        "creates": [],
+        "run": "node scripts/check-claims.mjs",
+        "why": "A register stating a number the gate measured differently is the failure this was ported for: strictNullChecks in src/ was reported as ZERO for seven consecutive rounds after it had gone back to seven. This break reproduces it."
+    },
+    {
+        "gate": "check:hygiene",
+        "break": "printf '<<<<<<< HEAD\\nAKIAIOSFODNN7EXAMPLE\\nghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\n' > godot/probe_hygiene.gd && git add -f godot/probe_hygiene.gd",
+        "creates": ["godot/probe_hygiene.gd"],
+        "run": "node scripts/check-hygiene.mjs",
+        "why": "An unfinished merge and a committed credential in the PORT. The gate read 183 of 275 tracked files while printing '275 tracked files checked', never opening a .gd file, so both classes passed."
+    },
+    {
+        "gate": "check:destructive",
+        "break": "printf 'import { execSync } from \\\"node:child_process\\\";\\nexecSync(`sed -i \\\"s/x/y/\\\" godot/scripts/player.gd`);\\n' > scripts/probe-bulk.mjs && git add -f scripts/probe-bulk.mjs",
+        "creates": ["scripts/probe-bulk.mjs"],
+        "run": "node scripts/check-destructive.mjs",
+        "why": "Rule 6's mechanical half did not cover the half being transformed: SOURCE_EXTENSION listed only JS/TS, so a committed `sed -i` against the Godot source was invisible. Rule 6 is the rule broken most often here, so its only mechanism must reach the port."
+    },
+    {
+        "gate": "check:suppressions",
+        "break": "printf '@warning_ignore(\\\"unused_parameter\\\")\\nfunc f(x):\\n\\treturn x\\n' > godot/probe_suppression.gd && git add -f godot/probe_suppression.gd",
+        "creates": ["godot/probe_suppression.gd"],
+        "run": "node scripts/check-suppressions.mjs",
+        "why": "GDScript's suppressions were entirely unread, so a whole family could grow without limit while the gate reported every ceiling matched exactly."
+    },
+    {
+        "gate": "check:assertions",
+        "break": "node scripts/edit.mjs test/stages_daily.test.ts --anchor \"assert.notEqual(cyrb53('2026-04-25'), cyrb53('2026-04-26'));\" --replace \"assert.equal(cyrb53('2026-04-25'), cyrb53('2026-04-25'));\"",
+        "creates": [],
+        "run": "node scripts/check-assertions.mjs",
+        "why": "A tautology is an absent assertion wearing a real one's clothes. The digest cannot see it -- equal(hp, maxHp) and equal(hp, hp) have the same argument shape -- so it needs its own rule."
+    },
+    {
+        "gate": "check:docs",
+        "break": "printf 'See `NO_SUCH_CRITERION.md` for the shape.\\n' > docs/probe-dangling.md && git add -f docs/probe-dangling.md",
+        "creates": ["docs/probe-dangling.md"],
+        "run": "node scripts/check-docs.mjs",
+        "why": "A citation to a document that does not exist sends a reader to a hole. An audit proved this catches the backticked form and MISSES the markdown-link form, of which there are 34 -- so this pins the half that works while the other half is a registered gap."
+    },
+    {
+        "gate": "check:coverage",
+        "break": "printf '// probe\\n' > src/probe-uncovered.ts && git add -f src/probe-uncovered.ts",
+        "creates": ["src/probe-uncovered.ts"],
+        "run": "node scripts/check-coverage.mjs",
+        "why": "ESLint prints NOTHING and exits 0 for a file no config block matches, so `npm run lint` can report success while whole directories are never linted. That is what had happened to scripts/, service-worker.js and game.js."
+    },
+    {
+        "gate": "check:register",
+        "break": "node scripts/edit.mjs docs/SHORTCUTS.md --anchor '| 1 |' --replace '| 9 |'",
+        "creates": [],
+        "run": "node scripts/check-register.mjs",
+        "why": "A renumbered row leaves a gap in a register whose whole value is that every known gap is enumerated. Demonstrated by the gate auditor: 'has no row 6', exit 1."
+    },
+    {
+        "gate": "check:baseline",
+        "break": "printf '\\ntest(\\\"probe baseline\\\", () => { assert.equal(1, 2); });\\n' >> test/claims.test.ts",
+        "creates": [],
+        "run": "node scripts/check-baseline.mjs",
+        "why": "A NEW failure must be reported as new rather than folded into a recorded count. Demonstrated by the gate auditor: 'NEW FAILURE', exit 1."
+    },
+    {
+        "gate": "check:suite",
+        "break": "node scripts/edit.mjs test/claims.test.ts --anchor \"test('claims: a row between the markers is read'\" --replace \"test.skip('claims: a row between the markers is read'\"",
+        "creates": [],
+        "run": "node scripts/check-suite.mjs",
+        "why": "A skipped test is a test that stopped being run while the count stayed plausible. Demonstrated by the gate auditor with a test.skip: exit 1."
+    },
+    {
+        "gate": "check:types",
+        "break": "printf 'export const probe: any = 1 as any;\\nexport const probe2: any = 2 as any;\\n' > src/probe-any.ts && git add -f src/probe-any.ts",
+        "creates": ["src/probe-any.ts"],
+        "run": "node scripts/check-types.mjs",
+        "why": "A ceiling that cannot refuse a rise is not a ceiling. Demonstrated by the gate auditor: eight `any`s took it to 135 against a ceiling of 131, exit 1."
+    },
+    {
+        "gate": "check:ports",
+        "break": "node scripts/edit.mjs src/main.ts --anchor 'export ' --replace 'export '",
+        "creates": [],
+        "incomplete": true,
+        "run": "node scripts/check-ports.mjs",
+        "why": "I have not constructed a break for this one. The gate auditor demonstrated it -- one `?.` took it to 322 against a ceiling of 321, exit 1 -- but I have not reproduced that break myself, and this ledger records what has been WATCHED, not what has been reported to me."
+    },
+    {
+        "gate": "test:clock",
+        "break": "node scripts/edit.mjs test/claims.test.ts --anchor 'import test from' --replace 'import test from'",
+        "creates": [],
+        "incomplete": true,
+        "run": "node scripts/check-clocks.mjs",
+        "why": "I have not constructed a break for this one either. A test that reads the wall clock must be caught, and I have not watched that happen."
+    },
+    {
+        "gate": "check:coverage-floor",
+        "break": "git rm -q test/claims.test.ts",
+        "creates": [],
+        "run": "node scripts/check-coverage-floor.mjs",
+        "why": "Deleting a test file must drop a floor. Demonstrated by the gate auditor, who probed ten candidate files and found every one dropped a floor -- so the net holds, but it holds because the floors are tight, not because the suite count is."
+    },
+    {
+        "gate": "check:godot",
+        "break": "node scripts/edit.mjs godot/data/config.gd --anchor 'CANVAS_WIDTH := 1200' --replace 'CANVAS_WIDTH := 9999'",
+        "creates": [],
+        "run": "node scripts/check-godot.mjs",
+        "why": "A gate that REGENERATES the thing it checks can never fail. This one generates to a temp directory and diffs, so corrupting a committed generated value must be refused. It was not, before rule 13: the check rewrote the file and reported ok."
+    },
+    {
+        "gate": "lint",
+        "break": "printf 'export const probe = ;\\n' > src/probe-syntax.ts && git add -f src/probe-syntax.ts",
+        "creates": ["src/probe-syntax.ts"],
+        "run": "npm run --silent lint",
+        "why": "A linter that exits 0 on a syntax error is not a linter."
+    },
+    {
+        "gate": "typecheck",
+        "break": "printf 'export const probe: number = \\\"not a number\\\";\\n' > src/probe-type.ts && git add -f src/probe-type.ts",
+        "creates": ["src/probe-type.ts"],
+        "run": "npm run --silent typecheck",
+        "why": "The compiler is the gate everything else assumes. A type error must stop the build."
+    },
+    {
+        "gate": "format:check",
+        "break": "printf 'export const probe={a:1,b:2};\\n' > src/probe-format.ts && git add -f src/probe-format.ts",
+        "creates": ["src/probe-format.ts"],
+        "run": "npm run --silent format:check",
+        "why": "Formatting is the one gate whose failure is purely cosmetic, which makes it the one most likely to be weakened. It must still refuse."
+    },
+    {
+        "gate": "check:strict",
+        "break": "node scripts/edit.mjs tsconfig.json --anchor '\"strictNullChecks\": false' --replace '\"strictNullChecks\": true'",
+        "creates": [],
+        "run": "node scripts/check-strict.mjs",
+        "why": "A ceiling that may only fall must refuse a RISE. Turning a flag on when the ceiling says it is off is a change the baseline has to record deliberately."
+    }
+]
