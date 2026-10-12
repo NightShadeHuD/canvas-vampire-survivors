@@ -198,7 +198,8 @@ const checks = [
     ['res://verify_invariants.gd', '10 minutes of adversarial play stays coherent'],
     ['res://verify_archetypes.gd', 'EVERY enemy archetype in the data behaves differently'],
     ['res://verify_assertions.gd', 'the assertion helpers fail when they should'],
-    ['res://verify_achievements.gd', 'EVERY achievement is reachable and fires on its boundary']
+    ['res://verify_achievements.gd', 'EVERY achievement is reachable and fires on its boundary'],
+    ['res://verify_save.gd', 'the save round-trips, survives corruption, and unlocks triple_build']
 ];
 
 // ---------------------------------------------------------------------------

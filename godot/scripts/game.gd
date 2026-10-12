@@ -39,6 +39,8 @@ var foe_def: Dictionary
 ## a field that is always empty is more honest than a save system that only exists to
 ## satisfy one achievement. `null` means "no save", which `_unique_builds` handles.
 var save: Variant = null
+## The loaded save object, kept so a caller can WRITE it back as well as read it.
+var save_data: SaveData = null
 
 ## `spawn_interval` and the rest are the slice's own pacing, NOT ported constants --
 ## the original tunes waves through `stages.ts`, which is out of scope here. They are
@@ -58,6 +60,10 @@ func _init(spawn_interval: float = 0.8) -> void:
 	# 999s, which is what it always read as.
 	spawn_timer = spawn_interval
 	current_wave = wave_for(0.0)
+	# LOADED, not left null. A save file nothing reads is a save file that does nothing,
+	# which is how `triple_build` was unreachable for its whole existence.
+	save_data = SaveData.load_from_disk()
+	save = save_data.data
 
 var _spawn_interval: float
 ## The difficulty curve, from the original's `_computeDifficultyMults`.
