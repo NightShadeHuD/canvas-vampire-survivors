@@ -111,8 +111,9 @@
         "break": "node scripts/edit.mjs godot/data/config.gd --anchor 'CANVAS_WIDTH := 1200' --replace 'CANVAS_WIDTH := 9999'",
         "creates": [],
         "run": "node scripts/check-godot.mjs",
-        "why": "A gate that REGENERATES the thing it checks can never fail. This one generates to a temp directory and diffs, so corrupting a committed generated value must be refused. It was not, before rule 13: the check rewrote the file and reported ok.",
-        "touches": ["godot/data/config.gd"]
+        "why": "A gate that REGENERATES the thing it checks can never fail. This one generates to a temp directory and diffs, so corrupting a committed generated value must be refused. It was not, before rule 13: the check rewrote the file and reported ok. **REQUIRES GODOT.** CI found this the first time the gate ran there: without Godot the gate NOTICEs and exits 0, so this break produced no failure and the self-test reported \"the gate stayed GREEN\" -- which reads as a gate defect and is a missing dependency.",
+        "touches": ["godot/data/config.gd"],
+        "requires": ["godot"]
     },
     {
         "gate": "lint",

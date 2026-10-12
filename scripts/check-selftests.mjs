@@ -145,11 +145,41 @@ if (preDirty.length > 0 && !process.argv.includes('--force')) {
     process.exit(0);
 }
 
+// ---------------------------------------------------------------------------
+// A SELF-TEST CAN REQUIRE SOMETHING. CI found this the first time the gate ran there.
+//
+// `check:godot`'s break edits a generated value, and the gate refuses drift -- **but only
+// where Godot is installed.** In CI it prints NOTICE and exits 0, so the break produced no
+// failure and the self-test reported "the gate stayed GREEN", which reads as a gate defect
+// and is actually a missing dependency.
+//
+// **A self-test that cannot run is not a self-test that failed**, and conflating them makes
+// the ledger wrong in the direction that matters: it would report a gate as unproven when
+// nobody had tried. Declared per entry, and reported in its own category.
+// ---------------------------------------------------------------------------
+const has = (cmd) => {
+    try {
+        execSync(`command -v ${cmd}`, { cwd: repoRoot, stdio: 'pipe' });
+        return true;
+    } catch {
+        return false;
+    }
+};
+const REQUIREMENTS = { godot: () => has('godot'), python3: () => has('python3') };
+
 const proven = [];
 const failures = [];
 const skipped = [];
+const unmet = [];
 
 for (const entry of manifest) {
+    const missing = (entry.requires ?? []).filter((r) => !(REQUIREMENTS[r] ?? (() => true))());
+    if (missing.length > 0) {
+        unmet.push(`${entry.gate}: needs ${missing.join(', ')}, which is not available here`);
+        restore(entry);
+        continue;
+    }
+
     if (entry.incomplete) {
         skipped.push(`${entry.gate}: ${entry.why}`);
         restore(entry);
@@ -206,6 +236,7 @@ for (const g of unproven) {
     console.log(`  UNPROVEN   ${g} — no self-test declares an input that makes it fail`);
 }
 for (const s of skipped) console.log(`  INCOMPLETE ${s}`);
+for (const u of unmet) console.log(`  UNMET      ${u}`);
 
 if (dirty.length > 0) {
     console.error(`\ncheck-selftests: FAILED — ${dirty.length} path(s) left modified by a break:`);
