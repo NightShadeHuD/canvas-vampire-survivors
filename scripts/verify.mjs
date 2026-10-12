@@ -33,6 +33,10 @@ const STEPS = [
         script: 'check:strict',
         proves: 'no strict flag this project already enabled has been turned back off'
     },
+    {
+        script: 'check:claims',
+        proves: 'the numbers the register states match the ones the gates measured'
+    },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     {
