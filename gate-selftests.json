@@ -103,7 +103,8 @@
         "break": "git rm -q test/claims.test.ts",
         "creates": [],
         "run": "node scripts/check-coverage-floor.mjs",
-        "why": "Deleting a test file must drop a floor. Demonstrated by the gate auditor, who probed ten candidate files and found every one dropped a floor -- so the net holds, but it holds because the floors are tight, not because the suite count is."
+        "why": "Deleting a test file must drop a floor. Demonstrated by the gate auditor, who probed ten candidate files and found every one dropped a floor -- so the net holds, but it holds because the floors are tight, not because the suite count is. **It DELETES a tracked file, so it declares it in `touches`** -- the surgical restore only puts back what an entry names, and the first version of this one left the test file deleted in the working tree.",
+        "touches": ["test/claims.test.ts"]
     },
     {
         "gate": "check:godot",
