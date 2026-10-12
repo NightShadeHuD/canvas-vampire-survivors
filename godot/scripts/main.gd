@@ -74,6 +74,19 @@ func _ready() -> void:
 	over = VBoxContainer.new()
 	over.name = "GameOver"
 	over.set_anchors_preset(Control.PRESET_CENTER)
+	# GROW FROM THE CENTRE, not from its top-left.
+	#
+	# `PRESET_CENTER` sets the ANCHORS to the middle, but a Control's grow direction
+	# defaults to END -- so a container whose size is not known until its content exists
+	# expands to the RIGHT and DOWN from that centre point. Its top-left lands exactly on
+	# the screen centre and the panel sits in the bottom-right quadrant.
+	#
+	# Measured from a screen recording: `LEVEL 4` and the upgrade panel both sat well right
+	# of centre, with the panel's top-left at the centre line. A behavioural audit found
+	# the same for all three modals -- picker, game over and pause -- and measured each
+	# one's rect starting at exactly (576, 324) in a 1152x648 window.
+	over.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	over.grow_vertical = Control.GROW_DIRECTION_BOTH
 	over.add_theme_constant_override("separation", 18)
 	over.alignment = BoxContainer.ALIGNMENT_CENTER
 	layer.add_child(over)
@@ -82,6 +95,19 @@ func _ready() -> void:
 	paused_panel = VBoxContainer.new()
 	paused_panel.name = "Paused"
 	paused_panel.set_anchors_preset(Control.PRESET_CENTER)
+	# GROW FROM THE CENTRE, not from its top-left.
+	#
+	# `PRESET_CENTER` sets the ANCHORS to the middle, but a Control's grow direction
+	# defaults to END -- so a container whose size is not known until its content exists
+	# expands to the RIGHT and DOWN from that centre point. Its top-left lands exactly on
+	# the screen centre and the panel sits in the bottom-right quadrant.
+	#
+	# Measured from a screen recording: `LEVEL 4` and the upgrade panel both sat well right
+	# of centre, with the panel's top-left at the centre line. A behavioural audit found
+	# the same for all three modals -- picker, game over and pause -- and measured each
+	# one's rect starting at exactly (576, 324) in a 1152x648 window.
+	paused_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	paused_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	paused_panel.add_theme_constant_override("separation", 18)
 	paused_panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	layer.add_child(paused_panel)
@@ -90,6 +116,19 @@ func _ready() -> void:
 	picker = VBoxContainer.new()
 	picker.name = "Offers"
 	picker.set_anchors_preset(Control.PRESET_CENTER)
+	# GROW FROM THE CENTRE, not from its top-left.
+	#
+	# `PRESET_CENTER` sets the ANCHORS to the middle, but a Control's grow direction
+	# defaults to END -- so a container whose size is not known until its content exists
+	# expands to the RIGHT and DOWN from that centre point. Its top-left lands exactly on
+	# the screen centre and the panel sits in the bottom-right quadrant.
+	#
+	# Measured from a screen recording: `LEVEL 4` and the upgrade panel both sat well right
+	# of centre, with the panel's top-left at the centre line. A behavioural audit found
+	# the same for all three modals -- picker, game over and pause -- and measured each
+	# one's rect starting at exactly (576, 324) in a 1152x648 window.
+	picker.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	picker.grow_vertical = Control.GROW_DIRECTION_BOTH
 	picker.add_theme_constant_override("separation", 18)
 	picker.alignment = BoxContainer.ALIGNMENT_CENTER
 	layer.add_child(picker)

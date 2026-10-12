@@ -179,6 +179,49 @@ func _init() -> void:
 		Check.at_most(shade.color.a, 0.6, "and leaves the world readable through it")
 		Check.at_least(shade.color.a, 0.15, "while still separating the modal from it")
 
+	# A MODAL IS CENTRED ON THE SCREEN, not on its own corner.
+	#
+	# `PRESET_CENTER` sets anchors; the grow direction is a SEPARATE property that defaults
+	# to END, so a container sizes itself to the right and down from the centre point. All
+	# three modals had their top-left at exactly (576, 324) in a 1152x648 window -- the
+	# screen centre -- which put every one of them in the bottom-right quadrant. Visible in
+	# a player's screen recording and measured by an audit before that.
+	#
+	# Asserted as GEOMETRY, not as a property, because the property is only a means: what
+	# matters is where the thing ends up.
+	# Drive the REAL picker path: grant XP until a level lands, which is what a player does.
+	main.game.hero.gain_exp(100000.0)
+	main._process(1.0 / 60.0)
+	# TWO frames: the buttons are added during the first, and a Container computes its
+	# children's sizes and its own rect on the frame AFTER that. Measuring after one frame
+	# reads a rect of width zero at the anchor -- which is what the first version of this
+	# assertion did, and it reported 32 against an expected 576.
+	main.picker.queue_sort()
+	await process_frame
+	await process_frame
+	# THE PROPERTY, NOT THE GEOMETRY -- and the reason is worth recording.
+	#
+	# The obvious assertion is "the picker's centre is the screen's centre", and it CANNOT
+	# be written headlessly: headless Godot reports a 64x64 root viewport, so `PRESET_CENTER`
+	# centres on 64x64 and the picker's centre measures **32**. The first version of this
+	# check compared 32 against the configured 576 and failed on CORRECT code.
+	#
+	# `grow_horizontal`/`grow_vertical` are the means rather than the end, so this is the
+	# weaker half of the claim: it catches the regression that happened (the grow direction
+	# left at its default) and cannot catch a layout that is wrong for another reason.
+	# **Measuring the real geometry needs a window**, which a behavioural audit used and
+	# which `verify:all`'s browser tier could grow into.
+	Check.unchanged(main.picker.grow_horizontal, Control.GROW_DIRECTION_BOTH,
+		"the picker grows from its CENTRE horizontally")
+	Check.unchanged(main.picker.grow_vertical, Control.GROW_DIRECTION_BOTH,
+		"and vertically")
+	Check.unchanged(main.over.grow_horizontal, Control.GROW_DIRECTION_BOTH,
+		"the game-over panel grows from its centre too")
+	Check.unchanged(main.over.grow_vertical, Control.GROW_DIRECTION_BOTH, "and vertically")
+	Check.unchanged(main.paused_panel.grow_horizontal, Control.GROW_DIRECTION_BOTH,
+		"and so does the pause panel")
+	Check.unchanged(main.paused_panel.grow_vertical, Control.GROW_DIRECTION_BOTH, "and vertically")
+
 	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
 	for simulated in ["game.shots", "game.enemy_shots", "game.foes", "game.orbs"]:
