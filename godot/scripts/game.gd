@@ -123,11 +123,19 @@ func step(delta: float, move_dir: Vector2) -> void:
 		var id: String = w["id"]
 		# Cooldown passive. `cooldownMult` is NEGATIVE in the data (-0.08), so
 		# `1 + effect` is 0.92 and a stack genuinely shortens the timer.
-		var cd := float(w["def"]["baseCooldown"]) * hero.cooldown_mult()
+		# The WEAPON's level shortens its own cooldown: x0.92^(n-1), the original's curve.
+		# Without it, a level-up that shortened a cooldown did nothing -- the timer was
+		# computed from the base and the passives only.
+		var wl: int = maxi(1, int(w.get("level", 1)))
+		var cd := (
+			float(w["def"]["baseCooldown"])
+			* pow(0.92, float(wl - 1))
+			* hero.cooldown_mult()
+		)
 		var left := float(cooldowns.get(id, 0.0)) - delta
 		if left <= 0.0:
 			left = cd
-			WeaponFire.fire(w["def"], hero, foes, shots)
+			WeaponFire.fire(w["def"], hero, foes, shots, wl)
 		cooldowns[id] = left
 
 	for foe in foes:
