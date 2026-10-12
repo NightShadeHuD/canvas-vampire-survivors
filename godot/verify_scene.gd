@@ -222,6 +222,46 @@ func _init() -> void:
 		"and so does the pause panel")
 	Check.unchanged(main.paused_panel.grow_vertical, Control.GROW_DIRECTION_BOTH, "and vertically")
 
+	# A MODAL MUST BE ANSWERABLE WITH THE KEYBOARD.
+	#
+	# Godot delivers `ui_accept` (Enter/Space) to whatever Control has FOCUS, and nothing
+	# called `grab_focus()` anywhere in this file's history -- so `focus owner` was null on
+	# every panel. An audit measured the consequence: pressing Enter, Space, `1`, Down and
+	# numpad-1 at the level-up picker left `pending_picks` at 1. **The HUD advertised the
+	# keyboard and the keyboard could not answer the game.**
+	#
+	# This is WASD's root cause a second time: the simulation was wired, the input was not.
+	var menu_focus := main.get_viewport().gui_get_focus_owner()
+	Check.unchanged(main.menu.visible, true, "the menu is up")
+	Check.unchanged(menu_focus != null, true, "and SOMETHING has focus, so Enter can start a run")
+
+	# AND THE PICKER'S BUTTONS CAN HOLD FOCUS AT ALL.
+	#
+	# Asserted as a PROPERTY rather than by opening the picker: driving `_on_start()` here
+	# changes the state the menu assertions below depend on, and the first version of this
+	# check did exactly that -- breaking "it is shown first" and "and is visible" three lines
+	# further down. **A test that changes the world for the next test is a test that lies
+	# about the next test.**
+	#
+	# `focus_mode` is what `grab_focus()` requires; `_focus_first` walks for the first node
+	# that has it. A button with FOCUS_NONE could never be reached by the keyboard however
+	# often focus was requested.
+	var focusable := 0
+	for node in main._focusable_under(main):
+		if (node as Control).focus_mode != Control.FOCUS_NONE:
+			focusable += 1
+	# ONE, not two, and the number is the finding: at this point only the MENU exists. The
+	# picker and game-over panels are built when a level lands and when the hero dies, so
+	# they are not in the tree yet. Asserting "two" measured the test's position in the
+	# suite rather than the scene.
+	Check.at_least(float(focusable), 1.0, "the scene has a focusable control to walk")
+	Check.unchanged(
+		main.get_node_or_null("Menu/Start") != null
+			and main.get_node("Menu/Start").focus_mode != Control.FOCUS_NONE,
+		true,
+		"and it is START, the control a keyboard player needs first"
+	)
+
 	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
 	for simulated in ["game.shots", "game.enemy_shots", "game.foes", "game.orbs"]:

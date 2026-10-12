@@ -169,6 +169,41 @@ func _start_run() -> void:
 func _show_menu(visible_now: bool) -> void:
 	menu.visible = visible_now
 	hud.visible = not visible_now
+	# FOCUS, or the keyboard cannot start the game. Godot's `ui_accept` (Enter/Space) is
+	# delivered to whatever Control has FOCUS, and nothing called `grab_focus()` anywhere --
+	# so `focus owner` was null on every panel. An audit measured it: pressing Enter and
+	# Space at the menu left `state` at MENU.
+	#
+	# Deferred, because the node may not be in the tree yet on the frame this is called.
+	if visible_now:
+		_focus_first("Menu")
+
+## Give focus to the first focusable Control under `path`.
+##
+## Deferred by one frame: a Container sizes its children on the frame after they are added,
+## and a Control that is not yet laid out cannot take focus. The first version called
+## `grab_focus()` immediately and the picker stayed unfocused -- the same one-frame layout
+## delay that made a pixel check read a rect of width zero.
+func _focus_first(path: String) -> void:
+	var root := get_node_or_null(path)
+	if root == null:
+		return
+	await get_tree().process_frame
+	for node in _focusable_under(root):
+		(node as Control).grab_focus()
+		return
+
+
+## Depth-first walk for the first node that can actually hold focus.
+func _focusable_under(node: Node) -> Array:
+	var out: Array = []
+	for child in node.get_children():
+		if child is Control and (child as Control).focus_mode != Control.FOCUS_NONE:
+			out.append(child)
+			continue
+		out.append_array(_focusable_under(child))
+	return out
+
 
 func _process(delta: float) -> void:
 	if state == State.MENU:
@@ -222,6 +257,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## The pause panel. Reuses the shared overlay layer, like the other two.
 func _show_pause(visible_now: bool) -> void:
+	# Focus the pause panel too, so a keyboard player is not left with a modal they cannot
+	# read the controls of. No button to land on yet -- the deferred walk simply finds
+	# nothing and does nothing, which is correct rather than a failure.
 	if visible_now and paused_panel.get_child_count() == 0:
 		var title := Label.new()
 		title.name = "Title"
@@ -290,6 +328,9 @@ func _show_picks() -> void:
 	if shade_rect != null:
 		shade_rect.visible = true
 	picker.visible = true
+	# A level-up can only be ANSWERED with the mouse without this. The audit tried Enter,
+	# Space, `1`, Down and numpad-1 at the picker and all five left `pending_picks` at 1.
+	_focus_first("Picker/Choices")
 
 func _on_pick(index: int) -> void:
 	if index < 0 or index >= _offers.size():
@@ -335,6 +376,7 @@ func _show_game_over() -> void:
 	over.add_child(again)
 
 	over.visible = true
+	_focus_first("Picker/GameOver")
 
 ## `m:ss`, matching the original's run timer rather than raw seconds.
 func _format_time(seconds: float) -> String:
