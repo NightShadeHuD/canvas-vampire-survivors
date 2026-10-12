@@ -15,11 +15,10 @@
 extends SceneTree
 
 const FRAME := 1.0 / 60.0
-var ok := true
 
 func _init() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
-	_check(packed != null, "the scene loads", "res://scenes/main.tscn")
+	Check.unchanged(packed != null, true, "the scene loads")
 	if packed == null:
 		_finish()
 		return
@@ -29,18 +28,15 @@ func _init() -> void:
 	# One frame, so `_ready` has run and the camera has been aimed.
 	await process_frame
 
-	_check(main.camera != null, "the scene HAS a camera", "Camera2D present")
-	_check(main.camera.is_current(), "the camera is the active one", "make_current() called")
+	Check.unchanged(main.camera != null, true, "the scene HAS a camera")
+	Check.unchanged(main.camera.is_current(), true, "the camera is the active one")
 
 	# The bug, stated as an assertion: the hero must project INSIDE the viewport.
 	var view := root.get_visible_rect().size
 	var hero_pos: Vector2 = Vector2(main.game.hero.x, main.game.hero.y)
 	var screen: Vector2 = (hero_pos - main.camera.position) * main.camera.zoom + view / 2.0
-	_check(
-		screen.x >= 0.0 and screen.x <= view.x and screen.y >= 0.0 and screen.y <= view.y,
-		"the hero is INSIDE the visible viewport",
-		"hero at screen (%0.0f, %0.0f) of %0.0fx%0.0f" % [screen.x, screen.y, view.x, view.y]
-	)
+	Check.between(screen.x, 0.0, view.x, "the hero is INSIDE the visible viewport (x)")
+	Check.between(screen.y, 0.0, view.y, "and inside it vertically (y)")
 
 	# The camera must FOLLOW, or the hero walks out of view the moment it moves --
 	# the same bug wearing a different hat.
@@ -48,45 +44,41 @@ func _init() -> void:
 	for i in 120:
 		main.game.step(1.0 / 60.0, Vector2.RIGHT)
 		main.camera.position = main.camera.position.lerp(Vector2(main.game.hero.x, main.game.hero.y), 0.15)
-	_check(
-		absf(main.camera.position.x - main.game.hero.x) < 60.0,
-		"the camera follows the hero",
-		"camera %0.0f vs hero %0.0f" % [main.camera.position.x, main.game.hero.x]
-	)
-	_check(main.camera.position.x > before.x, "and actually moved", "%0.0f -> %0.0f" % [before.x, main.camera.position.x])
+	Check.approx(main.camera.position.x, main.game.hero.x, "the camera follows the hero", 60.0)
+	Check.rose(before.x, main.camera.position.x, "and actually moved")
 
 	# The menu is what the player sees FIRST. It existed in the original and did not
 	# exist here, which is why the port "didn't look like the source material".
-	_check(main.get_node_or_null("Menu") != null, "there IS a menu", "Menu CanvasLayer")
-	_check(main.get_node_or_null("Menu/Title") != null, "and a title", main.get_node("Menu/Title").text)
-	_check(main.get_node_or_null("Menu/Start") != null, "and a way to start", "Start button")
-	_check(main.state == main.State.MENU, "it is shown first", "state = MENU")
-	_check(main.menu.visible, "and is visible", "menu.visible = true")
+	Check.unchanged(main.get_node_or_null("Menu") != null, true, "there IS a menu")
+	Check.unchanged(main.get_node_or_null("Menu/Title") != null, true, "and a title")
+	Check.unchanged(main.get_node_or_null("Menu/Start") != null, true, "and a way to start")
+	Check.unchanged(main.state, main.State.MENU, "it is shown first")
+	Check.unchanged(main.menu.visible, true, "and is visible")
 
 	# Pressing START must actually start.
 	main.get_node("Menu/Start").emit_signal("pressed")
 	await process_frame
-	_check(main.state == main.State.PLAYING, "START begins a run", "state = PLAYING")
-	_check(not main.menu.visible, "the menu gets out of the way", "menu.visible = false")
-	_check(main.hud.visible, "and the HUD appears", "hud.visible = true")
+	Check.unchanged(main.state, main.State.PLAYING, "START begins a run")
+	Check.unchanged(main.menu.visible, false, "the menu gets out of the way")
+	Check.unchanged(main.hud.visible, true, "and the HUD appears")
 
 	# The loop must CLOSE: die, see what happened, play again. Without this the game
 	# stops on death and reads as a crash rather than an ending.
 	main.game.hero.hp = 1.0
 	main.game.hero.take_damage(9999.0)
 	main._process(FRAME)
-	_check(main.state == main.State.DEAD, "dying ends the run", "state = DEAD")
-	_check(main.over.visible, "the summary appears", "GameOver visible")
-	_check(main.get_node_or_null("Picker/GameOver/Title") != null, "with a title", main.get_node("Picker/GameOver/Title").text)
-	_check(main.get_node_or_null("Picker/GameOver/Again") != null, "and a way back", "PLAY AGAIN button")
+	Check.unchanged(main.state, main.State.DEAD, "dying ends the run")
+	Check.unchanged(main.over.visible, true, "the summary appears")
+	Check.unchanged(main.get_node_or_null("Picker/GameOver/Title") != null, true, "with a title")
+	Check.unchanged(main.get_node_or_null("Picker/GameOver/Again") != null, true, "and a way back")
 
 	var elapsed_before: float = main.game.elapsed
 	main.get_node("Picker/GameOver/Again").emit_signal("pressed")
 	await process_frame
-	_check(main.state == main.State.PLAYING, "PLAY AGAIN starts a fresh run", "state = PLAYING")
-	_check(not main.over.visible, "and the summary gets out of the way", "GameOver hidden")
-	_check(main.game.elapsed < elapsed_before or main.game.elapsed == 0.0, "with a NEW run, not the old one", "elapsed %0.1f" % main.game.elapsed)
-	_check(main.game.hero.hp == main.game.hero.max_hp, "and a full-health hero", "hp %0.0f" % main.game.hero.hp)
+	Check.unchanged(main.state, main.State.PLAYING, "PLAY AGAIN starts a fresh run")
+	Check.unchanged(main.over.visible, false, "and the summary gets out of the way")
+	Check.fell(elapsed_before, main.game.elapsed, "with a NEW run, not the old one")
+	Check.approx(main.game.hero.hp, main.game.hero.max_hp, "and a full-health hero")
 
 	# Esc used to QUIT. A player hits it expecting a menu and loses the run -- the most
 	# expensive kind of wrong, so it is asserted rather than eyeballed.
@@ -96,38 +88,34 @@ func _init() -> void:
 	tick.keycode = KEY_ESCAPE
 	tick.pressed = true
 	main._unhandled_input(tick)
-	_check(main.state == main.State.PAUSED, "Esc PAUSES rather than quitting", "state = PAUSED")
-	_check(main.paused_panel.visible, "and shows a pause panel", "Paused visible")
+	Check.unchanged(main.state, main.State.PAUSED, "Esc PAUSES rather than quitting")
+	Check.unchanged(main.paused_panel.visible, true, "and shows a pause panel")
 
 	# The clock must not move while paused.
-	var frozen: float = main.game.elapsed
-	for i in 60:
-		main._process(FRAME)
-	_check(is_equal_approx(main.game.elapsed, frozen), "and the run does not advance", "elapsed %0.2f" % main.game.elapsed)
+	Check.frozen(
+		60,
+		func(_i): main._process(FRAME),
+		func(): return main.game.elapsed,
+		"and the run does not advance"
+	)
 
 	var again_key := InputEventKey.new()
 	again_key.keycode = KEY_P
 	again_key.pressed = true
 	main._unhandled_input(again_key)
-	_check(main.state == main.State.PLAYING, "P resumes", "state = PLAYING")
-	_check(not main.paused_panel.visible, "and hides the panel", "Paused hidden")
+	Check.unchanged(main.state, main.State.PLAYING, "P resumes")
+	Check.unchanged(main.paused_panel.visible, false, "and hides the panel")
 
 	# A level-up must NOT be pausable: two modals at once, and the pick is the one
 	# that has to be answered.
 	main.state = main.State.LEVEL_UP
 	main._unhandled_input(tick)
-	_check(main.state == main.State.LEVEL_UP, "a level-up cannot be paused over", "still LEVEL_UP")
+	Check.unchanged(main.state, main.State.LEVEL_UP, "a level-up cannot be paused over")
 
 	main.queue_free()
 	_finish()
 
-func _check(cond: bool, label: String, detail: String) -> void:
-	if cond:
-		print("  ok   %s  (%s)" % [label, detail])
-	else:
-		print("  FAIL %s  (%s)" % [label, detail])
-		ok = false
-
 func _finish() -> void:
-	print("verify_scene: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	var passed := Check.ok
+	print("verify_scene: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)

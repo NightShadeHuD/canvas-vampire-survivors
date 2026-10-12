@@ -7,23 +7,15 @@ func _init() -> void:
 	var weapons = load("res://data/weapons.gd").WEAPONS
 	var enemies = load("res://data/enemies.gd").ENEMIES
 	var passives = load("res://data/passives.gd").PASSIVES
-	var ok := true
+	Check.unchanged(weapons.size(), 11, "weapon count")
+	Check.unchanged(enemies.size(), 11, "enemy count")
+	Check.unchanged(passives.size(), 13, "passive count")
+	Check.unchanged(weapons["WHIP"]["baseDamage"], 20, "WHIP baseDamage")
+	Check.approx(weapons["WHIP"]["baseCooldown"], 1.5, "WHIP baseCooldown")
+	Check.unchanged(weapons["GARLIC"]["type"], "aura", "GARLIC type")
+	Check.unchanged(weapons["KNIFE"]["piercing"], true, "KNIFE piercing")
+	Check.unchanged(weapons["WHIP"]["evolveName"], "Bloody Sweep", "WHIP evolveName")
 
-	ok = _check(weapons.size(), 11, "weapon count") and ok
-	ok = _check(enemies.size(), 11, "enemy count") and ok
-	ok = _check(passives.size(), 13, "passive count") and ok
-	ok = _check(weapons["WHIP"]["baseDamage"], 20, "WHIP baseDamage") and ok
-	ok = _check(weapons["WHIP"]["baseCooldown"], 1.5, "WHIP baseCooldown") and ok
-	ok = _check(weapons["GARLIC"]["type"], "aura", "GARLIC type") and ok
-	ok = _check(weapons["KNIFE"]["piercing"], true, "KNIFE piercing") and ok
-	ok = _check(weapons["WHIP"]["evolveName"], "Bloody Sweep", "WHIP evolveName") and ok
-
-	print("verify_data: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
-
-func _check(got, want, label: String) -> bool:
-	if got == want:
-		print("  ok   %s = %s" % [label, str(got)])
-		return true
-	print("  FAIL %s: got %s, want %s" % [label, str(got), str(want)])
-	return false
+	var passed := Check.ok
+	print("verify_data: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)

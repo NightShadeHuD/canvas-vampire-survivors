@@ -17,7 +17,6 @@ extends SceneTree
 const SECONDS := 90.0
 const FRAME := 1.0 / 60.0
 
-var ok := true
 var dirs := [Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT, Vector2.UP, Vector2(1, 1), Vector2.ZERO]
 
 func _init() -> void:
@@ -27,45 +26,44 @@ func _init() -> void:
 	await process_frame
 	main.get_node("Menu/Start").emit_signal("pressed")
 	await process_frame
-	_check(main.state == main.State.PLAYING, "a run has started", "state = PLAYING")
+	Check.unchanged(main.state, main.State.PLAYING, "a run has started")
 
 	# Drive the REAL loop: `_process` runs `_draw`, the camera and the spawner.
-	var peaks := {"foes": 0, "kills": 0}
-	var died_at := -1.0
+	var foe_peak := Check.Peak.new()
+	var kill_peak := Check.Peak.new()
 	var frames := int(SECONDS / FRAME)
-	for i in frames:
+	# The WHOLE window, with no early exit: a loop that stops at the first
+	# interesting frame measures a different run from the one it claims to have played.
+	Check.over(frames, func(i):
 		# Change direction periodically so the hero sweeps the arena and the camera
 		# has to keep up -- a stationary hero would never exercise the follow.
 		if i % 120 == 0:
 			main._input_dir_override = dirs[int(i / 120) % dirs.size()]
 		main._process(FRAME)
-		peaks["foes"] = maxi(peaks["foes"], main.game.foes.size())
-		peaks["kills"] = maxi(peaks["kills"], main.game.kills)
-		if main.state == main.State.DEAD and died_at < 0.0:
-			died_at = main.game.elapsed
-			break
+		foe_peak.consider(float(main.game.foes.size()), i)
+		kill_peak.consider(float(main.game.kills), i)
+	)
 
-	_check(peaks["foes"] > 5, "foes accumulate", "%d at peak" % peaks["foes"])
-	_check(peaks["kills"] > 0, "kills happen while playing", "%d" % peaks["kills"])
+	Check.at_least(foe_peak.value, 6.0, "foes accumulate")
+	Check.at_least(kill_peak.value, 1.0, "kills happen while playing")
 
 	# The hero must be able to DIE, or the game has no stakes and never ends.
+	# This one DOES stop at the event: "it eventually dies" is a claim about the first
+	# frame it dies at, and the bound is there so a hero that never dies fails loudly.
 	var g := Game.new(0.1)
 	for i in 60 * 600:
 		g.step(FRAME, Vector2.ZERO)
 		if g.hero.dead:
 			break
-	_check(g.hero.dead, "a stationary hero eventually dies", "hp = %0.1f at %.0fs" % [g.hero.hp, g.elapsed])
+	Check.unchanged(g.hero.dead, true, "a stationary hero eventually dies")
 
 	# Nothing should have leaked past the cap, however long it ran.
 	var long_run := Game.new(0.05)
-	for i in 60 * 120:
-		long_run.step(FRAME, Vector2(1, 0))
-	_check(
-		long_run.foes.size() <= Config.MAX_ENEMIES,
-		"foes stay under MAX_ENEMIES",
-		"%d <= %d" % [long_run.foes.size(), Config.MAX_ENEMIES]
-	)
-	_check(main.game.foes.size() >= 0, "the scene survived the whole run", "no crash in 90s of play")
+	Check.over(60 * 120, func(_i): long_run.step(FRAME, Vector2(1, 0)))
+	Check.at_most(float(long_run.foes.size()), float(Config.MAX_ENEMIES), "foes stay under MAX_ENEMIES")
+	# NOTE: `foes.size() >= 0` is true of every array, so this asserts only that the run
+	# above did not crash the scene. Kept as it was; it is not a claim about behaviour.
+	Check.at_least(float(main.game.foes.size()), 0.0, "the scene survived the whole run")
 
 	# The level-up pause, exercised through the SCENE rather than a fresh Game.
 	# Without this the play test would pass whether or not the pause worked, because
@@ -94,34 +92,29 @@ func _init() -> void:
 			if frozen_for > 30:
 				main._on_pick(0)
 		was_levelup = now_levelup
-	_check(scene_hit_levelup, "the scene reaches a level-up", "state = LEVEL_UP")
-	_check(frozen_for > 0 and not stalled, "and the run PAUSES for it", "%d frames frozen" % frozen_for)
-	_check(main.game.hero.level > 1, "the hero levelled", "level %d" % main.game.hero.level)
+	Check.unchanged(scene_hit_levelup, true, "the scene reaches a level-up")
+	Check.at_least(float(frozen_for), 1.0, "and the run PAUSES for it")
+	Check.unchanged(stalled, false, "without the clock moving during an offer")
+	Check.at_least(float(main.game.hero.level), 2.0, "the hero levelled")
 
 	# Shots must reach the world, or a weapon that "works" in isolation is invisible in
 	# play -- the same failure as the hero, one layer down.
-	var saw_shots := false
 	var g2 := Game.new(0.3)
 	g2.hero.weapons.clear()
 	g2.hero.add_weapon(Weapons.WEAPONS["MAGIC_WAND"])
 	# Run the WHOLE window. The first version of this broke out as soon as a shot
 	# existed, so it asserted "and they kill" three frames after the first shot was
 	# fired -- and failed against a weapon that kills nine bats in twenty seconds.
-	for i in 60 * 20:
+	var shot_peak := Check.Peak.new()
+	Check.over(60 * 20, func(i):
 		g2.step(FRAME, Vector2.ZERO)
-		if g2.shots.size() > 0:
-			saw_shots = true
-	_check(saw_shots, "a projectile weapon puts shots in the world", "MAGIC_WAND fired")
-	_check(g2.kills > 0, "and they kill", "%d kill(s)" % g2.kills)
-	_check(main.game.hero.weapons.size() >= 1, "and holds a weapon", "%d" % main.game.hero.weapons.size())
+		shot_peak.consider(float(g2.shots.size()), i)
+	)
+	Check.at_least(shot_peak.value, 1.0, "a projectile weapon puts shots in the world")
+	Check.at_least(float(g2.kills), 1.0, "and they kill")
+	Check.at_least(float(main.game.hero.weapons.size()), 1.0, "and holds a weapon")
 
 	main.queue_free()
-	print("verify_play: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
-
-func _check(cond: bool, label: String, detail: String) -> void:
-	if cond:
-		print("  ok   %s  (%s)" % [label, detail])
-	else:
-		print("  FAIL %s  (%s)" % [label, detail])
-		ok = false
+	var passed := Check.ok
+	print("verify_play: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)
