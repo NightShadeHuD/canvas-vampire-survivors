@@ -68,6 +68,51 @@ export function measurements(repoRoot) {
                     /script:\s*'([^']+)'/g
                 )
             ].length,
+        /**
+         * GDScript assertions, counted from the suites' own output.
+         *
+         * Runs Godot, so it is the slowest entry here -- and it is worth it, because this is
+         * the number `docs/GODOT-PORT.md` quotes in almost every section.
+         */
+        godotAssertions: () => {
+            const checks = [
+                'verify_data',
+                'verify_slice',
+                'verify_scene',
+                'verify_play',
+                'verify_xp',
+                'verify_weapons',
+                'verify_passives',
+                'verify_invariants',
+                'verify_archetypes',
+                'verify_assertions',
+                'verify_achievements',
+                'verify_save'
+            ];
+            let total = 0;
+            for (const c of checks) {
+                const out = execFileSync(
+                    'godot',
+                    [
+                        '--headless',
+                        '--path',
+                        path.join(repoRoot, 'godot'),
+                        '--script',
+                        `res://${c}.gd`
+                    ],
+                    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 }
+                );
+                total += (out.match(/^ {2}ok {3}/gm) ?? []).length;
+            }
+            return total;
+        },
+        /** Godot verification suites in the chain. */
+        godotSuites: () =>
+            [
+                ...readFileSync(path.join(repoRoot, 'scripts', 'check-godot.mjs'), 'utf8').matchAll(
+                    /\['res:\/\/(verify_[a-z_]+)\.gd'/g
+                )
+            ].length,
         /** Suppression ceilings, counted from the baseline rather than from prose. */
         suppressionCeilings: () =>
             Object.keys(

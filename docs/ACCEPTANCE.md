@@ -1,5 +1,20 @@
 # Writing acceptance criteria
 
+## Measured figures
+
+The evidence column below quotes values. These are the ones checked automatically.
+
+<!-- claims:begin -->
+
+| name                  | value |
+| --------------------- | ----- |
+| `tests`               | 845   |
+| `testFloor`           | 816   |
+| `suppressionCeilings` | 9     |
+| `verifySteps`         | 23    |
+
+<!-- claims:end -->
+
 **An acceptance criterion is a claim about the product that a command can
 settle.** That is the whole idea. If you cannot name the check when you write the
 criterion, you are writing a wish, and a wish in a requirements document is worse
