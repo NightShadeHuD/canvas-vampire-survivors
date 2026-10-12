@@ -138,6 +138,17 @@ run is a partial run.
 
 ---
 
+## Measured figures
+
+<!-- claims:begin -->
+
+| name                  | value |
+| --------------------- | ----- |
+| `verifySteps`         | 23    |
+| `suppressionCeilings` | 9     |
+
+<!-- claims:end -->
+
 ## 3. Testing
 
 Testing is the highest-value work in this repository.

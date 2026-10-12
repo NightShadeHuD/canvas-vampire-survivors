@@ -74,17 +74,34 @@ export function parseClaims(text) {
         }
         if (!inside) continue;
 
-        // `| \`noImplicitAny\` | 168 | 360 |`
-        const m = /^\|\s*`([A-Za-z][A-Za-z0-9_]*)`\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*$/.exec(
+        // `| \`noImplicitAny\` | 168 | 360 |`   -- a strict flag, src and test
+        const flag = /^\|\s*`([A-Za-z][A-Za-z0-9_]*)`\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*$/.exec(
             lines[i]
         );
-        if (m) {
+        if (flag) {
             claims.push({
-                gate: m[1],
-                src: Number(m[2]),
-                test: Number(m[3]),
+                gate: flag[1],
+                src: Number(flag[2]),
+                test: Number(flag[3]),
                 line: i + 1,
-                text: m[0].trim()
+                text: flag[0].trim()
+            });
+            continue;
+        }
+
+        // `| tests | 845 |`  -- ONE number, by name, from the measurements registry.
+        //
+        // Added because 176 numeric lines across five documents had ONE guarded block
+        // between them, and the unguarded remainder carried 15 stale figures including a
+        // README badge reading `Tests: 512` against a real 845.
+        const single = /^\|\s*`?([a-z][A-Za-z0-9_]*)`?\s*\|\s*(\d+)\s*\|\s*$/.exec(lines[i]);
+        if (single) {
+            claims.push({
+                gate: single[1],
+                src: Number(single[2]),
+                test: null,
+                line: i + 1,
+                text: single[0].trim()
             });
         }
     }
@@ -115,6 +132,18 @@ export function judgeClaims(claims, measured) {
             );
             continue;
         }
+        // A one-number claim: the registry answers it directly.
+        if (c.test === null) {
+            const measured = typeof want === 'function' ? want() : (want.src ?? want);
+            if (c.src !== measured) {
+                reasons.push(
+                    `line ${c.line}: claims "${c.gate}" is ${c.src}, but the measurement is ` +
+                        `${measured}. Update the document, or the registry if it is wrong.`
+                );
+            }
+            continue;
+        }
+
         if (c.src !== want.src) {
             reasons.push(
                 `line ${c.line}: claims \`${c.gate}\` is ${c.src} in src/, but the gate ` +
