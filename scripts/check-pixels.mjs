@@ -19,13 +19,14 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { NOTICE_PREFIX } from './lib/gate-input.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const godotDir = path.join(repoRoot, 'godot');
 
 if (process.env.CI && !process.env.DISPLAY) {
     console.log(
-        'check-pixels: NOTICE — no display, so the WINDOWED pixel checks did not run. ' +
+        `check-pixels: ${NOTICE_PREFIX} no display, so the WINDOWED pixel checks did not run. ` +
             'This is not a pass; it is an unchecked tier.'
     );
     process.exit(0);
@@ -42,7 +43,7 @@ try {
     out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
     if (/command not found|ENOENT/.test(String(err.message))) {
         console.log(
-            'check-pixels: NOTICE — Godot is not installed, so the pixel checks did not ' +
+            `check-pixels: ${NOTICE_PREFIX} Godot is not installed, so the pixel checks did not ` +
                 'run. This is not a pass.'
         );
         process.exit(0);

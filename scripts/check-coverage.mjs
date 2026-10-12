@@ -260,11 +260,27 @@ const extOf = (f) => {
 
     // A §2 row naming a gate, in the column that says which chain runs it.
     const sectionTwo = docSrc.slice(docSrc.indexOf('## 2.'));
+    // `npm run X` AND `npm test`. The first version required the word `run`, and §2 documents
+    // the unit-test step as `npm test` -- so **the most important gate in the repository was
+    // invisible to the check written to catch exactly this**, and deleting
+    // `{ script: 'test', ... }` from `verify.mjs` produced a fully green run. Found by a
+    // tooling audit, which did it in three edits.
     const tableRows = [
         ...sectionTwo.matchAll(
-            /^\|\s*([^|]+?)\s*\|\s*`?npm run ([a-z0-9:_-]+)`?[^|]*\|\s*([^|]*?)\s*\|/gim
+            /^\|\s*([^|]+?)\s*\|\s*`?npm (?:run )?([a-z0-9:_-]+)`?[^|]*\|\s*([^|]*?)\s*\|/gim
         )
     ];
+
+    // AND IT MUST FIND SOMETHING. Every other scan in this file refuses an empty set; this
+    // one had no guard, so a regex matching nothing would report success -- the same false
+    // green `refuseEmptyScan` exists to prevent, in the check that enforces it elsewhere.
+    if (tableRows.length === 0) {
+        failures.push(
+            'docs: the §2 table matched no gate rows at all. Either the table was removed or ' +
+                'the shape this parser reads changed; both need looking at, because a scan ' +
+                'that matches nothing cannot report a missing gate.'
+        );
+    }
     const notInAnyChain = tableRows
         .map(([, , script, where]) => ({ script, where: where.trim() }))
         .filter(({ script, where }) => {
