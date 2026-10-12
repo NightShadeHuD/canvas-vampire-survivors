@@ -8,11 +8,12 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The fifteen non-negotiables
+## The sixteen non-negotiables
 
-Rules 1-7 are the original mandate. Rules 8-15 were each learned here the hard way --
+Rules 1-7 are the original mandate. Rules 8-16 were each learned here the hard way --
 each made more than twice before being written down, which is the threshold for a rule
-worth having. Rule 15 cost nothing only because the agent that broke it noticed.
+worth having. Rule 15 cost nothing only because the agent that broke it noticed, and
+rule 16 is the only one whose evidence is a count.
 
 ### 1. A red baseline stops everything
 
@@ -213,6 +214,36 @@ parentage — silently, and only at the moment it commits.
 **Before delegating, ask where the other agent will work.** If the answer is "the same
 directory", the delegation is already broken.
 
+### 16. The author of a gate is the worst person to find its hole
+
+**Four times in one session a defect was found in code written the same day and believed
+correct** -- and **twice it was in a fix made specifically to address the previous finding.**
+
+    `check-assertions` never read a `.gd` file        -- the gate's own author missed it
+    the title screen rendered OFF-SCREEN             -- "strengthened" from "node exists"
+                                                        to "text is correct", and called
+                                                        that the fix
+    argument-shape digest still missed equal(a,b)    -- shipped as the closure of the gap
+       -> equal(a,a)                                    it did not close
+    `found.name` did not exist                       -- in that same digest
+
+**A person checks that a gate PASSES. An auditor checks that it CAN FAIL.** Different
+questions, and the second is the one that matters.
+
+So: **commission audits of your own tooling, and require a positive control.** For every
+finding, the break (it stayed green when it should not) AND the control (something it
+should catch went red) -- without the control, "nothing changed" proves nothing, because
+the probe may simply not work.
+
+**And know the ceiling: verification does not delegate.** An agent's report is a claim, not
+a result. Fan out ONE level -- agents do not spawn agents -- and run the gate yourself
+before building on the report. Where that was skipped, a fix shipped that closed a
+different hole than the one claimed, and another audit round was needed to find out.
+
+`docs/AUDITS.md` has the brief template that produced the results, and the anti-patterns
+that produced nothing. A vague brief (_"analyse failures"_) yielded no trace and no report;
+an adversarial one (_"construct the input that should fail it"_) found seven.
+
 ## Before you commit
 
 ```bash
@@ -249,20 +280,31 @@ Playwright went 1.59 to 1.63.
 
 ## What is enforced, and by what
 
-| Rule                                                    | Mechanism                                        |
-| ------------------------------------------------------- | ------------------------------------------------ |
-| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                     |
-| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                 |
-| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                      |
-| Every source file is really linted                      | `scripts/check-coverage.mjs`                     |
-| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`               |
-| No test depends on today's date                         | `scripts/check-clocks.mjs`                       |
-| The game still boots and plays                          | `scripts/boot-smoke.mjs`                         |
-| Accessibility holds                                     | `scripts/a11y-audit.mjs`                         |
-| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                  |
-| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                        |
-| All of the above, in order, locally                     | `.githooks/pre-push` → `npm run verify`          |
-| All of the above, unbypassably                          | CI job **Verify**, required by branch protection |
+| Rule                                                    | Mechanism                                          |
+| ------------------------------------------------------- | -------------------------------------------------- |
+| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                       |
+| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                   |
+| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                        |
+| Every source file is really linted                      | `scripts/check-coverage.mjs`                       |
+| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`                 |
+| No test depends on today's date                         | `scripts/check-clocks.mjs`                         |
+| The game still boots and plays                          | `scripts/boot-smoke.mjs`                           |
+| Accessibility holds                                     | `scripts/a11y-audit.mjs`                           |
+| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                    |
+| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                          |
+| The register's numbers match what was measured          | `scripts/check-claims.mjs`                         |
+| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → `npm run verify`            |
+| **The rows ABOVE this one**, unbypassably               | CI job **Verify**, required by branch protection   |
+| The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`** |
+
+**Two gates are deliberately outside `verify`**: `boot-smoke.mjs` and `a11y-audit.mjs`
+need a browser, so `verify` would fail on a machine without one. **They are real
+enforcement — CI installs Chromium on every run and the deploy workflow gates on the full
+`Verify` job — but a local `npm run verify` does not run them, and this table said it did.**
+
+That is the class of defect this whole section exists to prevent: a claim about coverage
+that is one row wider than the coverage. An audit found it by listing the gates
+`verify.mjs` actually runs and comparing.
 
 `check:coverage` exists because ESLint prints **nothing** — no warning, exit
 0 — for a file that no config block matches, so `npm run lint` can report success
