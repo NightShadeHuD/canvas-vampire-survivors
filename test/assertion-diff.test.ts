@@ -263,3 +263,46 @@ test('assertion-digest/judge: it returns fresh digests for every file', () => {
     assert.deepEqual(Object.keys(fresh), ['test/a.test.ts', 'test/b.test.ts']);
     assert.equal(fresh['test/a.test.ts'], assertionDigest(A));
 });
+
+test('digest: ARGUMENT SHAPE closes the gap a kind-only digest cannot', async () => {
+    // The digest used to be `parts.push(`${found.name}/${found.kind}`)` with a comment
+    // reading "The name, not the arguments". `found.name` DOES NOT EXIST -- the entry is
+    // `{kind, head, args}` -- so every assertion hashed as `undefined/<kind>` and the
+    // digest was kind-only, always. Found by the maintainer of the scaffold this was
+    // ported from, pushing back on a claim of mine.
+    //
+    // Kind-only catches a change of KIND. It cannot catch a change of SHAPE, which is
+    // the weakening that matters most: a specific claim becoming a tautology.
+    const { argumentShape, assertionDigest } = await import('../scripts/lib/assertion-diff.mjs');
+
+    // WEAKENED -- the specific value becomes the thing itself. Must be caught.
+    assert.notEqual(
+        assertionDigest('assert.equal(hp, 42);'),
+        assertionDigest('assert.equal(hp, hp);'),
+        'a claim that became a tautology must change the digest'
+    );
+    // WEAKENED -- equality becomes a property. Must be caught.
+    assert.notEqual(
+        assertionDigest('assert.equal(hp, 42);'),
+        assertionDigest('assert.ok(hp > 0);')
+    );
+
+    // NOT weakened -- a different SUBJECT, same strength.
+    assert.equal(
+        assertionDigest('assert.equal(hp, 42);'),
+        assertionDigest('assert.equal(q.z, 7);'),
+        'a new subject is not a strength change'
+    );
+    // NOT weakened -- a new EXPECTED VALUE, same strength. This is why values are excluded.
+    assert.equal(
+        assertionDigest('assert.equal(hp, 42);'),
+        assertionDigest('assert.equal(hp, 43);'),
+        'a new expected value is not a strength change'
+    );
+
+    // The shape function itself, pinned.
+    assert.equal(argumentShape(['hp', '42']), 'IL', 'identifier then literal');
+    assert.equal(argumentShape(['hp', 'hp']), 'II', 'identifier twice -- the tautology');
+    assert.equal(argumentShape(['hp > 0']), 'X', 'a comparison is a property, not a value');
+    assert.equal(argumentShape(['-1']), 'L', 'a signed number is still a literal');
+});
