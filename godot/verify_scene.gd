@@ -16,6 +16,12 @@ extends SceneTree
 
 const FRAME := 1.0 / 60.0
 
+## `String.contains` via `find`, because GDScript has no `contains` on String and a
+## missing method is a runtime error rather than a failed check.
+func contains(haystack: String, needle: String) -> bool:
+	return haystack.find(needle) != -1
+
+
 func _init() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	Check.unchanged(packed != null, true, "the scene loads")
@@ -78,6 +84,29 @@ func _init() -> void:
 		Check.at_least(r.position.y + r.size.y, 0.0, "%s is not entirely ABOVE the screen" % node_path)
 		Check.at_most(r.position.y, vp.y, "%s is not entirely BELOW the screen" % node_path)
 		Check.at_most(r.position.x, vp.x, "%s is not entirely off the RIGHT edge" % node_path)
+
+	# EVERY SIMULATED THING IS DRAWN.
+	#
+	# This is the port's most repeated bug: a hero nobody could see, a title rendered above
+	# the screen, an 82% scrim over every frame, and hostile bolts that took 14 HP off with
+	# nothing on screen. All four were CORRECT SIMULATION with ZERO REPRESENTATION, and all
+	# four passed every suite, because the suites assert state.
+	#
+	# WHAT THIS DOES NOT PROVE, stated because the limit matters: it greps the draw source,
+	# so it cannot tell whether the drawn thing is VISIBLE, correctly coloured, or on
+	# screen. A pixel diff can, and that is what a behavioural audit used to find the bolts.
+	# This is the cheap half -- it fails the moment the loop is deleted, which is the
+	# mistake actually made -- and it is honest about being the cheap half.
+	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
+	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
+	for simulated in ["game.shots", "game.enemy_shots", "game.foes", "game.orbs"]:
+		Check.unchanged(
+			contains(draw_src, "for shot in %s" % simulated)
+				or contains(draw_src, "for foe in %s" % simulated)
+				or contains(draw_src, "for orb in %s" % simulated),
+			true,
+			"%s is ITERATED by _draw, not merely simulated" % simulated
+		)
 	Check.unchanged(main.get_node_or_null("Menu/Start") != null, true, "and a way to start")
 	Check.unchanged(main.state, main.State.MENU, "it is shown first")
 	Check.unchanged(main.menu.visible, true, "and is visible")
