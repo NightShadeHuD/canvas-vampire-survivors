@@ -53,6 +53,39 @@ jobs:
             - name: Install Chromium for the browser gates
               run: npx playwright install --with-deps chromium
 
+            # Godot: the port's 12 suites, 309 assertions and the generated-data drift
+            # check all run through it, and `.godot/` (the class_name cache) is
+            # gitignored — so a fresh checkout needs one `--import` before any
+            # `verify_*.gd` will load.
+            #
+            # UNTIL THIS STEP EXISTED, check:godot printed NOTICE and exited 0 on every
+            # CI run: the whole Godot half of this repository was enforced only on
+            # whichever contributor happened to have Godot installed. A tooling audit
+            # proved it by setting CONFIG.VERSION to 9.9.9 and getting "all 23 gates
+            # passed" under CI's PATH, while the same tree failed correctly on drift the
+            # moment Godot was on PATH.
+            #
+            # PINNED. `godotAssertionFloors` are exact per-suite counts derived from one
+            # particular Godot's output format, so an unpinned upgrade could change the
+            # format rather than the behaviour and fail the gate for the wrong reason.
+            - name: Install Godot
+              run: |
+                  set -euo pipefail
+                  GODOT_VERSION=4.7.2
+                  curl -fsSL -o /tmp/godot.zip \
+                    "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+                  unzip -q /tmp/godot.zip -d /tmp/godot
+                  sudo mv "/tmp/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+                  sudo chmod +x /usr/local/bin/godot
+                  godot --version
+
+            # Build the class_name cache the suites need, and prove the suites can load
+            # before the gate that runs them. Without this the failure surfaces at gate 5
+            # blaming a DOCUMENT -- `claims "godotAssertions" is 309, but the measurement
+            # is 0` -- because the measurement runs them and they cannot parse.
+            - name: Import the Godot project
+              run: godot --headless --path godot --import
+
             # Tier 1 (no browser): lint, format, unit tests, date-hermeticity, test
             # baseline, suppression ceilings, hygiene.
             # Tier 2 (browser): boot smoke through the critical path, axe a11y scan

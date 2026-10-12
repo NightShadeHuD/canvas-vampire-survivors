@@ -91,31 +91,32 @@ npm run verify
 
 It runs, in order, and stops at the first failure:
 
-| Step               | Command                        | Proves                                                                  |
-| ------------------ | ------------------------------ | ----------------------------------------------------------------------- |
-| Lint               | `npm run lint`                 | No undefined globals, no dead identifiers, style rules hold             |
-| Coverage           | `npm run check:coverage`       | Lint, format and test discovery actually reach every file               |
-| Typecheck          | `npm run typecheck`            | The TypeScript config is valid and the tree parses                      |
-| Gate self-tests    | `npm run check:selftests`      | Every gate has input that makes it FAIL                                 |
-| Register numbers   | `npm run check:claims`         | The figures the register states match what the gates measured           |
-| Strict flags       | `npm run check:strict`         | Enabled strict flags stay on, and the two outstanding flags do not rise |
-| Format             | `npm run format:check`         | Code matches the project's Prettier contract                            |
-| Unit tests         | `npm test`                     | Behaviour is as specified                                               |
-| Godot port         | `npm run check:godot`          | The Godot project runs, and its generated data matches the TypeScript   |
-| Isolation          | `npm run check:isolation`      | The suite behaves the same under both isolation models                  |
-| Suite mandates     | `npm run check:suite`          | No test was skipped, left as todo, or deleted                           |
-| Assertion strength | `npm run check:assertions`     | No assertion was weakened since the base revision                       |
-| Shortcut register  | `npm run check:register`       | Every shortcut is bounded, tracked and correctly cited                  |
-| Rule documents     | `npm run check:docs`           | Tables, citations and acceptance criteria all hold                      |
-| Date-hermeticity   | `npm run test:clock`           | No test depends on today's date                                         |
-| Baseline           | `npm run check:baseline`       | No new failures, no stale baseline entries                              |
-| Coverage floors    | `npm run check:coverage-floor` | Measured coverage has not fallen below its recorded floors              |
-| Suppressions       | `npm run check:suppressions`   | Every suppression is within its declared ceiling                        |
-| Type coverage      | `npm run check:types`          | The use of `any` has not grown                                          |
-| Port hazards       | `npm run check:ports`          | The Godot transform has not grown, and no SILENT hazard was added       |
-| Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets               |
-| Destructive edits  | `npm run check:destructive`    | Committed tooling does not bulk-edit source                             |
-| Build              | `npm run build`                | The shipped browser artifact compiles                                   |
+| Step               | Command                         | Proves                                                                  |
+| ------------------ | ------------------------------- | ----------------------------------------------------------------------- |
+| Lint               | `npm run lint`                  | No undefined globals, no dead identifiers, style rules hold             |
+| Coverage           | `npm run check:coverage`        | Lint, format and test discovery actually reach every file               |
+| Typecheck          | `npm run typecheck`             | The TypeScript config is valid and the tree parses                      |
+| Gate self-tests    | `npm run check:selftests`       | Every gate has input that makes it FAIL                                 |
+| Workflow parity    | `npm run check:workflow-parity` | The two CI workflows install the same toolchain, so neither drifts      |
+| Register numbers   | `npm run check:claims`          | The figures the register states match what the gates measured           |
+| Strict flags       | `npm run check:strict`          | Enabled strict flags stay on, and the two outstanding flags do not rise |
+| Format             | `npm run format:check`          | Code matches the project's Prettier contract                            |
+| Unit tests         | `npm test`                      | Behaviour is as specified                                               |
+| Godot port         | `npm run check:godot`           | The Godot project runs, and its generated data matches the TypeScript   |
+| Isolation          | `npm run check:isolation`       | The suite behaves the same under both isolation models                  |
+| Suite mandates     | `npm run check:suite`           | No test was skipped, left as todo, or deleted                           |
+| Assertion strength | `npm run check:assertions`      | No assertion was weakened since the base revision                       |
+| Shortcut register  | `npm run check:register`        | Every shortcut is bounded, tracked and correctly cited                  |
+| Rule documents     | `npm run check:docs`            | Tables, citations and acceptance criteria all hold                      |
+| Date-hermeticity   | `npm run test:clock`            | No test depends on today's date                                         |
+| Baseline           | `npm run check:baseline`        | No new failures, no stale baseline entries                              |
+| Coverage floors    | `npm run check:coverage-floor`  | Measured coverage has not fallen below its recorded floors              |
+| Suppressions       | `npm run check:suppressions`    | Every suppression is within its declared ceiling                        |
+| Type coverage      | `npm run check:types`           | The use of `any` has not grown                                          |
+| Port hazards       | `npm run check:ports`           | The Godot transform has not grown, and no SILENT hazard was added       |
+| Hygiene            | `npm run check:hygiene`         | No debuggers, no `.only`, no conflict markers, no secrets               |
+| Destructive edits  | `npm run check:destructive`     | Committed tooling does not bulk-edit source                             |
+| Build              | `npm run build`                 | The shipped browser artifact compiles                                   |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
 in `scripts/verify.mjs` must appear here, and every command listed here must
@@ -144,7 +145,7 @@ run is a partial run.
 
 | name                  | value |
 | --------------------- | ----- |
-| `verifySteps`         | 23    |
+| `verifySteps`         | 24    |
 | `suppressionCeilings` | 9     |
 
 <!-- claims:end -->
