@@ -40,6 +40,7 @@
         "check:claims": "node scripts/check-claims.mjs",
         "check:selftests": "node scripts/check-selftests.mjs",
         "check:pixels": "node scripts/check-pixels.mjs",
+        "check:workflow-parity": "node scripts/check-workflow-parity.mjs",
         "check:destructive": "node scripts/check-destructive.mjs",
         "check:types": "node scripts/check-types.mjs",
         "check:ports": "node scripts/check-ports.mjs",

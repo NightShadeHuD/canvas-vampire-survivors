@@ -38,6 +38,10 @@ const STEPS = [
         proves: 'the numbers the register states match the ones the gates measured'
     },
     {
+        script: 'check:workflow-parity',
+        proves: 'the two CI workflows install the same toolchain, so neither drifts'
+    },
+    {
         script: 'check:selftests',
         proves: 'every gate has been WATCHED failing on a deliberately broken input'
     },
