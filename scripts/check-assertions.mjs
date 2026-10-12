@@ -32,7 +32,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { writeBaseline } from './lib/baseline-file.mjs';
 import path from 'node:path';
-import { compareFiles, judgeDigests } from './lib/assertion-diff.mjs';
+import { compareFiles, judgeDigests, tautologies } from './lib/assertion-diff.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -132,6 +132,36 @@ if (process.argv.includes('--update')) {
         `check-assertions: recorded digests for ${Object.keys(fresh).length} test file(s).`
     );
     process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// TAUTOLOGIES: assertions that CANNOT FAIL.
+//
+// A HARD FAILURE, and it runs BEFORE the digest. A tautology is not "weaker than the
+// base" -- it is invalid on its own terms, so recording one in the baseline would be
+// wrong. Recommended by this repository's gate auditor, who measured that the
+// argument-shape rule it replaces misses `assert.equal(hp, maxHp)` -> `assert.equal(hp,
+// hp)` because both sides keep the shape `II`. Textual identity cannot be fooled by a
+// vocabulary, and needs none.
+// ---------------------------------------------------------------------------
+const tautological = loaded
+    .map((f) => ({ path: f.path, found: tautologies(f.text) }))
+    .filter((f) => f.found.length > 0);
+
+if (tautological.length > 0) {
+    console.error('check-assertions: FAILED — assertion(s) that CANNOT FAIL\n');
+    for (const f of tautological) {
+        for (const t of f.found) {
+            console.error(`  ${f.path}:${t.line}  ${t.head}`);
+            console.error('    both sides are the same text, so this is true whatever the');
+            console.error('    code does. It occupies the place a real assertion would go.\n');
+        }
+    }
+    console.error(
+        '  A tautology is not a weaker assertion, it is an absent one. Fix the assertion\n' +
+            '  rather than recording it.\n'
+    );
+    process.exit(1);
 }
 
 const digestVerdict = judgeDigests(loaded, recorded, modified);

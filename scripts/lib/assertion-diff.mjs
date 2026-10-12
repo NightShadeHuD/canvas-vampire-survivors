@@ -329,6 +329,56 @@ export function argumentShape(args) {
         .join('');
 }
 
+/**
+ * Assertions that CANNOT FAIL, because both sides are the same text.
+ *
+ * Recommended by the auditor of this repository's gates, and it is better than the
+ * argument-shape rule it replaces: shape is a vocabulary that has to guess, and it
+ * misses the case that matters most. Measured, all three with `assertionDigest`:
+ *
+ *   assert.equal(hp, 42)    -> assert.equal(hp, hp)      shape IL -> II  CAUGHT
+ *   assert.equal(hp, maxHp) -> assert.equal(hp, hp)      shape II -> II  MISSED
+ *   assert.equal(len, 1)    -> assert.equal(len, len)    shape IL -> II  CAUGHT
+ *
+ * `equal(hp, maxHp)` becoming `equal(hp, hp)` preserves the shape exactly, and it is the
+ * same weakening: a claim about two things becoming a claim that a thing equals itself.
+ *
+ * A two-argument assertion whose arguments are textually identical can never fail, so
+ * this needs no vocabulary and cannot be fooled by one. It is a HARD FAILURE rather than
+ * a revision change -- a tautology is not weaker than the base, it is invalid on its own
+ * terms, and it would be wrong to let one in by recording it.
+ *
+ * @param {string} text
+ * @returns {{line: number, kind: string, head: string}[]}
+ */
+export function tautologies(text) {
+    const found = [];
+    const lines = String(text ?? '').split('\n');
+    for (const entry of assertions(text)) {
+        const args = entry.args ?? [];
+        if (args.length < 2) continue;
+        const first = String(args[0]).trim();
+        if (first === '') continue;
+        // NOT INSIDE A STRING. `test/assertion-diff.test.ts` feeds assertion TEXT to the
+        // digest as input, and this rule flagged its own test's fixture as a tautology.
+        // A false positive is how a gate gets switched off, so the line is checked for a
+        // quote before the assertion starts.
+        const lineText = lines.find((l) => l.includes(entry.head)) ?? '';
+        const at = lineText.indexOf(entry.head);
+        const before = at > 0 ? lineText.slice(0, at) : '';
+        if ((before.match(/['"`]/g) ?? []).length % 2 === 1) continue;
+
+        if (args.every((a) => String(a).trim() === first)) {
+            found.push({
+                line: lines.findIndex((l) => l.includes(entry.head)) + 1,
+                kind: entry.kind,
+                head: entry.head
+            });
+        }
+    }
+    return found;
+}
+
 export function assertionDigest(text) {
     const parts = [];
     for (const found of assertions(text)) {

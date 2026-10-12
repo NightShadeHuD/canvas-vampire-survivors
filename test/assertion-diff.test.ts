@@ -210,8 +210,24 @@ test('assertion-digest: deleting an assertion changes the digest', () => {
     assert.notEqual(assertionDigest(two), assertionDigest(one));
 });
 
-test('assertion-digest: an empty file has a stable digest', () => {
-    assert.equal(assertionDigest(''), assertionDigest(''));
+test('assertion-digest: an empty file has a stable digest', async () => {
+    // This was `assert.equal(assertionDigest(''), assertionDigest(''))` -- a pure function
+    // called twice with one argument, which no implementation can fail. The test NAME was
+    // right and the assertion was empty; found by the tautology rule in check:assertions.
+    //
+    // Stability means the VALUE does not move between releases, because recorded digests
+    // in quality-baseline.json are compared against it. So it is pinned.
+    const { assertionDigest } = await import('../scripts/lib/assertion-diff.mjs');
+    assert.equal(
+        assertionDigest(''),
+        '811c9dc501000193',
+        'the empty digest is pinned, not recomputed'
+    );
+    assert.notEqual(
+        assertionDigest(''),
+        assertionDigest('assert.ok(true);'),
+        'and it is not universal'
+    );
 });
 
 test('assertion-digest/judge: a stale digest fails EVEN when the base diff sees the file', () => {
@@ -305,4 +321,34 @@ test('digest: ARGUMENT SHAPE closes the gap a kind-only digest cannot', async ()
     assert.equal(argumentShape(['hp', 'hp']), 'II', 'identifier twice -- the tautology');
     assert.equal(argumentShape(['hp > 0']), 'X', 'a comparison is a property, not a value');
     assert.equal(argumentShape(['-1']), 'L', 'a signed number is still a literal');
+});
+
+test('digest: a TAUTOLOGY is flagged, and a string literal is not', async () => {
+    // An argument-shape digest provably cannot see `equal(hp, maxHp) -> equal(hp, hp)`:
+    // both sides keep the shape `II`. Textual identity can, and needs no vocabulary.
+    //
+    // Measured by this repository's gate auditor, who also noted the rule must not read
+    // STRING LITERALS -- the test below feeds assertion text to the digest as input, and
+    // the first version of this rule flagged its own fixture.
+    const { tautologies } = await import('../scripts/lib/assertion-diff.mjs');
+
+    const flagged = (t: string) => tautologies(t).map((x) => x.head);
+
+    assert.deepEqual(
+        flagged('assert.equal(hp, hp);'),
+        ['assert.equal(hp, hp)'],
+        'identity is flagged'
+    );
+    assert.deepEqual(flagged('assert.equal(a.len, a.len);'), ['assert.equal(a.len, a.len)']);
+    assert.deepEqual(flagged('assert.equal(hp, maxHp);'), [], 'a real comparison is not');
+    assert.deepEqual(flagged('assert.equal(hp, 42);'), [], 'a value check is not');
+    assert.deepEqual(flagged('assert.ok(x);'), [], 'one argument cannot be a tautology');
+
+    // THE FALSE POSITIVE THAT MADE ME ADD THE GUARD: this file's own fixtures are
+    // assertion text inside quotes, and they must not be reported.
+    assert.deepEqual(
+        flagged("const a = assertionDigest('assert.equal(hp, hp);');"),
+        [],
+        'an assertion inside a string literal is data, not an assertion'
+    );
 });
