@@ -9,7 +9,6 @@
 extends SceneTree
 
 const FRAME := 1.0 / 60.0
-var ok := true
 
 func _init() -> void:
 	seed(12345)  # Deterministic: a spawn angle drawn from a fixed seed is repeatable.
@@ -20,15 +19,17 @@ func _init() -> void:
 	_contact_damage_respects_iframes()
 	_clamps_to_the_arena()
 
-	print("verify_slice: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	var passed := Check.ok
+	print("verify_slice: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)
 
 func _moves_when_asked() -> void:
 	var g := Game.new()
 	var x0 := g.hero.x
 	for i in 120:
 		g.step(FRAME, Vector2.RIGHT)
-	_check(g.hero.x > x0 + 100.0, "hero moves right when asked", "x %0.1f -> %0.1f" % [x0, g.hero.x])
+	Check.rose(x0, g.hero.x, "hero moves right when asked")
+	Check.at_least(g.hero.x - x0, 100.0, "and covers at least 100px in 2s")
 
 	# A diagonal must not be FASTER than a straight line -- the classic bug, and the
 	# original normalises for exactly this reason. Compared by DISTANCE TRAVELLED,
@@ -46,17 +47,13 @@ func _moves_when_asked() -> void:
 	var diagonal_dist := sqrt(
 		pow(diagonal.hero.x - start.x, 2) + pow(diagonal.hero.y - start.y, 2)
 	)
-	_check(
-		is_equal_approx(straight_dist, diagonal_dist),
-		"a diagonal is not faster than a straight line",
-		"%0.1f vs %0.1f" % [straight_dist, diagonal_dist]
-	)
+	Check.approx(straight_dist, diagonal_dist, "a diagonal is not faster than a straight line", 0.5)
 
 func _spawns_and_chases() -> void:
 	var g := Game.new(0.5)
 	for i in 120:
 		g.step(FRAME, Vector2.ZERO)
-	_check(g.foes.size() > 0, "foes spawn", "%d after 2s" % g.foes.size())
+	Check.at_least(float(g.foes.size()), 1.0, "foes spawn")
 
 	# A foe must CLOSE THE DISTANCE, not merely exist.
 	var f: Foe = g.foes[0]
@@ -64,40 +61,34 @@ func _spawns_and_chases() -> void:
 	for i in 30:
 		g.step(FRAME, Vector2.ZERO)
 	var after := sqrt(pow(f.x - g.hero.x, 2) + pow(f.y - g.hero.y, 2))
-	_check(after < before, "foe closes on the hero", "%0.1f -> %0.1f" % [before, after])
+	Check.fell(before, after, "foe closes on the hero")
 
 func _weapon_kills() -> void:
 	var g := Game.new(0.2)
 	for i in 600:
 		g.step(FRAME, Vector2.ZERO)
-	_check(g.kills > 0, "the weapon kills", "%d kills in 10s" % g.kills)
+	Check.at_least(float(g.kills), 1.0, "the weapon kills")
 
 func _contact_damage_respects_iframes() -> void:
 	var h := Hero.new(0, 0)
 	h.take_damage(10.0)
-	_check(h.hp == h.max_hp - 10.0, "a hit costs hp", "hp = %0.1f" % h.hp)
-	_check(h.invincible, "a hit grants i-frames", "invincible = %s" % h.invincible)
+	Check.approx(h.hp, h.max_hp - 10.0, "a hit costs hp")
+	Check.unchanged(h.invincible, true, "a hit grants i-frames")
 
 	# The rule, stated: a second hit DURING the window is free. Without this the
 	# hero melts in a crowd and the slice is not playable.
+	var hp_before := h.hp
 	h.take_damage(10.0)
-	_check(h.hp == h.max_hp - 10.0, "a hit during i-frames is free", "hp = %0.1f" % h.hp)
+	Check.unchanged(hp_before, h.hp, "a hit during i-frames is free")
 
 	# ...and one past the window is not.
 	h.tick(Config.INVINCIBILITY_TIME + FRAME)
 	h.take_damage(10.0)
-	_check(h.hp == h.max_hp - 20.0, "a hit past i-frames lands", "hp = %0.1f" % h.hp)
+	Check.approx(h.hp, h.max_hp - 20.0, "a hit past i-frames lands")
 
 func _clamps_to_the_arena() -> void:
 	# Boundary and one past it, which is how this project pins an edge.
 	var g := Game.new()
 	for i in 100000:
 		g.step(FRAME, Vector2.RIGHT)
-	_check(is_equal_approx(g.hero.x, Config.ARENA_WIDTH - g.hero.size), "hero stops at the right edge", "x = %0.1f" % g.hero.x)
-
-func _check(cond: bool, label: String, detail: String) -> void:
-	if cond:
-		print("  ok   %s  (%s)" % [label, detail])
-	else:
-		print("  FAIL %s  (%s)" % [label, detail])
-		ok = false
+	Check.approx(g.hero.x, Config.ARENA_WIDTH - g.hero.size, "hero stops at the right edge", 0.001)

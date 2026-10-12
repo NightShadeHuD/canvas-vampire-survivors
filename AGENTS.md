@@ -8,11 +8,11 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The fourteen non-negotiables
+## The fifteen non-negotiables
 
-Rules 1-7 are the original mandate. Rules 8-14 were each learned here the hard way --
+Rules 1-7 are the original mandate. Rules 8-15 were each learned here the hard way --
 each made more than twice before being written down, which is the threshold for a rule
-worth having.
+worth having. Rule 15 cost nothing only because the agent that broke it noticed.
 
 ### 1. A red baseline stops everything
 
@@ -189,6 +189,29 @@ say how big a change is before it is half-made.
 
 Backing out is correct. Backing out **repeatedly, for the same reason,** means the
 measuring step was being skipped.
+
+### 15. One working tree, one agent
+
+Two agents shared this checkout. I ran `git switch` and `git pull` while a subagent was
+mid-refactor, and **HEAD moved under it** — so its branch was created from the wrong
+base and its commit landed on `main`.
+
+It caught this itself and undid it cleanly (branch moved off `main`, `main` reset to
+`origin/main`, nothing pushed), which is the only reason it cost nothing. **A commit
+that reaches `main` and gets pushed is not undoable in the same way.**
+
+The rule is not "be careful with git". It is:
+
+```bash
+git worktree add --detach /tmp/agent-a main   # each agent gets its OWN tree
+```
+
+**A shared checkout is a shared mutable global.** Any agent that switches branches
+invalidates every other agent's baseline, its verification run, and its branch's
+parentage — silently, and only at the moment it commits.
+
+**Before delegating, ask where the other agent will work.** If the answer is "the same
+directory", the delegation is already broken.
 
 ## Before you commit
 

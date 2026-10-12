@@ -32,8 +32,12 @@ func _init() -> void:
 	_upgrade_pool_never_returns_nothing()
 	_a_long_adversarial_run()
 
-	print("verify_invariants: ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	# BOTH flags. The per-frame invariant fuzzer reports through this file's own `ok`
+	# (a first-broken-frame tracker no per-call helper can express) and every other
+	# check reports through `Check.`
+	var passed := ok and Check.ok
+	print("verify_invariants: ", "PASS" if passed else "FAIL")
+	quit(0 if passed else 1)
 
 func _seed(n: int) -> void:
 	seed(n)
@@ -96,13 +100,14 @@ func _monotonic_levels() -> void:
 			went_back = true
 			break
 		last = g.hero.level
-	_check(not went_back, "a level never goes backwards", "reached level %d" % last)
+	Check.unchanged(went_back, false, "a level never goes backwards")
 
 ## The XP threshold must keep growing, or levelling becomes free partway through.
 func _exp_threshold_never_stops_growing() -> void:
 	var h := Hero.new(0, 0)
 	var last := h.exp_to_next
 	var stalled := -1
+	var level_before := h.level
 	# Levelling 200 times is far past any real run.
 	for i in 200:
 		h.gain_exp(h.exp_to_next)
@@ -110,9 +115,9 @@ func _exp_threshold_never_stops_growing() -> void:
 			stalled = i
 			break
 		last = h.exp_to_next
-	_check(stalled < 0, "the XP threshold grows at every level", "level %d costs %0.0f" % [h.level, h.exp_to_next])
-	_check(h.level == 201, "and 200 forced levels all landed", "level %d" % h.level)
-	_check(not is_nan(h.exp_to_next) and not is_inf(h.exp_to_next), "the threshold stays finite at level 200", "%0.0f" % h.exp_to_next)
+	Check.unchanged(stalled, -1, "the XP threshold grows at every level")
+	Check.unchanged(h.level, level_before + 200, "and 200 forced levels all landed")
+	Check.unchanged(not is_nan(h.exp_to_next) and not is_inf(h.exp_to_next), true, "the threshold stays finite at level 200")
 
 ## An orb must expire, and must expire even if it can never reach the hero.
 func _orb_lifetime_is_bounded() -> void:
@@ -123,8 +128,10 @@ func _orb_lifetime_is_bounded() -> void:
 	while not orb.expired and frames < 60 * 60:
 		orb.update(FRAME, h)
 		frames += 1
-	_check(orb.expired, "an unreachable orb expires", "after %0.1fs" % (frames * FRAME))
-	_check(frames <= 60 * 60, "and does so within the lifetime constant", "%0.1fs vs EXP_ORB_LIFETIME %0.1f" % [frames * FRAME, float(Config.EXP_ORB_LIFETIME)])
+	Check.unchanged(orb.expired, true, "an unreachable orb expires at %0.1fs" % (frames * FRAME))
+	# The bound is the LIFETIME CONSTANT, not the loop guard above: expiry lands on the
+	# frame accumulated `life` crosses zero, so it can overshoot by one frame.
+	Check.at_most(float(frames) * FRAME, float(Config.EXP_ORB_LIFETIME) + 2.0 * FRAME, "and does so within the lifetime constant")
 
 ## Every instant of time must belong to exactly one wave. A gap would silently stop
 ## spawning, and an overlap would make `wave_for` order-dependent.
@@ -143,11 +150,11 @@ func _wave_boundaries_are_total() -> void:
 		var wave = g.wave_for(t)
 		if wave == null:
 			gaps.append(t)
-	_check(gaps.is_empty(), "every instant falls in a wave", "gaps at %s" % str(gaps.slice(0, 5)))
+	Check.unchanged(gaps.size(), 0, "every instant falls in a wave")
 	# And the boundary itself belongs to the LATER wave, not both.
 	var second: Dictionary = Waves.WAVES[1]
 	var at_from := g.wave_for(float(second["from"]))
-	_check(at_from["label"] == second["label"], "a boundary instant belongs to the wave starting there", "t=%d -> %s" % [second["from"], at_from["label"]])
+	Check.unchanged(at_from["label"], second["label"], "a boundary instant belongs to the wave starting there")
 
 ## `choose` must never return nothing while anything is offerable -- an empty offer
 ## would leave the run paused forever with no way out.
@@ -167,27 +174,23 @@ func _upgrade_pool_never_returns_nothing() -> void:
 		for i in int(Config.PASSIVE_MAX_STACK):
 			h.add_passive(def)
 	var picks := Upgrades.choose(h, 3, rng)
-	_check(picks.size() > 0, "a fully maxed hero is still offered something", "%d offer(s)" % picks.size())
+	Check.at_least(float(picks.size()), 1.0, "a fully maxed hero is still offered something")
 	# And the offer must be honest about being maxed.
 	var all_maxed := true
 	for p in picks:
 		if Upgrades.label(p) != " (MAXED)":
 			all_maxed = false
-	_check(all_maxed, "and they are labelled MAXED", "labels honest")
+	Check.unchanged(all_maxed, true, "and they are labelled MAXED")
 
 func _note(label: String, cond: bool, frame := -1, detail := "") -> void:
 	if not cond and not broken.has(label):
 		broken[label] = {"frame": frame, "detail": detail}
 
 func _report() -> void:
+	# NOT `Check.*` on purpose. Each invariant is sampled EVERY frame and only the first
+	# frame it broke at is interesting, which is a shape no per-call helper expresses --
+	# so these report through this file's own flag, and the ending accounts for both.
 	for label in broken:
 		var b: Dictionary = broken[label]
 		print("  FAIL %s  (frame %d, %s)" % [label, b["frame"], b["detail"]])
-		ok = false
-
-func _check(cond: bool, label: String, detail: String) -> void:
-	if cond:
-		print("  ok   %s  (%s)" % [label, detail])
-	else:
-		print("  FAIL %s  (%s)" % [label, detail])
 		ok = false
