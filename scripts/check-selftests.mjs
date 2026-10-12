@@ -79,7 +79,12 @@ function restore(entry) {
 // damage is invisible and lands on the person least able to tell it apart from their own
 // mistake. So it does not run at all unless the tree is clean apart from its own files.
 // ---------------------------------------------------------------------------
-const OWN_PATHS = ['gate-selftests.json', 'scripts/check-selftests.mjs'];
+// NO EXEMPTIONS. This list used to exclude the manifest and this script, on the reasoning
+// that they are the mechanism's own files and a break never touches them. **But the
+// restore is a blanket `git checkout HEAD -- .`, so "a break never touches it" is not the
+// question -- "will the restore revert it" is, and the answer for an uncommitted manifest
+// edit is YES.** It reverted one, silently, and the fix had to be written twice.
+const OWN_PATHS = [];
 const preDirty = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' })
     .split('\n')
     .filter((l) => l.trim() && !OWN_PATHS.some((o) => l.includes(o)));

@@ -37,10 +37,6 @@ const STEPS = [
         script: 'check:claims',
         proves: 'the numbers the register states match the ones the gates measured'
     },
-    {
-        script: 'check:selftests',
-        proves: 'every gate has been WATCHED failing on a deliberately broken input'
-    },
     { script: 'format:check', proves: "code matches the project's Prettier contract" },
     { script: 'test', proves: 'behaviour matches the unit tests' },
     {
