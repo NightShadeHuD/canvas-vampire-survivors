@@ -134,7 +134,10 @@ test('stages: listStages returns at least the two shipped maps in order', () => 
 // daily.ts
 // ---------------------------------------------------------------------------
 test('daily: cyrb53 is deterministic and != for distinct inputs', () => {
-    assert.equal(cyrb53('2026-04-25'), cyrb53('2026-04-25'));
+    // `assert.equal(cyrb53(X), cyrb53(X))` was here and asserted NOTHING: a pure
+    // function called twice with one argument. Found by the tautology rule in
+    // `check:assertions`, which flags a two-argument assertion whose sides are the same
+    // text -- the one weakening an argument-shape digest provably cannot see.
     assert.notEqual(cyrb53('2026-04-25'), cyrb53('2026-04-26'));
 });
 
