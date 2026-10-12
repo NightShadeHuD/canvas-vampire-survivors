@@ -320,6 +320,12 @@ func _draw() -> void:
 	# same class of bug as a hero who is -- and that one shipped.
 	for shot in game.shots:
 		_draw_shot(shot)
+	# HOSTILE bolts, in the same pass and UNDER the actors for the same reason. They were
+	# simulated every frame and never drawn: an audit measured that removing a Cultist's
+	# bolt 88px from the hero changed ZERO pixels, while moving the same shot into the
+	# drawn list changed 108. Fourteen damage with nothing on screen to read it from.
+	for shot in game.enemy_shots:
+		_draw_shot(shot, true)
 	for foe in game.foes:
 		_draw_foe(foe)
 	if not game.hero.dead:
@@ -347,7 +353,10 @@ func _draw_hero(hero: Hero) -> void:
 
 ## A shot in flight. Orbit shards are drawn as a ring segment, everything else as a
 ## bright core with a trail, so a boomerang and a knife are distinguishable at a glance.
-func _draw_shot(shot: Shot) -> void:
+## A shot. `hostile` tints it RED and gives it a hotter core -- the simulation treats
+## friendly and enemy shots as one type, so the only thing distinguishing them on screen is
+## this, and a bolt that looks like yours is worse than one you cannot see.
+func _draw_shot(shot: Shot, hostile: bool = false) -> void:
 	var p := Vector2(shot.x, shot.y)
 	if shot.kind == Shot.Kind.ORBIT:
 		draw_circle(p, shot.radius, Color("ffd166"))
@@ -358,6 +367,12 @@ func _draw_shot(shot: Shot) -> void:
 		# A short tail behind the shot, in the direction it came from.
 		draw_line(p, p - heading.normalized() * 14.0, Color(1, 1, 1, 0.25), 3.0)
 	var tint := Color("ffcc55") if shot.kind == Shot.Kind.BOOMERANG else Color("aaddff")
+	if hostile:
+		# A halo as well as a colour: hostile shots are the only thing in the game that
+		# hurts you at a distance, and colour alone is not a sufficient signal for anyone
+		# who cannot separate red from blue.
+		draw_circle(p, shot.radius * 2.1, Color(1.0, 0.25, 0.2, 0.22))
+		tint = Color("ff5544")
 	draw_circle(p, shot.radius, tint)
 	draw_circle(p, shot.radius * 0.45, Color(1, 1, 1, 0.9))
 
