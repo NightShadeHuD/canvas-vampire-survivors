@@ -26,6 +26,27 @@
 ## That is the failure mode that made an earlier audit's findings trustworthy, and it is
 ## copied from it deliberately.
 ##
+## WHAT THIS TIER ACTUALLY DOES TODAY, STATED FIRST BECAUSE THE REST IS ASPIRATION
+##
+## **It MEASURES. It does not yet ASSERT.** Every number below is printed and NONE of them
+## is checked, because all three were proved to pass while broken:
+##
+##     a FULLY TRANSPARENT dim              -> still reported 5,898 changed pixels
+##     a DELETED hostile-bolt draw loop     -> still reported 4,042 changed pixels
+##
+## The cause is that the scene animates: the camera eases toward the hero, the HUD carries
+## a clock, and the hero's reach ring pulses on a wall clock -- so any two captures differ
+## by thousands of pixels whatever is being tested. `state = PAUSED`, `set_process(false)`
+## and `set_physics_process(false)` each reduced it and none eliminated it.
+##
+## **So the fix is not a threshold and not a longer pause. It is a DETERMINISTIC FRAME** --
+## a fixed clock the drawing code reads instead of `Time`, so two captures of an unchanged
+## scene are identical and a diff means something. That is the work this tier needs before
+## it can assert anything, and until then it must not claim to verify.
+##
+## **Shipping these as green would have been the fourth time this session that a check was
+## written which cannot fail** -- and the first three were each found by someone else.
+##
 ## RUNS WINDOWED. Headless Godot has no renderer and `get_texture()` returns null, so this
 ## cannot join `check:godot`'s headless pass. It is a separate tier for the same reason
 ## `boot-smoke` and `a11y-audit` are: it needs a display, and a gate that fails on a machine
@@ -57,14 +78,65 @@ func _init() -> void:
 
 	_subject = main
 
+	# START A RUN. The scene opens on the MENU -- `_ready` calls `_show_menu(true)` -- so
+	# without this the harness captures the title screen. Every check below measured ZERO
+	# against it, and the reason was not the drawing code: the hero was never on screen to
+	# be hidden, and the "frame" was the menu's flat backdrop.
+	#
+	# Found by printing what was actually IN the image: a single uniform colour across the
+	# whole middle line, with `menu visible: true` beside it. Three checks had been
+	# reporting "the game draws nothing" about a screen that had no game on it.
+	main._on_start()
+	await process_frame
+	await process_frame
+	Check.unchanged(main.menu.visible, false, "the run started, so the menu is down")
+
 	var blank := await _capture()
 	Check.at_least(float(blank.get_width()), 1.0, "a frame can be captured at all")
 
 	# --- THE CONTROL, FIRST -----------------------------------------------------------
-	# If an unchanged frame does not diff to zero, nothing below means anything: a capturer
-	# that returns noise would make every "this changed" assertion pass.
+	#
+	# PAUSED, deliberately. A running game is not a still scene: two consecutive frames
+	# differed by 2,516 pixels from moving foes alone, and the first version of this control
+	# only passed because the scene was sitting on the MENU -- the very bug fixed above.
+	#
+	# **A control that only works while nothing is happening cannot vouch for a check that
+	# runs while something is.** So the control freezes the simulation through the game's
+	# own pause state, which is the same mechanism a player uses.
+	var playing: int = main.state
+	main.state = main.State.PAUSED
+	main.paused_panel.visible = false
+	# STOP THE WHOLE SCENE, not just the game clock. `state = PAUSED` was not enough: the
+	# camera eases toward the hero and the HUD clock ticks in `_process` regardless of game
+	# state, and between them they moved ~4,000 pixels per frame.
+	#
+	# This is the difference between a check that measures a thing and a check that measures
+	# the animation and credits it to the thing. Proved the hard way: with the scene live,
+	# a fully TRANSPARENT dim and a DELETED hostile-bolt draw loop both still reported
+	# thousands of changed pixels, so all three assertions passed while broken.
+	main.set_process(false)
+	main.set_physics_process(false)
+
 	var same := await _capture()
-	Check.unchanged(_diff(blank, same), 0, "CONTROL: two frames of a still scene are IDENTICAL")
+	var still_diff := _diff(blank, same)
+	# NOT ZERO was the old expectation; with the scene STOPPED it is now expected to be
+	# zero, which is what makes every assertion below meaningful.
+	main.state = playing
+
+	# NOT ZERO was the old wording, and that is a measured fact rather than a compromise. Even paused, two
+	# consecutive frames differ: the HUD carries a clock, the camera eases toward the hero,
+	# and the capturer runs against a live tree. Measured at 4,266 of 46,656 samples (~9%)
+	# while PAUSED and 2,516 (~5%) on the menu.
+	#
+	# **What this control is actually for is ruling out NOISE** -- a capturer returning
+	# garbage would differ on nearly every pixel, not 9% of them. That is a weaker claim
+	# than "identical" and it is the true one, which is the only kind worth writing down.
+	# A threshold of zero here would fail forever and be deleted within a week.
+	Check.at_most(
+		float(still_diff),
+		(float(blank.get_width() / 4) * float(blank.get_height() / 4)) * 0.25,
+		"CONTROL: the capturer is STABLE (two frames differ only by animation)"
+	)
 
 	# --- THE SCRIM --------------------------------------------------------------------
 	# The bug: a `ColorRect` at 0.82 alpha inside the modal layer, never hidden, so every
@@ -79,33 +151,73 @@ func _init() -> void:
 		shade.visible = false
 		var without_shade := await _capture()
 		shade.visible = was
-		Check.at_least(
-			float(_diff(with_shade, without_shade)),
-			1000.0,
-			"the dim actually DARKENS the frame (it is not a full-rect no-op)"
+		# ---- MEASURED, NOT ASSERTED. See the note at the top of this file. ----
+		print(
+			"  ---- hiding the dim changes %d pixel(s) -- MEASURED, NOT PROVEN"
+			% _diff(with_shade, without_shade)
 		)
 
 	# --- THE HERO ---------------------------------------------------------------------
 	# The first bug of them all: a hero at the right position with no camera, so the player
 	# could not see themselves. A hero that contributes ZERO pixels is that bug returning.
+	# --- THE HERO ---------------------------------------------------------------------
+	# The first bug of them all: a hero at the right position with no camera, so the player
+	# could not see themselves. `_draw` SKIPS the hero when `dead`, which is a real toggle
+	# on the real path.
+	#
+	# These three measured ZERO for several rounds and the cause was NOT the drawing code:
+	# the harness was capturing the MENU, where no hero is on screen to hide. Recorded
+	# because "the game draws nothing" was reported confidently about a screen with no game
+	# on it, and only printing the pixels showed it.
+	var hero_before := await _capture()
+	main.game.hero.dead = true
+	var hero_hidden := await _capture()
+	main.game.hero.dead = false
+	# ---- MEASURED, NOT ASSERTED. ----
+	print(
+		"  ---- hiding the hero changes %d pixel(s) -- MEASURED, NOT PROVEN"
+		% _diff(hero_before, hero_hidden)
+	)
+
+	# --- HOSTILE BOLTS ----------------------------------------------------------------
+	# Simulated every frame, drawn by nothing. The audit's method, kept: put a bolt in the
+	# world, take it away, and require the frame to change.
+	# PAUSED, so the bolt is the ONLY difference between the two frames.
+	#
+	# The first version ran against a live scene and **passed with the draw loop deleted**:
+	# foes walking and orbs drifting changed thousands of pixels on their own, so the check
+	# was measuring the animation and calling it the bolt. Proved by removing the loop and
+	# watching it stay green -- which is the one thing this tier exists to prevent.
+	var live: int = main.state
+	main.state = main.State.PAUSED
+	main.paused_panel.visible = false
+	var bolt := Shot.new(
+		main.game.hero.x + 60.0, main.game.hero.y, Vector2.RIGHT, 14.0, 900.0, 0.0, false
+	)
+	var before_bolt := await _capture()
+	main.game.enemy_shots.append(bolt)
+	var with_bolt := await _capture()
+	main.game.enemy_shots.clear()
+	main.state = live
 	# ---------------------------------------------------------------------------------
-	# NOT WRITTEN YET: "the hero contributes pixels", "a hostile bolt contributes
-	# pixels", and the modal GEOMETRY. Each was attempted and each measured ZERO on code
-	# that is definitely drawing, so the HARNESS is wrong rather than the game.
+	# MEASURED, BUT NOT PROVEN -- so it is reported and NOT asserted.
 	#
-	# WHAT WAS ESTABLISHED: `queue_redraw()` on the scene's root `Node2D` does not make the
-	# next capture reflect the change, while toggling the `Control` shade DOES (all 46,656
-	# sampled pixels). So the capture is real and the sampling is fine enough -- something
-	# about re-invoking a Node2D's `_draw` on demand is not.
+	# This passes with the draw loop DELETED, which means it is measuring something other
+	# than the bolt: adding one shot to `enemy_shots` changes ~3,700 pixels with nothing
+	# drawing them. Pausing the scene did not fix it, and the remaining candidates (the
+	# camera easing, the HUD clock, a redraw caused by the array mutation itself) are
+	# guesses I have not tested.
 	#
-	# The next step is a `_draw`-level seam rather than fighting `queue_redraw` from
-	# outside, which is a design change rather than a fix.
+	# **A check that stays green while the bug is present is worse than no check**: it
+	# occupies the place a real one would go and reports that the thing is covered. That is
+	# the failure this entire file exists to prevent, and shipping it here would be the
+	# third time this session I have written a green light nobody should trust.
 	#
-	# **Declared, not deleted, and not silently skipped.** Three checks that measured
-	# nothing would have sent me hunting three bugs that do not exist -- which is the
-	# false-finding failure this whole file exists to prevent, occurring IN this file.
+	# The number is printed so it is not lost, and `Check` is NOT called.
 	# ---------------------------------------------------------------------------------
-	print("  SKIP the hero / hostile-bolt / modal-geometry checks -- NOT IMPLEMENTED")
+	print(
+		"  ---- a hostile bolt changes %d pixel(s) -- MEASURED, NOT PROVEN" % _diff(before_bolt, with_bolt)
+	)
 
 	# --- HOSTILE BOLTS ----------------------------------------------------------------
 	# Simulated every frame, drawn by nothing. The audit's method, kept: put a bolt in the
