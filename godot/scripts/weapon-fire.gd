@@ -21,19 +21,31 @@ const ORBIT_SPIN := 2.4
 ## rather than fired at nothing -- the original does the same, and a knife thrown into
 ## empty space reads as a bug to the player.
 static func fire(
-	weapon: Dictionary, hero: Hero, foes: Array, shots: Array
+	weapon: Dictionary, hero: Hero, foes: Array, shots: Array, level: int = 1
 ) -> Array:
 	var created: Array = []
 	var kind: String = str(weapon["type"])
 	# The hero's passives, applied HERE rather than at each archetype. This is the hook
 	# the weapon commit recorded as missing: `damageMult`, `areaMult` and `cooldownMult`
 	# had no port, so Might/Area/Cooldown did nothing when taken.
-	var dmg := float(weapon["baseDamage"]) * hero.damage_mult()
+	# THE WEAPON'S OWN LEVEL, from `src/weapons.ts`.  A behavioural audit measured this
+	# as absent: knife and whip at weapon level 1 and level 5 produced identical damage
+	# (12.0), identical shot life (0.677s) and identical rates (24 shots in 10s).
+	#
+	# The level-up UI offers "Lv.2", "Lv.3" and "MAXED", so a player was choosing between
+	# offers that did nothing. The original scales damage +20%/level, cooldown x0.92^(n-1),
+	# range +10%/level and +1 projectile per 2 levels; only the passives were ported.
+	var lv: float = maxf(1.0, float(level))
+	var lv_damage := 1.0 + (lv - 1.0) * 0.2
+	var lv_area := 1.0 + (lv - 1.0) * 0.1
+
+	var dmg := float(weapon["baseDamage"]) * lv_damage * hero.damage_mult()
 	# A crit doubles. `luck` is the only source and a base hero has none.
 	if hero.crit_chance() > 0.0 and randf() < hero.crit_chance():
 		dmg *= 2.0
-	var reach := float(weapon["baseRange"]) * hero.area_mult()
-	var count: int = int(weapon.get("projectileCount", 1))
+	var reach := float(weapon["baseRange"]) * lv_area * hero.area_mult()
+	# +1 projectile per 2 weapon levels, floored -- `src/weapons.ts` `getProjectileCount`.
+	var count: int = int(weapon.get("projectileCount", 1)) + int(floor((lv - 1.0) / 2.0))
 
 	match kind:
 		"projectile":

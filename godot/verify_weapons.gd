@@ -26,6 +26,7 @@ func _init() -> void:
 	_drain_heals()
 	_lightning_strikes_the_nearest()
 	_multi_projectile_fires_a_volley()
+	_every_weapon_scales_with_its_level()
 	_cooldowns_are_per_weapon()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
@@ -179,6 +180,85 @@ func _multi_projectile_fires_a_volley() -> void:
 		# `vy`, not `vx`. `cos` is EVEN, so the x components of a symmetric fan are
 		# EXACTLY equal -- the original check compared a constant with itself.
 		Check.differs(shots[0].vy * shots[1].vy, 0.0, 1.0, "on opposite sides of the aim line")
+
+## EVERY weapon gets STRONGER with its own level.
+##
+## This was absent: a behavioural audit measured knife and whip at weapon level 1 and
+## level 5 producing IDENTICAL damage (12.0), identical shot life (0.677s) and identical
+## rates (24 shots in 10s), because `WeaponFire.fire()` had no level parameter at all.
+## The level-up UI offers "Lv.2", "Lv.3" and "MAXED" -- the most common offer in the game
+## -- and every one of them did nothing.
+##
+## DRIVEN BY THE DATA TABLE, not by one weapon that happens to work. A weapon added
+## without a level-scaling path fails here the moment it is added, which is the pattern
+## the other suites in this port already use.
+func _every_weapon_scales_with_its_level() -> void:
+	var scaled := 0
+	var not_scaling: Array = []
+	for def in Weapons.WEAPONS.values():
+		var g := Game.without_spawns()
+		# A target INSIDE the weapon's reach, so each archetype actually fires.
+		var foe := Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 40.0, g.hero.y)
+		g.foes.append(foe)
+		# MEASURED AS DAMAGE TO THE FOE, not as projectiles created.
+		#
+		# The first version counted shots, which only sees the four archetypes that
+		# RETURN one. Whip, Lightning, Mine, Garlic, Frost Nova and Soul Drain apply
+		# damage directly and return nothing, so they were reported as not scaling when
+		# the measurement could not see them at all. What a player experiences is the
+		# foe losing health, so that is what this measures.
+		var lo := _damage_at(def, 1)
+		var hi := _damage_at(def, 5)
+		var lo_n := _shots_at(def, 1)
+		var hi_n := _shots_at(def, 5)
+		# EITHER signal counts, and both are real. Damage rising is a harder hit; COUNT
+		# rising is better coverage. Orbit is the case that proves they are different
+		# claims: its shards go 2 -> 3 -> 4 while single-target damage does NOT rise,
+		# because a foe's re-hit window caps how often any one of them can land. Asserting
+		# only damage would call a correctly-scaling weapon broken.
+		if hi > lo + 0.001 or hi_n > lo_n:
+			scaled += 1
+		else:
+			not_scaling.append("%s (dmg %0.1f -> %0.1f, n %d -> %d)" % [def["id"], lo, hi, lo_n, hi_n])
+	Check.unchanged(not_scaling, [], "EVERY weapon in the data scales with its level")
+	Check.at_least(float(scaled), float(Weapons.WEAPONS.size()), "all %d were measured" % Weapons.WEAPONS.size())
+
+	# And the cooldown curve, which the game applies at its own call site.
+	var knife: Dictionary = Weapons.WEAPONS["KNIFE"]
+	var cd1 := float(knife["baseCooldown"]) * pow(0.92, 0.0)
+	var cd5 := float(knife["baseCooldown"]) * pow(0.92, 4.0)
+	# `Check.fell(before, after)`. This was written the other way round, and the suite
+	# said so immediately -- 0.2866 -> 0.4000 is a RISE, and the helper is not wrong.
+	Check.fell(cd1, cd5, "a higher weapon level SHORTENS its cooldown")
+
+
+## Total damage one shot of `def` does to a lone foe at weapon level `level`.
+##
+## Fires through the REAL archetype path and then steps the simulation, so projectiles
+## travel and strike weapons land. Returns the foe's HP loss, which is the thing a player
+## perceives -- and it is archetype-blind, so a new weapon type is measured rather than
+## silently skipped.
+## How many projectiles/shards `def` creates at `level`.
+func _shots_at(def: Dictionary, level: int) -> int:
+	var g := Game.without_spawns()
+	g.foes.append(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 40.0, g.hero.y))
+	return WeaponFire.fire(def, g.hero, g.foes, [], level).size()
+
+
+func _damage_at(def: Dictionary, level: int) -> float:
+	var g := Game.without_spawns()
+	var foe := Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 40.0, g.hero.y)
+	foe.hp = 100000.0
+	foe.max_hp = 100000.0
+	g.foes.append(foe)
+	var before: float = foe.hp
+	var made: Array = WeaponFire.fire(def, g.hero, g.foes, [], level)
+	for s in made:
+		g.shots.append(s)
+	for i in 90:
+		g.step(1.0 / 60.0, Vector2.ZERO)
+	return before - float(foe.hp)
+
 
 func _cooldowns_are_per_weapon() -> void:
 	# A knife (0.4s) must not be throttled by a slower weapon the hero also holds.
