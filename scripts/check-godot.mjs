@@ -27,6 +27,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { writeBaseline } from './lib/baseline-file.mjs';
 import { tmpdir } from 'node:os';
 import { exportGodot } from './export-godot.mjs';
 import { fileURLToPath } from 'node:url';
@@ -67,9 +68,12 @@ if (!have('godot')) {
 //
 // Generating elsewhere and DIFFING is the only form that can fail.
 const scratch = mkdtempSync(path.join(tmpdir(), 'godot-drift-'));
+/** Filled by the export below: every value the converter could not turn into GDScript. */
+let worklistReport = [];
 const drifted = [];
 try {
-    const { files } = await exportGodot(scratch);
+    const { files, report } = await exportGodot(scratch);
+    worklistReport = report.skipped;
     for (const name of files) {
         const fresh = readFileSync(path.join(scratch, name), 'utf8');
         const committedPath = path.join(godotDir, 'data', name);
@@ -80,6 +84,79 @@ try {
 } finally {
     rmSync(scratch, { recursive: true, force: true });
 }
+
+// ---------------------------------------------------------------------------
+// The PORT WORKLIST: values the exporter cannot convert, and therefore work the port
+// still has to do by hand.
+//
+// This is the same hole as the drift check above, one level up. `export:godot` has
+// always reported how many values it could not convert -- "21 a function -- needs a
+// hand-written func" -- and NOTHING RECORDED THE NUMBER. Close one and the count fell
+// silently; add a function to `src/data.ts` and it rose silently. A worklist nobody
+// measures is a worklist that grows.
+//
+// The ceiling may only fall, like every other ceiling in this project.
+// ---------------------------------------------------------------------------
+const baseline = JSON.parse(readFileSync(path.join(repoRoot, 'quality-baseline.json'), 'utf8'));
+const ceiling = baseline.godotWorklist;
+if (!ceiling || typeof ceiling.total !== 'number') {
+    console.error(
+        'check-godot: FAILED — no `godotWorklist` ceiling in quality-baseline.json. A ' +
+            'worklist with no recorded size cannot show that it is growing.'
+    );
+    process.exit(1);
+}
+const worklist = worklistReport;
+
+if (worklist.length > ceiling.total) {
+    // Name the ADDITIONS, not the first eight entries.
+    //
+    // The baseline stores every path, so the difference is computable. Listing the
+    // oldest entries instead means the reader has to diff the worklist by hand to find
+    // what they just broke -- a failure that needs debugging is half a failure.
+    const known = new Set(ceiling.paths ?? []);
+    const added = known.size > 0 ? worklist.filter((s) => !known.has(s.at)) : worklist;
+    console.error(
+        `check-godot: FAILED — the port worklist ROSE to ${worklist.length}, above the ` +
+            `recorded ceiling of ${ceiling.total}.\n\n` +
+            (known.size > 0 && added.length > 0
+                ? '  NEW since the ceiling was recorded:\n' +
+                  added.map((s) => `    ${s.at}  --  ${s.why}`).join('\n')
+                : worklist
+                      .slice(0, 8)
+                      .map((s) => `    ${s.at}  --  ${s.why}`)
+                      .join('\n')) +
+            '\n\n  Something was added to `src/data.ts` that the exporter cannot convert.\n' +
+            '  Either give it a form the generator understands, or raise the ceiling\n' +
+            '  deliberately with the reason recorded.'
+    );
+    process.exit(1);
+}
+if (worklist.length < ceiling.total) {
+    // Same `--update` contract as every other ceiling in this project. The message used
+    // to name a flag that did not exist, which is worse than saying nothing.
+    if (process.argv.includes('--update')) {
+        // The PATHS, not just the count: a ceiling that stores only a number cannot say
+        // WHICH hand-port was closed or added.
+        baseline.godotWorklist = {
+            total: worklist.length,
+            paths: worklist.map((s) => s.at).sort()
+        };
+        writeBaseline(path.join(repoRoot, 'quality-baseline.json'), baseline);
+        console.log(
+            `check-godot: recording the worklist -- ${ceiling.total} -> ${worklist.length}`
+        );
+    } else {
+        console.log(
+            `check-godot: NOTICE: the port worklist FELL to ${worklist.length} from ` +
+                `${ceiling.total}. Run \`npm run check:godot -- --update\` to record it.`
+        );
+    }
+}
+console.log(
+    `check-godot: ok   ${'port worklist'} — ${worklist.length} hand-port(s) remaining ` +
+        `(ceiling ${ceiling.total})`
+);
 
 if (drifted.length > 0) {
     console.error(

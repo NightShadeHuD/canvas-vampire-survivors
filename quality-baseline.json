@@ -229,6 +229,33 @@
         "error": 321,
         "silent": 8
     },
+    "godotWorklist": {
+        "total": 22,
+        "paths": [
+            "ACHIEVEMENTS[0].check",
+            "ACHIEVEMENTS[10].check",
+            "ACHIEVEMENTS[11].check",
+            "ACHIEVEMENTS[12].check",
+            "ACHIEVEMENTS[13].check",
+            "ACHIEVEMENTS[14].check",
+            "ACHIEVEMENTS[15].check",
+            "ACHIEVEMENTS[16].check",
+            "ACHIEVEMENTS[17].check",
+            "ACHIEVEMENTS[18].check",
+            "ACHIEVEMENTS[19].check",
+            "ACHIEVEMENTS[1].check",
+            "ACHIEVEMENTS[20].check",
+            "ACHIEVEMENTS[2].check",
+            "ACHIEVEMENTS[3].check",
+            "ACHIEVEMENTS[4].check",
+            "ACHIEVEMENTS[5].check",
+            "ACHIEVEMENTS[6].check",
+            "ACHIEVEMENTS[7].check",
+            "ACHIEVEMENTS[8].check",
+            "ACHIEVEMENTS[9].check",
+            "WAVES[9].to"
+        ]
+    },
     "strictCeilings": {
         "strictNullChecks": {
             "src": 0,
