@@ -28,6 +28,10 @@ var over: VBoxContainer
 ## The pause panel, hidden until Esc or P.
 var paused_panel: VBoxContainer
 
+## The dim behind a modal, hidden unless one is up. Set where it is created; a dim that
+## outlives its modal is a dim over the whole game, which is what it was.
+var shade_rect: ColorRect = null
+
 @onready var camera: Camera2D = $Camera2D
 @onready var menu: CanvasLayer = $Menu
 @onready var hud: CanvasLayer = $HUD
@@ -48,7 +52,17 @@ func _ready() -> void:
 	shade.name = "Shade"
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.color = Color(0.02, 0.02, 0.04, 0.82)
+	# HIDDEN BY DEFAULT, and it was not. The shade exists to dim the world BEHIND a modal,
+	# but nothing ever hid it, so every frame of the game -- title screen and gameplay
+	# alike -- ran under 82% black. Measured before the fix: hiding it changed all
+	# 746,496 pixels of a 1152x648 window, HUD contrast was 1.32:1 (WCAG AA needs 4.5:1)
+	# and the hero read at 1.47:1 against the floor.
+	#
+	# Nothing in the twelve suites caught it, because every one of them asserts state,
+	# and the state was correct. What was wrong was that a player could not see.
+	shade.visible = false
 	layer.add_child(shade)
+	shade_rect = shade
 
 	# The game-over panel shares the picker's layer and layout: two modal overlays that
 	# never appear together, so a second CanvasLayer would be a second thing to keep in
@@ -217,6 +231,10 @@ func _show_picks() -> void:
 		b.pressed.connect(_on_pick.bind(i))
 		box.add_child(b)
 
+	# The shade goes UP with the picker and DOWN with it. A dim that outlives its modal
+	# is a dim over the whole game.
+	if shade_rect != null:
+		shade_rect.visible = true
 	picker.visible = true
 
 func _on_pick(index: int) -> void:

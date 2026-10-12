@@ -53,6 +53,31 @@ func _init() -> void:
 	# The TEXT, not just the node. Existence alone passes on an empty label, which is
 	# the kind of check that looks like coverage and is not.
 	Check.unchanged(main.get_node("Menu/Title").text, "SURVIVOR", "and the title reads SURVIVOR")
+
+	# ON SCREEN, not merely present. This file asserted the title's TEXT and passed while
+	# the title was rendered entirely ABOVE the viewport -- rect y -180..-100 in a 648-tall
+	# window, because `anchors_preset = 15` makes the offsets screen-relative while they
+	# were written as if they were centre-relative. A behavioural audit measured HIDING
+	# the title changing ZERO pixels and moving it on-screen revealing 6229.
+	#
+	# That is the invisible-hero bug a third time. `text == "SURVIVOR"` cannot see it, so
+	# this measures the rect against the viewport the player actually has.
+	# The PROJECT's configured window, not `get_viewport_rect()`: headless Godot reports a
+	# 64x64 viewport, so measuring against it flagged correct UI as off-screen and would
+	# have flagged nothing real. The player's window is what the settings say it is.
+	var vp := Vector2(
+		float(ProjectSettings.get_setting("display/window/size/viewport_width")),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height"))
+	)
+	for node_path in ["Menu/Title", "Menu/Subtitle", "Menu/Start", "Menu/HowTo"]:
+		var c := main.get_node_or_null(node_path) as Control
+		if c == null:
+			Check.unchanged(false, true, "%s exists" % node_path)
+			continue
+		var r := c.get_global_rect()
+		Check.at_least(r.position.y + r.size.y, 0.0, "%s is not entirely ABOVE the screen" % node_path)
+		Check.at_most(r.position.y, vp.y, "%s is not entirely BELOW the screen" % node_path)
+		Check.at_most(r.position.x, vp.x, "%s is not entirely off the RIGHT edge" % node_path)
 	Check.unchanged(main.get_node_or_null("Menu/Start") != null, true, "and a way to start")
 	Check.unchanged(main.state, main.State.MENU, "it is shown first")
 	Check.unchanged(main.menu.visible, true, "and is visible")
