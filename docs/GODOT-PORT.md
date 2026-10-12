@@ -530,6 +530,71 @@ movement was correct; **the test had hardcoded the hero's start as `ARENA_HEIGHT
 position instead of writing it down. A test that assumes a value it could read fails
 on the truth and blames the code.
 
+## Tooling research: `typescript-to-gdscript`
+
+**Researched 2026-10-12, and recorded because it changes what a future contributor should do
+— not what this port should do now.**
+
+There is a maintained tool for the exact half of this port that was done by hand:
+[`typescript-to-gdscript`](https://github.com/nnn3d/typescript-to-gdscript) (MIT). You write
+Godot scripts in TypeScript, it type-checks them against **900+ generated engine classes**
+and emits ordinary `.gd` files Godot runs unchanged. Watch mode, source maps back to the
+`.ts` line, and scene/path typings generated from the project.
+
+    npm install --save-dev typescript-to-gdscript
+    npx tstogd init          # write .ts in src/, it emits .gd into scripts/
+
+### What it does NOT do, which is the half this repository already covers
+
+**It converts code. This repository's `export-godot.mjs` converts DATA.** `WEAPONS`,
+`PASSIVES`, `ENEMIES`, `BOSSES`, `WAVES`, `ACHIEVEMENTS`, `UNLOCKS` and the config constants
+are turned into `godot/data/*.gd` tables from `src/data.ts` — the single source of truth both
+games read. `tstogd` has no equivalent, and a data table is not a script.
+
+**The two are complementary, not competing.** A future project could reasonably use `tstogd`
+for the logic and a generator like ours for the tables.
+
+### The honest tradeoff, measured rather than argued
+
+|                               |                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| Hand-written GDScript here    | 11 modules, ~2,900 lines                                                |
+| Assertions verifying them     | **309**                                                                 |
+| Cost of switching to `tstogd` | rewrite all 11 in TypeScript; **discard every one of those assertions** |
+| Benefit                       | type-checking before running; the Godot API typed; safe refactoring     |
+
+**Rule 14 says measure a cascade before starting it, and this cascade is larger than the
+increment.** The port is verified and playable. Rewriting it to gain compile-time checking
+trades 309 passing assertions for a promise, and the six player-visible bugs this port has
+shipped — invisible hero, off-screen title, 82% scrim, undrawn bolts, off-centre panels,
+unbound WASD — **were all representation bugs that a type checker would not have caught
+either.** Types would not have helped with any of them.
+
+**So: recorded, not adopted.** The recommendation is for the NEXT Godot project, not this one.
+
+### What the research DID change: confirmation that our gotchas were real
+
+Every GDScript trap this port hit by hand is [documented upstream as a caveat](https://nnn3d.github.io/typescript-to-gdscript/guide/caveats/).
+That is evidence the mistakes were the language's, not carelessness:
+
+| We hit                                                                                                                   | Their caveat                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| **A lambda captures locals BY VALUE** — cost a round, and `godot/assertions.gd` works around it with a one-element Array | _"A GDScript lambda gets its own copy of the local variables it uses, and TypeScript doesn't warn you."_ |
+| A save read that must never return null — `save.gd` routes every read through `_get`                                     | _"Reading `obj.key` becomes `obj.get("key")`, which gives `null` for a missing key, never `undefined`."_ |
+| Generated tables wrap every constant in a `class_name`                                                                   | _"GDScript has no variables outside a class"_ and _"A `.gd` file is one class"_                          |
+| `Check.unchanged(arr, [])` compares contents, not identity                                                               | _"`==` … compares vectors, colors, arrays and dictionaries by their contents, not by identity"_          |
+| Weapon level scaling written as `(lv - 1.0) / 2.0`, deliberately float                                                   | _"`/` between two `int` values drops the fraction … and TypeScript can't warn you"_                      |
+
+**Five of five.** The workarounds were correct; a compiler would have made them unnecessary
+rather than wrong.
+
+### Also worth knowing
+
+[`@gdx/godact`](https://jsr.io/@gdx/godact) is a different approach — a runtime bridge that
+lets Godot call JavaScript — and is **not** a fit here. This project's TypeScript is
+compiled to a static `dist/` bundle and the Godot build is separate; a runtime bridge would
+make Godot depend on a JS engine, against the zero-runtime-dependency constraint.
+
 ## What is NOT ported
 
 Everything else. `src/` is 9,885 lines across 24 files; the data layer is ~850 of
