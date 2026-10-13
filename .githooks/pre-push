@@ -1,16 +1,126 @@
 #!/bin/sh
 #
-# pre-push — the full gate, same as CI.
+# pre-push — REFUSES TO PUSH WITHOUT A RECEIPT FOR THIS EXACT COMMIT.
+#
 # See docs/ENGINEERING-STANDARDS.md §2 and §6.
 #
-# Pushing is the last point where a mistake is still cheap to fix, so this runs
-# everything `npm run verify` runs. If it fails, nothing is pushed.
+# WHY THIS IS NOT "just run the gate here"
+#
+# GitHub Actions was removed, so nothing on the server checks anything. The gate runs on this
+# machine and reports itself, which means the only thing standing between a broken commit and
+# `main` is whether somebody typed `npm run ci`. **This hook is what makes them.**
+#
+# The earlier version ran `npm run verify` inline. That was wrong twice over:
+#
+#   1. **It ran TIER 1 ONLY.** `verify` is lint, format, unit tests, clocks, baseline and
+#      hygiene. It does NOT run the browser tier (boot smoke, a11y) or the pixel tier. With no
+#      CI left, those would have run NOWHERE -- and `verify`'s own output said "all 25 gates
+#      passed", which read as though they had.
+#   2. **It said "CI will still enforce it".** That sentence was true when it was written and
+#      false from the moment the workflows were deleted. A hook that lies about who is watching
+#      is worse than no hook, because it invites exactly the trust it has not earned.
+#
+# So the hook does not run the gate. It checks that the gate RAN, and ran on this revision:
+#
+#   * no receipt            -> refuse, and name the command
+#   * receipt for another   -> refuse, something changed since it passed
+#     revision
+#   * receipt says FAIL     -> refuse
+#   * receipt was written   -> refuse; it names a working tree, not a commit
+#     on a dirty tree
+#   * receipt says PASS for -> allow
+#     this revision
+#
+# **It can still be bypassed with `git push --no-verify`**, and that is deliberate -- a hook
+# that could not be bypassed would have to be a server, and the point of this change was that
+# there is no server. What it cannot be is bypassed ACCIDENTALLY. Skipping it now requires
+# typing the flag and meaning it.
 
 set -e
 
-command -v npm >/dev/null 2>&1 || {
-    echo "pre-push: npm not found, skipping local gate (CI will still enforce it)."
-    exit 0
+RECEIPT=".verify-receipt.json"
+
+command -v node >/dev/null 2>&1 || {
+    echo "pre-push: FAILED — node not found, so the receipt cannot be read."
+    echo "pre-push: refusing to push. Run the gate where node exists, or use --no-verify."
+    exit 1
 }
 
-npm run --silent verify
+HEAD_SHA=$(git rev-parse HEAD)
+HEAD_SHORT=$(printf '%s' "$HEAD_SHA" | cut -c1-7)
+
+if [ ! -f "$RECEIPT" ]; then
+    echo "pre-push: FAILED — no $RECEIPT, so the gate has not been run for this commit."
+    echo ""
+    echo "  There is no CI. Nothing on the server checks anything."
+    echo "  Run the gate, then push:"
+    echo ""
+    echo "      npm run ci"
+    echo ""
+    echo "  It runs verify:all -- lint, tests, the browser tier and the pixel tier -- records"
+    echo "  the revision, and reports the result."
+    echo ""
+    echo "  To push without it: git push --no-verify"
+    exit 1
+fi
+
+VERDICT=$(node -e '
+const fs = require("fs");
+const cp = require("child_process");
+let r;
+try {
+    r = JSON.parse(fs.readFileSync(".verify-receipt.json", "utf8"));
+} catch {
+    console.log("UNREADABLE");
+    process.exit(0);
+}
+const head = cp.execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+if (r.sha !== head) console.log("STALE " + (r.short || String(r.sha).slice(0, 7)));
+else if (r.dirty) console.log("DIRTY");
+else if (!r.ok) console.log("FAILED");
+else console.log("PASS");
+')
+
+case "$VERDICT" in
+    PASS)
+        echo "pre-push: ok — the gate passed on $HEAD_SHORT, and this is that commit."
+        ;;
+    STALE\ *)
+        echo "pre-push: FAILED — the receipt is for ${VERDICT#STALE }, but HEAD is $HEAD_SHORT."
+        echo ""
+        echo "  The gate passed on a DIFFERENT revision. Something changed since, and nothing"
+        echo "  has verified the change. Re-run it:"
+        echo ""
+        echo "      npm run ci"
+        exit 1
+        ;;
+    DIRTY)
+        echo "pre-push: FAILED — the receipt was written on a tree with uncommitted changes, so"
+        echo "  it names no revision. Commit, then: npm run ci"
+        exit 1
+        ;;
+    FAILED)
+        echo "pre-push: FAILED — the recorded run says the gate did NOT pass. Nothing is pushed."
+        echo ""
+        echo "  Fix the failure, then: npm run ci"
+        exit 1
+        ;;
+    *)
+        echo "pre-push: FAILED — $RECEIPT could not be read. Delete it, then: npm run ci"
+        exit 1
+        ;;
+esac
+
+# Two checks the receipt cannot make, and they cost nothing here.
+git diff --check >/dev/null 2>&1 || {
+    echo "pre-push: FAILED — the working tree has whitespace errors. Run: git diff --check"
+    exit 1
+}
+
+if git ls-files --error-unmatch "$RECEIPT" >/dev/null 2>&1; then
+    echo "pre-push: FAILED — $RECEIPT is TRACKED. It describes one machine's checkout and is"
+    echo "  meaningless to anyone else. It belongs in .gitignore."
+    exit 1
+fi
+
+exit 0
