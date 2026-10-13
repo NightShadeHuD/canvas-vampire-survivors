@@ -18,6 +18,12 @@ const ORBIT_SPIN := 2.4
 ## `_fireMelee`. Named rather than written twice, because the band that DAMAGES and the
 ## band that is DRAWN have to be the same band.
 const MELEE_HALF_HEIGHT := 40.0
+## How far a Lightning chain hop reaches: `if (d < 180 && d < minD)` in `_fireInstant`.
+const CHAIN_RADIUS := 180.0
+## What a hop deals, as a fraction of the strike's damage: `nearest.takeDamage(dmg * 0.7)`.
+const CHAIN_DAMAGE := 0.7
+## The weapon level the chain starts at: `if (this.def.chain && this.level >= 3)`.
+const CHAIN_LEVEL := 3
 
 ## The reach a weapon fires with, in ONE place.
 ##
@@ -38,8 +44,15 @@ static func reach_for(weapon: Dictionary, hero: Hero, level: int) -> float:
 ## `nearest` is the foe to aim at, or null. A projectile with no target is not fired
 ## rather than fired at nothing -- the original does the same, and a knife thrown into
 ## empty space reads as a bug to the player.
+##
+## `rng` is the generator an archetype draws from when it needs one -- Lightning's random
+## target is the only one today. Null means the GLOBAL generator: Godot seeds it from the
+## device when the project runs, so play stays unpredictable, and only a caller that
+## passes a seeded generator gets a pinned sequence. `Upgrades._next_index` is the same
+## contract, and `verify_weapons.gd` is the caller that pins one.
 static func fire(
-	weapon: Dictionary, hero: Hero, foes: Array, shots: Array, level: int = 1, fx: Fx = null
+	weapon: Dictionary, hero: Hero, foes: Array, shots: Array, level: int = 1, fx: Fx = null,
+	rng: RandomNumberGenerator = null
 ) -> Array:
 	# `fx` is the visual sink: the caller owns it, and a caller with no interest in
 	# drawing (the headless suites) passes nothing. A weapon that applies damage directly
@@ -109,20 +122,27 @@ static func fire(
 				fx.emit_particles(hero.x, hero.y, Color("aaeeff"), 24)
 				fx.emit_ring(hero.x, hero.y, reach, Color("aaeeff"))
 		"instant":
-			# TWO THINGS THE ORIGINAL DOES THAT THIS DOES NOT, named so neither is
-			# mistaken for finished. `_fireInstant` picks a RANDOM foe from those in range
-			# (`targets[Math.floor(Math.random() * targets.length)]`) -- its own data
-			# description is "Smites a random foe" -- and from weapon level 3 hops
-			# `chainCount` more times, 180px at a time, for 70% damage. This strikes the
-			# NEAREST and never chains. Reported, not changed: `verify_weapons.gd` asserts
-			# the nearest-target behaviour that is here.
-			var struck := _strike_nearest(hero, foes, reach, dmg, count)
+			# A RANDOM foe, and then the chain. `_fireInstant` in `src/weapons.ts`:
+			#
+			#     const cand = targets[Math.floor(Math.random() * targets.length)];
+			#     if (this.def.chain && this.level >= 3) { ... d < 180 ... dmg * 0.7 ... }
+			#
+			# The port used to strike the NEAREST and never chain, and `verify_weapons.gd`
+			# ASSERTED that nearest-target behaviour -- a test pinning what the data
+			# contradicts. `src/data.ts` says "Smites a random foe. Lv3+ chains." The code
+			# and that assertion are replaced together; `_fire_instant` below carries the
+			# rest of the original, quoted rather than invented.
+			var hits := _fire_instant(weapon, hero, foes, reach, dmg, level, rng)
 			if fx != null:
 				# `createParticles(target.x, target.y, '#ffff66', 14)` runs INSIDE the
-				# original's strike loop, so a chain of three gets three bursts and the
-				# player can see which foes were hit.
-				for foe in struck:
-					fx.emit_particles(foe.x, foe.y, Color("ffff66"), 14)
+				# original's strike loop and `8` runs inside its chain loop, so EVERY foe
+				# the bolt touches leaves a burst of its own -- the strike AND each hop --
+				# and the player can see which foes were hit. The size travels with the
+				# foe: one number for both would draw a hop as loudly as the bolt that
+				# began it, which is a drawing that lies about what happened.
+				for hit in hits:
+					var hit_foe: Foe = hit["foe"]
+					fx.emit_particles(hit_foe.x, hit_foe.y, Color("ffff66"), int(hit["sparks"]))
 		"drain":
 			var drained := _strike_nearest(hero, foes, reach, dmg, count)
 			# Soul Drain heals on tick -- `lifestealPct` is on the data.
@@ -238,13 +258,121 @@ static func _strike_all_in_range(hero: Hero, foes: Array, reach: float, dmg: flo
 		if sqrt(dx * dx + dy * dy) <= reach:
 			foe.take_damage(dmg)
 
-## The `count` CLOSEST foes within `reach`. Lightning needs this and so does Soul
-## Drain: both are described as hitting the nearest, and hitting the furthest would be
-## a different weapon.
+## ONE LIGHTNING STRIKE: a RANDOM foe in range, and then the chain.
 ##
-## Returns the foes it struck, because both of those weapons draw their hit AT the foe --
-## `_fireInstant` bursts where the bolt landed and `_fireDrain` streaks to the midpoint of
-## the tether -- and a caller cannot draw that from a count.
+## WHICH FOE, AND WHY IT IS NOT THE NEAREST
+##
+##     const cand = targets[Math.floor(Math.random() * targets.length)];
+##
+## -- `_fireInstant` in `src/weapons.ts`, and `src/data.ts`'s own description of the
+## weapon is "Smites a random foe". This port struck the NEAREST instead, and
+## `verify_weapons.gd` ASSERTED that: a test pinning the behaviour the data contradicts,
+## which is rule 12 upside down. Both are replaced in the same change.
+##
+## THE CHAIN, QUOTED RATHER THAN INVENTED
+##
+##     if (this.def.chain && this.level >= 3) {
+##         const chainCount = evolved ? this.def.chainCount + 2 : this.def.chainCount;
+##         for (let c = 0; c < chainCount; c++) {
+##             ... if (d < 180 && d < minD) { minD = d; nearest = e; }
+##             if (!nearest) break;
+##             nearest.takeDamage(dmg * 0.7);
+##             game.createParticles(nearest.x, nearest.y, '#ffff66', 8);
+##
+## -- the nearest UN-CHAINED foe within 180px of the last one hit, `dmg * 0.7` a hop, at
+## most `chainCount` of them. Every one of those four numbers is read here: the flag, the
+## level, the count and the radius. None of them is written into the code twice.
+##
+## WHAT IS NOT PORTED, named so it is not mistaken for finished. Evolution does not exist
+## anywhere in this port -- `evolveLevel` is unread, a registered gap -- so the evolved
+## `chainCount + 2` and the evolved `Math.min(3, targets.length)` strikes have no branch
+## here: the original's non-evolved `strikes = 1` is what this reproduces. The port used
+## to pass a `projectileCount`-derived `count` in and hit TWO foes at weapon level 3,
+## which is a different weapon from the original's one smite followed by a chain.
+##
+## A DEAD FOE IS NOT A TARGET. The original's hop loop does not check, because its dead
+## are swept later in the same frame; every other strike in this file skips the dead, so
+## this one does too rather than chaining into a corpse.
+##
+## Returns `[{"foe": Foe, "sparks": int}]`. The burst SIZE travels with the foe because
+## the original emits 14 at the strike and 8 at each hop, and the caller draws both.
+static func _fire_instant(
+	weapon: Dictionary,
+	hero: Hero,
+	foes: Array,
+	reach: float,
+	dmg: float,
+	level: int,
+	rng: RandomNumberGenerator
+) -> Array:
+	var targets: Array = []
+	for foe in foes:
+		if foe.dead:
+			continue
+		var dx: float = foe.x - hero.x
+		var dy: float = foe.y - hero.y
+		# STRICT `<`: `if (Math.hypot(e.x - player.x, e.y - player.y) < range)`.
+		if sqrt(dx * dx + dy * dy) < reach:
+			targets.append(foe)
+	if targets.is_empty():
+		return []
+
+	var hits: Array = []
+	var struck: Foe = targets[_pick_index(rng, targets.size())]
+	struck.take_damage(dmg)
+	hits.append({"foe": struck, "sparks": 14})
+
+	if not bool(weapon.get("chain", false)) or level < CHAIN_LEVEL:
+		return hits
+
+	var chained: Array = [struck]
+	var current: Foe = struck
+	for _hop in int(weapon.get("chainCount", 0)):
+		var nearest: Foe = null
+		var min_d := CHAIN_RADIUS
+		for foe in foes:
+			if foe.dead or chained.has(foe):
+				continue
+			var hx: float = foe.x - current.x
+			var hy: float = foe.y - current.y
+			var d: float = sqrt(hx * hx + hy * hy)
+			# `d < 180 && d < minD`, with `minD` started AT the radius rather than at
+			# Infinity: the same candidate set, one comparison instead of two. STRICT, so
+			# a foe at exactly 180px is NOT chained -- `verify_weapons.gd` pins that.
+			if d < min_d:
+				min_d = d
+				nearest = foe
+		if nearest == null:
+			break
+		nearest.take_damage(dmg * CHAIN_DAMAGE)
+		hits.append({"foe": nearest, "sparks": 8})
+		chained.append(nearest)
+		current = nearest
+	return hits
+
+## A random index in `[0, n)`, from the generator the CALLER supplied when there is one.
+##
+## The same three lines as `Upgrades._next_index`, deliberately. One shape for "a random
+## index a caller can seed" means a test pins a sequence the same way whichever part of
+## the game it is driving, and there is one place to look when one of them is wrong.
+##
+## `rng == null` is the GLOBAL generator. Godot seeds it from the device at startup --
+## measured rather than assumed: `randi()` and `RandomNumberGenerator.new().randi()`
+## printed a different first value in each of three separate runs -- so the default is
+## unpredictable play, and only a caller that passes a seeded generator gets a pinned
+## sequence. `Game.step` passes nothing, which is the point of it.
+static func _pick_index(rng: RandomNumberGenerator, n: int) -> int:
+	if rng == null:
+		return randi() % n
+	return rng.randi() % n
+
+## The `count` CLOSEST foes within `reach`. Soul Drain and nothing else -- Lightning used
+## to be here and is not any more, because the original does not aim it at the nearest:
+## `_fire_instant` above is the random smite plus the chain, and the two are different
+## weapons. Hitting the furthest would be a third.
+##
+## Returns the foes it struck, because `_fireDrain` draws its hit AT the foe -- its two
+## sparks are at the tether's midpoint -- and a caller cannot draw that from a count.
 static func _strike_nearest(hero: Hero, foes: Array, reach: float, dmg: float, count: int) -> Array:
 	var in_range: Array = []
 	for foe in foes:

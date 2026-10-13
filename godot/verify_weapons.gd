@@ -15,6 +15,17 @@
 extends SceneTree
 
 const FRAME := 1.0 / 60.0
+## Where the three smite-test foes stand, in px from the hero. All three are inside the
+## weapon's own reach at level 1 (420), so all three are candidates, and they are at three
+## different distances so "the nearest" is ONE foe rather than a tie.
+const SMITE_AT := [50.0, 200.0, 380.0]
+## The seed the randomness tests pin. Any value would do; it is fixed so a failure is
+## reproducible and a pass is not luck.
+const SMITE_SEED := 20260425
+## How many times the randomness test fires. Named, because it is the DENOMINATOR of the
+## rate below and a rate over "however many hits there were" is not a rate over fires -- a
+## chain at level 1 would silently change what was being divided by what.
+const SMITE_TRIALS := 300
 var ok := true
 
 func _init() -> void:
@@ -24,7 +35,9 @@ func _init() -> void:
 	_orbit_shards_circle_and_hit()
 	_boomerang_comes_back()
 	_drain_heals()
-	_lightning_strikes_the_nearest()
+	_lightning_smites_a_random_foe()
+	_lightning_chains_from_level_three()
+	_lightning_shows_every_hop()
 	_multi_projectile_fires_a_volley()
 	_every_weapon_scales_with_its_level()
 	_cooldowns_are_per_weapon()
@@ -151,23 +164,234 @@ func _drain_heals() -> void:
 	WeaponFire.fire(s["def"], s["game"].hero, s["game"].foes, shots)
 	_check(s["game"].hero.hp > before, "Soul Drain heals on hit", "hp %0.1f -> %0.1f" % [before, s["game"].hero.hp])
 
-func _lightning_strikes_the_nearest() -> void:
-	# Two foes in range, one much closer. Lightning has chainCount 3 but
-	# projectileCount 1, so exactly the nearest must be hit.
-	var g := Game.new(999.0)
-	g.hero.weapons.clear()
+## LIGHTNING SMITES A RANDOM FOE, WHICH IS WHAT ITS OWN DATA SAYS IT DOES.
+##
+## `_fireInstant` in `src/weapons.ts`:
+##
+##     const cand = targets[Math.floor(Math.random() * targets.length)];
+##
+## and `src/data.ts`: "Smites a random foe. Lv3+ chains." The port smote the NEAREST and
+## this suite ASSERTED it -- a test on the side of the bug, which is rule 12 inverted: the
+## data declared one thing, the code did another, and the test wrote the code's version
+## down as the specification. That assertion is GONE. Run against this code it fails about
+## two runs in three -- measured, on this tree -- because a 50/50 draw lands on the near foe
+## half the time. Which is also why it could never have seen the bug: it fires ONCE, and one
+## draw is not a distribution.
+##
+## WHAT A RATE PROVES THAT "IT HIT ONE OF THEM" DOES NOT
+##
+## "One of the three foes was hit" is satisfied by hitting the same foe every single time,
+## which is exactly what the bug did. Three foes at three distances are fired at
+## `SMITE_TRIALS` times through a SEEDED generator and each must be struck about a third of
+## the time: nearest-only reads 1.00 / 0.00 / 0.00, and only a draw from the whole in-range
+## set reads a third each. What is counted is the POPULATION of foes hit per fire.
+func _lightning_smites_a_random_foe() -> void:
+	print("\n-- lightning smites a RANDOM foe --")
 	var def: Dictionary = _weapon("lightning")
+	var picks := _lightning_picks(def, SMITE_SEED, SMITE_TRIALS)
+	Check.unchanged(picks.size(), SMITE_TRIALS, "one foe is smitten per fire -- no chain at level 1")
+	var hits := [0, 0, 0]
+	for pick in picks:
+		hits[pick] += 1
+	for i in SMITE_AT.size():
+		Check.rate(
+			hits[i],
+			SMITE_TRIALS,
+			1.0 / float(SMITE_AT.size()),
+			0.1,
+			"the foe at %dpx is smitten about a third of the time" % int(SMITE_AT[i])
+		)
+
+	# THE INJECTED GENERATOR IS THE ONE THAT DRAWS, and it is consumed in LOCKSTEP: the first
+	# twelve picks of this SMITE_TRIALS-fire run are the twelve picks a fresh generator with
+	# seed produces, one draw per fire. A pick taken from `randf()`, or from the global
+	# generator the game itself uses, cannot reproduce them -- so the repeatability every
+	# number in this file leans on is a property of the code rather than of luck. A prefix,
+	# not the whole run, because a failure prints the two sequences and 300 numbers is not a
+	# diagnostic; twelve differing picks out of 3^12 possibilities is not an accident.
+	Check.unchanged(
+		picks.slice(0, 12),
+		_lightning_picks(def, SMITE_SEED, 12),
+		"and a seeded rng REPLAYS the same picks, one draw per fire"
+	)
+
+## Which foe Lightning smites on each of `trials` fires, as a list of indices.
+##
+## The SEQUENCE, not a count: the rate above counts it and the replay above compares it with
+## another run, so both claims are about the same measurement rather than about two
+## hand-rolled loops that could drift apart.
+func _lightning_picks(def: Dictionary, seed_value: int, trials: int) -> Array:
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
 	g.hero.add_weapon(def)
-	var near := Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 50.0, g.hero.y)
-	var far := Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 300.0, g.hero.y)
-	for f in [near, far]:
-		f.max_hp = 1000.0
-		f.hp = 1000.0
+	var foes: Array = []
+	for at in SMITE_AT:
+		# STURDY, because this measures WHICH foe is chosen and not whether it dies: 300
+		# smites is 16,800 damage, and a corpse leaves the candidate list and silently
+		# changes what is being measured.
+		var f := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + at, g.hero.y))
+		foes.append(f)
 		g.foes.append(f)
-	var shots: Array = []
-	WeaponFire.fire(def, g.hero, g.foes, shots)
-	_check(near.hp < 1000.0, "lightning hits the NEAREST foe", "near hp %0.1f" % near.hp)
-	_check(far.hp == 1000.0, "and not the far one", "far hp %0.1f" % far.hp)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var picks: Array = []
+	for i in trials:
+		var before: Array = []
+		for f in foes:
+			before.append(f.hp)
+		WeaponFire.fire(def, g.hero, g.foes, [], 1, null, rng)
+		for j in foes.size():
+			if foes[j].hp < before[j]:
+				picks.append(j)
+	return picks
+
+## THE CHAIN, WHICH THE PORT DID NOT HAVE AT ALL.
+##
+##     if (this.def.chain && this.level >= 3) {
+##         for (let c = 0; c < chainCount; c++) { ... d < 180 ... nearest.takeDamage(dmg * 0.7); }
+##
+## Four claims, each pinned where the wrong code cannot also satisfy it.
+##
+##   THE LEVEL GATE. A tight line of five foes, every one within 180px of every other, so
+##   WHICHEVER foe the random smite picks there is an un-chained neighbour for each hop.
+##   The count is therefore the same for any draw and does not depend on the seed. One foe
+##   at level 1 and at level 2; 1 + chainCount at level 3.
+##
+##   THE DATA FIELDS ARE READ. The same def with `chain` off chains nowhere, and with
+##   `chainCount` cut to 1 it hops exactly once. A hardcoded 3 satisfies neither, which is
+##   the property rule 12 exists for.
+##
+##   THE HOP RADIUS, at the boundary and one past it: two foes `sep` apart, both inside the
+##   reach, so whichever is smitten the other is reachable only by a hop. `d < 180` is
+##   STRICT in the original, so 180.0 is out and 179.999 is in.
+##
+##   THE HOP DAMAGE, as a RATIO against what the strike itself dealt: 0.7. A ratio, so this
+##   is the original's `dmg * 0.7` and not a second copy of the level curve that
+##   `_every_weapon_scales_with_its_level` already covers.
+func _lightning_chains_from_level_three() -> void:
+	print("\n-- lightning chains at level 3 --")
+	var def: Dictionary = _weapon("lightning")
+	var hops := int(def["chainCount"])
+	var line: Array = [40.0, 60.0, 80.0, 100.0, 120.0]
+	Check.unchanged(_smitten(def, line, 1).size(), 1, "level 1: one foe smitten, no chain")
+	Check.unchanged(_smitten(def, line, 2).size(), 1, "level 2: still one -- the chain is Lv3+")
+	Check.unchanged(
+		_smitten(def, line, 3).size(), 1 + hops, "level 3: the strike plus chainCount=%d hops" % hops
+	)
+
+	var unlinked := def.duplicate()
+	unlinked["chain"] = false
+	Check.unchanged(_smitten(unlinked, line, 3).size(), 1, "chain: false -- no chain at level 3")
+	var single := def.duplicate()
+	single["chainCount"] = 1
+	Check.unchanged(_smitten(single, line, 3).size(), 2, "chainCount: 1 -- exactly one hop")
+
+	Check.unchanged(
+		[_chained_at(def, 179.999), _chained_at(def, 180.0), _chained_at(def, 180.001)],
+		[2, 1, 1],
+		"the hop radius is 180 STRICT: 179.999 chains, 180.0 and 180.001 do not"
+	)
+	Check.approx(_hop_damage_ratio(def), 0.7, "a hop deals 0.7x the damage the strike dealt")
+
+## The indices of the DISTINCT foes a Lightning fire damages, in a line of foes at those px
+## offsets from the hero. A population, not a count of damage events: a chain that re-hit
+## the foe it started from reads as one here and as two in a counter.
+func _smitten(def: Dictionary, line: Array, level: int) -> Array:
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	g.hero.add_weapon(def)
+	var foes: Array = []
+	for off in line:
+		var f := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + off, g.hero.y))
+		foes.append(f)
+		g.foes.append(f)
+	WeaponFire.fire(def, g.hero, g.foes, [], level)
+	var hurt: Array = []
+	for i in foes.size():
+		if foes[i].hp < foes[i].max_hp:
+			hurt.append(i)
+	return hurt
+
+## How many foes are damaged when the only other one is `sep` px from the foe that was
+## smitten -- the hop radius, measured as a population rather than as a distance.
+func _chained_at(def: Dictionary, sep: float) -> int:
+	return _smitten(def, [50.0, 50.0 + sep], 3).size()
+
+## The damage a hop deals, over the damage the smite itself dealt.
+##
+## The smitten foe is at 400px, the ONLY one inside the level-3 reach (420 * 1.2 = 504), so
+## the smite is deterministic without a seed; the foe at 550px is outside that reach and
+## reachable only by a hop. A ratio of what actually landed, so the claim under test is the
+## original's `dmg * 0.7`.
+func _hop_damage_ratio(def: Dictionary) -> float:
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	g.hero.add_weapon(def)
+	var smitten := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 400.0, g.hero.y))
+	var hopped := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 550.0, g.hero.y))
+	g.foes.append(smitten)
+	g.foes.append(hopped)
+	WeaponFire.fire(def, g.hero, g.foes, [], 3)
+	var direct: float = smitten.max_hp - smitten.hp
+	var chained: float = hopped.max_hp - hopped.hp
+	if direct <= 0.0:
+		return -1.0
+	return chained / direct
+
+## AND EVERY HOP IS SHOWN. `_fireInstant` bursts at each foe the bolt touches:
+##
+##     game.createParticles(target.x, target.y, '#ffff66', 14);     <- the smite
+##     game.createParticles(nearest.x, nearest.y, '#ffff66', 8);    <- every hop
+##
+## The port emitted one burst per struck foe and its comment claimed "a chain of three gets
+## three bursts and the player can see which foes were hit" -- true of the original and,
+## before the chain existed, of nothing here. A chain that damages four foes and draws one
+## of them is the Garlic ring's lie again: the drawing not matching what the code did.
+##
+## MEASURED AT EACH FOE'S OWN POSITION, not as a total. A count of sparks would pass for
+## four bursts all emitted at the hero, which shows the player nothing about WHICH foes were
+## hit. The line is 150px apart, so a burst at one foe cannot be counted at another, and
+## every one of the 1 + chainCount foes must have sparks at its own feet.
+func _lightning_shows_every_hop() -> void:
+	print("\n-- a chain SHOWS each hop --")
+	var def: Dictionary = _weapon("lightning")
+	var hops := int(def["chainCount"])
+	# 400px is the only offset inside the level-3 reach (504), and each 150px step after it
+	# is inside the 180px hop radius of the one before and outside the reach itself -- so
+	# the smitten foe is deterministic and every other foe is reachable only by a hop.
+	var line: Array = []
+	var at := 400.0
+	for i in 1 + hops:
+		line.append(at)
+		at += 150.0
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	g.hero.add_weapon(def)
+	var foes: Array = []
+	for off in line:
+		var f := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + off, g.hero.y))
+		foes.append(f)
+		g.foes.append(f)
+	WeaponFire.fire(def, g.hero, g.foes, [], 3, g.fx)
+
+	var hurt := 0
+	for f in foes:
+		if f.hp < f.max_hp:
+			hurt += 1
+	Check.unchanged(hurt, 1 + hops, "the chain hit every foe in the line")
+
+	var bursts: Array = []
+	for f in foes:
+		var n := 0
+		for spark in g.fx.sparks:
+			if is_equal_approx(spark.x, f.x) and is_equal_approx(spark.y, f.y):
+				n += 1
+		bursts.append(n)
+	# The smite's own burst first, then one per hop: the original's 14 and 8.
+	var want: Array = [14]
+	for i in hops:
+		want.append(8)
+	Check.unchanged(bursts, want, "one burst AT EACH foe: 14 for the smite, 8 for every hop")
 
 func _multi_projectile_fires_a_volley() -> void:
 	var s := _scene("retro_blaster", 150.0)

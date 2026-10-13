@@ -122,6 +122,7 @@ export function measurements(repoRoot) {
                 'verify_play',
                 'verify_xp',
                 'verify_weapons',
+                'verify_lightning',
                 'verify_passives',
                 'verify_invariants',
                 'verify_archetypes',
