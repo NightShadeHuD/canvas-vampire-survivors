@@ -159,5 +159,39 @@
         "run": "node scripts/check-reach.mjs",
         "why": "THE SHADOWING TRAP, which is why this gate resolves an action to the bindings it REALLY has. Declaring an action in `[input]` REPLACES its built-in default rather than adding to it, so this -- a `ui_up` that keeps the WASD event and loses the arrow event -- is exactly the edit that silently kills the arrow keys. A gate that only asked \"is the action declared\" would pass on it, and the HUD would advertise arrows that no longer move anything.",
         "touches": ["godot/project.godot"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor 'hint.text = \"Esc / P to resume\"' --replace 'hint.text = \"Esc / P / W to resume\"'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "A VACUOUS RESUME CLAIM, and the gate published one as proof of coverage. `Esc / P to resume` edited to `Esc / P / W to resume` -- W bound to movement and to nothing else -- used to exit 0, because the probe tapped the key twice from PLAYING and asked only whether the state was PLAYING after the SECOND tap: a question a key that does nothing answers correctly (`toggle key=W playing=1 after_first=1 after_second=1`). The key is now pressed while the run is PAUSED, so the verdict is about resuming. `requires: godot` because the failure is produced by DRIVING the game; where the engine is absent the probe does not run and the self-test would blame the gate for a missing dependency.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor 'b.pressed.connect(_on_pick.bind(i))' --replace 'b.pressed.connect(_on_pick.bind(0))'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "ONLY THE FOCUSED CONTROL WAS EVER PRESSED. Binding every picker button to `_on_pick.bind(0)` makes two of the three offered upgrades apply the wrong upgrade, and this gate used to exit 0: the probe tapped `ui_accept` at whatever had focus, and on the picker that is always `Pick0`. Each offered control is now pressed in its own run and the offer it applied is identified against the game's own `Upgrades.apply`. `requires: godot` for the same reason as the entry above.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\tpicker.visible = false\n\t_lower_shade()' --replace '\tpicker.visible = false\n\tpush_warning(\"remember to call _lower_shade() sometime\")'",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "A MESSAGE IS NOT A LOWERING. The `_lower_shade()` call is replaced by a warning that merely NAMES it, so the dim is never lowered -- and the gate used to exit 0, because the call graph was built from name TOKENS and a name inside a string literal counted as an edge. String contents are stripped before the token graph is built now, so the mention is not a call.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t_offers = []\n\tpicker.visible = false\n\t_lower_shade()' --replace '\t_offers = []\n\tpicker.visible = false' && node scripts/edit.mjs godot/scripts/main.gd --anchor 'func _show_pause(visible_now: bool) -> void:' --replace 'func _show_pause(visible_now: bool) -> void:\n\tshade_rect.visible = false'",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "THE ENGINE ALLOWANCE WAS A UNIVERSAL HOLE. The `_lower_shade()` call goes from `_on_pick` and the lowering is parked at the top of `_show_pause`, so the dim comes down only when the player PAUSES -- the exact bug that shipped, and the gate used to exit 0 because ANY lowering inside an engine callback (or one hop from one) was accepted, wherever the raise was. The allowance is a CYCLE now: an engine-driven lowering counts only if that same function can reach the code that raises the latch. The identical break parked in `_draw_hero` -- a dim that never comes up at all -- is also RED.",
+        "touches": ["godot/scripts/main.gd"]
     }
 ]

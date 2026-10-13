@@ -37,7 +37,11 @@
  *      leaves the assignment in the file while the dim again covers the run. An
  *      "is `= false` written anywhere" check stays green on that. This one does not: a
  *      lowering counts only if the code that RAISES the latch can reach it, by call or by
- *      signal connection.
+ *      signal connection — **or** the frame loop drives that lowering AND the same function
+ *      can reach the code that RAISES the latch, which is the arm/re-arm cycle and nothing
+ *      wider. That second clause used to be a wildcard — "any lowering inside an engine
+ *      callback, wherever the raise is" — and the wildcard was measured ACCEPTING the dim
+ *      being lowered only when the player pauses, which is the shipped bug. See `engineRuns`.
  *   B. ZERO-GATED COUNTERS. A member that is accumulated (`+=`) and read as a gate
  *      (`if pending_picks > 0:`) must be able to return to zero, or the gate never closes
  *      again. `pending_picks` is decremented, so it PASSES — this class exists to keep it
@@ -79,26 +83,66 @@
  *     the exclusion would create false positives instead of removing them.
  *
  * WHAT STILL GETS PAST THIS — the honest list, because a gate with an unstated ceiling is
- * read as a guarantee
+ * read as a guarantee. Every entry here was MEASURED against this gate; the edit and the
+ * exit code are the record, and none of them is published on reasoning alone.
  *
  *   - **Order inside a function.** A lowering written BEFORE the raise in the same function
- *     still counts: `x.visible = false ... x.visible = true` in one body passes. Ordering is
- *     modelled nowhere, deliberately — a half-model (same function only) would report a
- *     legitimate close-then-reopen as a defect, and a false positive is the failure that gets
- *     a gate weakened instead of fixed.
- *   - **A lowering that is called, but not from the closing path.** Reachability follows
- *     calls and signal connections; it cannot know WHICH caller closes this modal.
- *   - **A node whose visibility a parent drives**, or an alias of the receiver —
- *     `var s := shade_rect; s.visible = false` pairs `s.visible`, not `shade_rect.visible`.
- *   - **State set from a `.tscn` scene file.** The scan is `.gd` text, and a node left
- *     visible in `godot/scenes/main.tscn` is outside it — which is the shape of the FIRST
- *     shade bug.
+ *     still counts: `x.visible = false ... x.visible = true` in one body passes. Measured:
+ *     green, with the latch listed as reached. Ordering is modelled nowhere, deliberately — a
+ *     half-model (same function only) would report a legitimate close-then-reopen as a
+ *     defect, and a false positive is the failure that gets a gate weakened instead of fixed.
+ *   - **State set from a `.tscn` scene file.** The scan is `.gd` text, and a node left visible
+ *     in `godot/scenes/main.tscn` is outside it — which is the shape of the FIRST shade bug.
+ *     Measured: a `.tscn`-only latch is invisible to this gate (green).
  *   - **Anything behind a string.** `set("visible", true)`, `call("_lower_shade")`, and an
- *     action name assembled at runtime are all invisible to a text scan.
+ *     action name assembled at runtime are all invisible to a text scan. Measured: green.
+ *     That cuts BOTH ways, and the other direction was a hole: a name merely MENTIONED in a
+ *     string used to count as a reachability edge, so
+ *     `push_warning("remember to call _lower_shade() sometime")` satisfied a lifecycle
+ *     contract while the dim was never lowered — measured exit 0 before the fix and exit 1
+ *     after it. See `stripStrings`.
  *   - **A lifecycle property not in the table** (`freeze` on a RigidBody2D, `stream_paused`,
  *     `autoplay`). Widening the table is a one-line edit that carries a reason; leaving it
  *     narrow is why this gate can ship with zero exemptions.
  *   - **A domain flag on a per-entity object** — see above.
+ *
+ * "A LOWERING THAT IS CALLED, BUT NOT FROM THE CLOSING PATH" IS NOT A CEILING — IT FAILS
+ *
+ * This list used to publish that as something which gets past. It does not. Measured: with
+ * the `_lower_shade()` call removed from `_on_pick` and a lowering written inline in
+ * `_restart`, this gate exits 1 — "`shade_rect.visible` is only lowered by … code that runs
+ * once at startup, or on a path this raise is not part of."
+ *
+ * The one thing a differently-placed lowering buys is the FRAME LOOP, and that allowance is
+ * now a cycle rather than a wildcard: a lowering in a function the engine runs (one hop from
+ * `_process`/`_draw`/`_unhandled_input` …) counts ONLY IF that same function can reach the
+ * code that raises the latch. Measured three ways — the re-arm pair (raise in `_on_pick`,
+ * lowering in `_show_picks`, which `_process` calls) is green; the same pair with that clause
+ * disabled is red on the raise; and a lowering parked in `_show_pause` or `_draw_hero` —
+ * engine-driven, but reaching no raise — is red, which is the shipped bug.
+ *
+ * WHAT IT FAILS ON CORRECT CODE — THREE FALSE POSITIVES, MEASURED (these are not ceilings)
+ *
+ * Every one of these was published above as a ceiling. They are the opposite: the gate goes
+ * RED on code that is correct. **A published ceiling nobody measured is how a gate gets
+ * deleted** — a reader trusts the text, writes the aliased form, hits a hard fail and
+ * concludes the gate is broken. Measured by editing `godot/scripts/main.gd` and running
+ * `node scripts/check-lifecycle.mjs`:
+ *
+ *     `var d := shade_rect` then `d.visible = true`     exit 1 — "nothing in the shipped
+ *                                                       code sets `d.visible` to false"
+ *     `var s := shade_rect` then `s.visible = false`    exit 1 — "nothing in the shipped
+ *                                                       code sets `shade_rect.visible` to false"
+ *     `stats.visible = true` with the PARENT            exit 1 — "nothing in the shipped
+ *     `hud.visible` doing the hiding                    code sets `stats.visible` to false"
+ *
+ * The first two are one fact: **this gate pairs by the RECEIVER NAME**, so an alias splits a
+ * pair that is really one pair. The third is that a child's latch is not excused by its parent
+ * being hidden. Both are left as failures rather than closed, and that direction is
+ * deliberate: closing them needs alias resolution and a Control-tree model, and the cheap
+ * versions of both MERGE KEYS — which accepts a lowering on a DIFFERENT node, the direction
+ * that hides the shipped bug. So the gate keeps the false positive and states it here, and the
+ * failure report names the alias so the reader who hits it is told why.
  *
  * AN EXEMPTION IS AS HARD TO ADD AS A SHORTCUT (rule 2)
  *
@@ -304,6 +348,43 @@ function stripComment(line) {
     return out;
 }
 
+/**
+ * The same line with every string literal's CONTENTS removed, quotes kept.
+ *
+ * The token graph is built from these, and a name inside a string is not an edge. This was
+ * a hole and not a precaution: with the `_lower_shade()` call in `_on_pick` replaced by
+ * `push_warning("remember to call _lower_shade() sometime")` — a message and nothing else —
+ * this gate reported "every SET has its UNSET" and exited 0 while the dim was never
+ * lowered. Measured on this gate before the fix.
+ *
+ * `stripComment` deliberately KEEPS string contents, because class D needs the action names
+ * inside them (`Input.is_action_pressed("ui_up")`). This is the opposite requirement over
+ * the same text, which is why it is a second function and not a flag on the first.
+ */
+function stripStrings(line) {
+    let out = '';
+    let quote = null;
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (quote !== null) {
+            if (ch === '\\') {
+                i += 1;
+            } else if (ch === quote) {
+                quote = null;
+                out += ch;
+            }
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            out += ch;
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+
 /** Not shipped game code: the suites and the assertion library they share. */
 const isSuite = (rel) => /^godot\/(assertions|verify_[a-z_]+)\.gd$/.test(rel);
 
@@ -436,7 +517,9 @@ for (const { rel, lines } of files) {
             reading = { name: header[1], lines: [] };
             fn = header[1];
         }
-        if (reading !== null) reading.lines.push(raw);
+        // STRING CONTENTS GONE: the token graph must not accept a name that exists only in a
+        // message. See `stripStrings`.
+        if (reading !== null) reading.lines.push(stripStrings(raw));
         const site = { rel, line: i + 1, text: raw.trim(), fn };
 
         const member = MEMBER_DECL.exec(raw);
@@ -503,9 +586,12 @@ for (const { rel, lines } of files) {
 //
 // The edges are NAME TOKENS, not parsed calls: if a function's body mentions the name of
 // another function, there is an edge. That is deliberately generous -- a `Callable` passed
-// by name, a `connect(_foo)`, a `"_foo"` string and a `Foo.bar()` static call all count --
-// because an edge the gate cannot see becomes a FALSE POSITIVE, and a false positive is the
-// one failure that gets a gate weakened rather than fixed.
+// by name, a `connect(_foo)` and a `Foo.bar()` static call all count -- because an edge the
+// gate cannot see becomes a FALSE POSITIVE, and a false positive is the one failure that
+// gets a gate weakened rather than fixed.
+//
+// A `"_foo"` STRING does NOT count, and it used to. That generosity was a hole: a name that
+// exists only inside a message satisfied a lifecycle contract. See `stripStrings`.
 // ---------------------------------------------------------------------------
 const tokensOf = new Map();
 for (const [name, body] of functionBodies) {
@@ -513,19 +599,41 @@ for (const [name, body] of functionBodies) {
 }
 
 /**
- * What the ENGINE runs without being asked: the per-frame and per-event callbacks.
+ * What the ENGINE runs without being asked: the per-frame and per-event callbacks, plus the
+ * functions one of them names directly.
  *
- * A lowering in one of these, or in a function one of them names, happens on its own and is
- * therefore a counterpart to a raise anywhere. **This allowance was measured, not guessed.**
- * The break suite added a correct pair — `picker.disabled = true` when a pick is taken,
- * `= false` in `_show_picks`, which `_process` calls when the next offer is due — and the
- * gate called it a defect. A latch that is ARMED when the thing closes and RE-ARMED when it
- * opens again is ordinary code, and a gate that reports it is a gate that gets weakened.
+ * A latch that is ARMED when the thing closes and RE-ARMED when it opens again is ordinary
+ * code, and the frame loop is what re-arms it: that pair -- the RAISE in the handler that
+ * CLOSES the modal, the LOWERING in the function `_process` calls to open the next one -- was
+ * reported as a defect without this, and a gate that reports correct code is a gate that gets
+ * weakened. Measured on this tree: `stats.visible = true` in `_on_pick` with
+ * `stats.visible = false` in `_show_picks` is GREEN, and the SAME pair is RED the moment the
+ * clause below is disabled -- so the clause is load-bearing and not decoration.
+ *
+ * **BUT BEING ENGINE-DRIVEN IS NOT ENOUGH, AND THAT WAS THIS GATE'S WORST HOLE.** The
+ * allowance used to be a WILDCARD -- any lowering inside an engine callback, or one hop from
+ * one, was accepted no matter where the raise was -- so the headline ("a lowering counts
+ * only if the code that RAISES the latch can reach it") was not true as written. Measured
+ * against this gate before the fix, with `_lower_shade()` deleted from `_on_pick`:
+ *
+ *     `shade_rect.visible = false` parked at the top of `_show_pause`   exit 0
+ *     the same line parked in `_draw_hero`                              exit 0
+ *
+ * The first is the dim coming down only when the player PAUSES, which is the shipped bug
+ * this gate exists to catch; the second is a dim that never comes up at all.
+ *
+ * So `engineRuns` is not an acceptance on its own. The pairing test below asks for a CYCLE:
+ * an engine-driven lowering counts only if that same function can reach the code that
+ * RAISES the latch. `_show_picks` connects `_on_pick`, so the arm/re-arm pair passes;
+ * `_show_pause` and `_draw_hero` reach nothing that raises the shade, so a parked lowering
+ * is reported. Measured both ways -- see `scripts/check-selftests.json` and the ceiling list
+ * at the top of this file.
  *
  * **ONE hop, not the transitive closure.** `_process -> _show_game_over -> _restart ->
  * _start_run -> _lower_shade` is four, and following it would blind this gate to the very
  * bug it was written for: in the broken tree the dim IS lowered four calls from the frame
- * loop, when a NEW RUN starts, and that is not the modal being lowered.
+ * loop, when a NEW RUN starts, and that is not the modal being lowered. That is still
+ * rejected: `_lower_shade` is not one hop from a callback.
  *
  * Signal handlers are deliberately NOT entry points here, for the same measured reason:
  * `_restart` is connected to a button, so treating its contents as universally reachable
@@ -542,12 +650,12 @@ const ENGINE_CALLBACKS = new Set([
     '_notification'
 ]);
 
-const engineLowered = new Set();
+const engineRuns = new Set();
 for (const name of ENGINE_CALLBACKS) {
     if (!functionBodies.has(name)) continue;
-    engineLowered.add(name);
+    engineRuns.add(name);
     for (const token of tokensOf.get(name) ?? []) {
-        if (functionBodies.has(token)) engineLowered.add(token);
+        if (functionBodies.has(token)) engineRuns.add(token);
     }
 }
 
@@ -604,8 +712,13 @@ for (const [key, sites] of raises) {
             // reachable from anywhere anyway; this says so explicitly so a future refactor
             // that calls an init function by hand cannot quietly count it as a lowering.
             if (low.fn === null || INIT_FUNCTIONS.has(low.fn)) return false;
-            if (engineLowered.has(low.fn)) return true;
-            return reached.has(low.fn);
+            // (a) The raise’s own path can reach the lowering.
+            if (reached.has(low.fn)) return true;
+            // (b) The frame loop drives the lowering AND that function is part of the SAME
+            // open/close cycle as the raise -- it can reach the code that arms the latch.
+            // Being engine-driven alone is NOT enough: that wildcard accepted the dim being
+            // lowered at the top of `_show_pause`, which is the shipped bug. See `engineRuns`.
+            return engineRuns.has(low.fn) && reachableFrom(low.fn).has(site.fn ?? '');
         });
         if (ok.length > 0) {
             paired += 1;
@@ -801,6 +914,11 @@ console.error(
     '  This is the class that shipped the greyed-out screen: one line set the dim true and\n' +
         '  nothing set it false, so it covered the rest of the run. The assertions passed\n' +
         '  because they read the dim’s ALPHA, and alpha is a property — this is a lifecycle.\n' +
+        '\n' +
+        '  This gate pairs by the RECEIVER NAME, so `var s := shade_rect` then `s.visible =\n' +
+        '  false` pairs `s.visible` and NOT `shade_rect.visible` — an alias splits a pair that\n' +
+        "  is really one. That is a KNOWN FALSE POSITIVE, listed in this file's header with its\n" +
+        '  measurement; the fix is to assign to the receiver itself, not to exempt it.\n' +
         '\n' +
         '  To exempt one, add to `lifecycleExemptions` in quality-baseline.json:\n' +
         '      { "id": "<file>:<name>", "why": "...", "bound": "...",\n' +
