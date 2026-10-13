@@ -346,16 +346,20 @@ measurement is 0` — because the measurement runs the suites and they cannot lo
 assertions and the generated-data drift check — is unverified on your machine**, and
 `verify` says so in its "checked nothing" list. That is a declared gap, not a pass.
 
-**CI installs Godot 4.7.2 and runs the import**, so the required check DOES enforce the
-port. Until recently it did not — `.github/` mentioned Godot nowhere, so `check:godot`
-printed NOTICE and exited 0 on every run and the port was enforced only by whichever
-contributor happened to have Godot on PATH. A tooling audit proved it by setting
-`CONFIG.VERSION` to `9.9.9` and getting "all 23 gates passed" under CI's PATH. **The version
-is pinned deliberately**: `godotAssertionFloors` are exact per-suite counts derived from one
-particular Godot's output format.
+**So on a machine with Godot, the port is enforced. There is nowhere else it could be** —
+GitHub Actions is gone, and for a while before that it did not install Godot either, so
+`check:godot` printed NOTICE and exited 0 on every run and the port was enforced only by
+whichever contributor happened to have it on PATH. A tooling audit proved that by setting
+`CONFIG.VERSION` to `9.9.9` and getting "all 23 gates passed" under CI's PATH.
 
-`check:pixels` still NOTICEs in CI — it needs a DISPLAY and the runner has none. **That one
-is a live declared gap**, and the browser tier's `xvfb` is the shape of the fix.
+**Godot 4.7.2 specifically**, and the pin is deliberate: `godotAssertionFloors` are exact
+per-suite counts derived from one particular Godot's output format, so a different version can
+fail the gate for a reason that is not a behaviour change.
+
+`check:pixels` needs a DISPLAY. **It used to NOTICE on every CI run and now simply runs**,
+because the gate runs where a screen is — which closed a declared gap as a side effect of
+moving the runner. It is still the only tier that asks what a PLAYER sees, and it is still the
+one whose assertions were once green while their subject was broken.
 
 **Re-run `npx playwright install chromium` after any Playwright upgrade.** The
 browser is versioned with the library, so a bump leaves the old binary in place
@@ -367,31 +371,31 @@ boot-smoke: could not launch Chromium — Executable doesn't exist at
   .../chromium_headless_shell-1243/...
 ```
 
-— which reads like a broken gate rather than a missing download. **CI is unaffected
-because `verify:all`'s workflow step installs the browser every run**, which is
-why a green PR is not evidence that a local checkout works. Hit for real when
-Playwright went 1.59 to 1.63.
+— which reads like a broken gate rather than a missing download. **Until recently CI installed
+the browser on every run, so a green PR was not evidence that a local checkout worked.** There
+is no CI now: if the browser is missing, `npm run ci` stops here for you and nobody else. Hit
+for real when Playwright went 1.59 to 1.63.
 
 ---
 
 ## What is enforced, and by what
 
-| Rule                                                    | Mechanism                                            |
-| ------------------------------------------------------- | ---------------------------------------------------- |
-| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                         |
-| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                     |
-| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                          |
-| Every source file is really linted                      | `scripts/check-coverage.mjs`                         |
-| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`                   |
-| No test depends on today's date                         | `scripts/check-clocks.mjs`                           |
-| The game still boots and plays                          | `scripts/boot-smoke.mjs`                             |
-| Accessibility holds                                     | `scripts/a11y-audit.mjs`                             |
-| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                      |
-| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                            |
-| The register's numbers match what was measured          | `scripts/check-claims.mjs`                           |
-| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → `npm run verify`              |
-| **The rows ABOVE this one**, reported to GitHub         | `npm run ci` — pushes the required **Verify** status |
-| The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`**   |
+| Rule                                                    | Mechanism                                              |
+| ------------------------------------------------------- | ------------------------------------------------------ |
+| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                           |
+| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                       |
+| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                            |
+| Every source file is really linted                      | `scripts/check-coverage.mjs`                           |
+| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`                     |
+| No test depends on today's date                         | `scripts/check-clocks.mjs`                             |
+| The game still boots and plays                          | `scripts/boot-smoke.mjs`                               |
+| Accessibility holds                                     | `scripts/a11y-audit.mjs`                               |
+| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                        |
+| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                              |
+| The register's numbers match what was measured          | `scripts/check-claims.mjs`                             |
+| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → `npm run verify`                |
+| **The rows ABOVE this one**, run here and recorded      | `npm run ci` — `verify:all` + a receipt naming the SHA |
+| The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`**     |
 
 **Two gates are deliberately outside `verify`**: `boot-smoke.mjs` and `a11y-audit.mjs`
 need a browser, so `verify` would fail on a machine without one. **`npm run verify:all` runs
@@ -407,21 +411,29 @@ report and no pull request could ever merge, with `enforce_admins` on so not eve
 could override it.
 
 **`npm run ci` does what the workflow did**: runs `npm run verify:all` here, writes
-`.verify-receipt.json` naming the exact revision, and POSTs the `Verify` status to GitHub. It
+`.verify-receipt.json` naming the exact revision, and POSTs a `Verify` status to GitHub. It
 refuses on a dirty tree, because a status names a COMMIT and a dirty tree is not one.
+
+**The status is EVIDENCE, not enforcement.** It was going to satisfy the required check until
+measurement showed it cannot: GitHub scopes a required check to an APP, only a GitHub App can
+post a check run, and a commit status is a different API. So it is posted, it is visible on the
+commit, and **nothing reads it**. Its only job is to make "I ran the gate" checkable by
+somebody else.
 
 ```bash
 npm run ci          # the full gate, then report it
 npm run ci -- --no-report   # run the gate, record locally, tell GitHub nothing
 ```
 
-**What this preserves:** `gh pr merge` still refuses without a passing `Verify`, and only a
-passing run produces one.
+**What it costs, and this is the honest part — it is more than was planned.** The intent was
+to keep the required check and move only the runner. **That turned out to be impossible**: the
+check was removed from branch protection, so nothing stops a merge now except the person doing
+it. On top of that, a CI runner cannot be talked out of running and this script can simply not
+be invoked.
 
-**What it costs, and this is the honest part:** a CI runner cannot be talked out of running,
-and this script can simply not be invoked. **The required check is now reported by the same
-person it constrains.** Nothing here should ever be described as "CI", and "the gate passed"
-now means "somebody ran it", which is a weaker claim than it was a week ago.
+**So the gate is now reported by, and enforced by, nobody but the person it constrains.**
+Nothing here should ever be described as "CI", and "the gate passed" now means "somebody ran
+it" — a materially weaker claim than it was before this change.
 
 That is the class of defect this whole section exists to prevent: a claim about coverage
 that is one row wider than the coverage. An audit found it by listing the gates
@@ -465,14 +477,22 @@ are rejected by GitHub, not merely discouraged:
 
 ```
 remote: - Changes must be made through a pull request.
-remote: - Required status check "Verify" is expected.
  ! [remote rejected] HEAD -> main (protected branch hook declined)
 ```
 
-Enforced on `main`: the required `Verify` check (strict — the branch must be up
-to date), pull requests mandatory, force pushes denied, deletions denied, and
-`enforce_admins` on so nobody bypasses it, not even the owner. Verified by probe:
-both a force push and a direct commit push were rejected.
+**That rejection used to name a required check as well.** It no longer does — see below — and
+this block kept the old text for exactly one commit after the check was removed, which is the
+drift this repository spends its time hunting.
+
+Enforced on `main`: pull requests mandatory, force pushes denied, deletions denied, and
+`enforce_admins` on. **There is NO required status check** — see the section above for why it
+cannot be one: GitHub scopes a required check to an APP (`app_id: 15368`, Actions), only a
+GitHub App can post a check run, and a local commit status does not satisfy it. The check was
+therefore removed rather than left in place to block every merge forever.
+
+**What that means in practice: nothing stops a pull request being merged without the gate
+having run.** The protection that remains is procedural. Treat `npm run ci` as the gate, not
+as a formality.
 
 The practical workflow is therefore:
 
@@ -480,8 +500,9 @@ The practical workflow is therefore:
 git switch -c my-change
 git commit -m "..."                     # pre-commit gate runs
 git push -u origin my-change            # pre-push gate runs
-gh pr create --fill                     # CI runs the full gate on the PR
-gh pr merge --squash --delete-branch    # succeeds only once Verify is green
+npm run ci                              # THE GATE: runs verify:all here, records it
+gh pr create --fill
+gh pr merge --squash --delete-branch    # nothing checks this for you any more
 ```
 
 `required_approving_review_count` is 0, so a solo maintainer can merge their own
