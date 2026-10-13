@@ -393,7 +393,7 @@ for real when Playwright went 1.59 to 1.63.
 | No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                        |
 | The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                              |
 | The register's numbers match what was measured          | `scripts/check-claims.mjs`                             |
-| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → `npm run verify`                |
+| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → requires a receipt for HEAD     |
 | **The rows ABOVE this one**, run here and recorded      | `npm run ci` — `verify:all` + a receipt naming the SHA |
 | The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`**     |
 
@@ -401,6 +401,25 @@ for real when Playwright went 1.59 to 1.63.
 need a browser, so `verify` would fail on a machine without one. **`npm run verify:all` runs
 them and is the definition of done**; a bare `npm run verify` does not, and this table once
 said it did.
+
+## YOU CANNOT PUSH WITHOUT HAVING RUN IT
+
+`.githooks/pre-push` **refuses to push without a receipt for the exact commit being pushed.** No
+receipt, a receipt for a different revision, a receipt from a failed run, or one written on a
+dirty tree — all four refuse, each naming the command to fix it.
+
+That is the mechanism. Everything else in this section is a description of it.
+
+**The hook used to run `npm run verify` inline, and that was wrong twice over.** It ran **tier 1
+only** — no boot smoke, no a11y, no pixel tier — so with CI gone those would have run _nowhere_
+while the output said "all gates passed". And it printed **"CI will still enforce it"**, a
+sentence that was true when written and false from the moment the workflows were deleted. **A
+hook that lies about who is watching is worse than no hook, because it invites exactly the trust
+it has not earned.**
+
+**`git push --no-verify` still bypasses it**, deliberately: a hook that could not be bypassed
+would have to be a server, and the point of this change was that there is no server. **What it
+cannot be is bypassed by accident.** Skipping it now means typing the flag and meaning it.
 
 ## THERE IS NO CI RUNNER. `npm run ci` IS THE GATE.
 
@@ -431,9 +450,13 @@ check was removed from branch protection, so nothing stops a merge now except th
 it. On top of that, a CI runner cannot be talked out of running and this script can simply not
 be invoked.
 
-**So the gate is now reported by, and enforced by, nobody but the person it constrains.**
-Nothing here should ever be described as "CI", and "the gate passed" now means "somebody ran
-it" — a materially weaker claim than it was before this change.
+**So the gate is reported by, and run by, nobody but the person it constrains. What stops a
+bad commit reaching `main` is now `.githooks/pre-push` refusing to push without a passing
+receipt for that exact revision — which makes "the gate passed" a fact about a commit rather
+than a claim about one. It is still bypassable with `--no-verify`, and still not enforced by
+anything that could not be talked out of it.
+
+Nothing here should ever be described as "CI".
 
 That is the class of defect this whole section exists to prevent: a claim about coverage
 that is one row wider than the coverage. An audit found it by listing the gates
@@ -490,19 +513,25 @@ cannot be one: GitHub scopes a required check to an APP (`app_id: 15368`, Action
 GitHub App can post a check run, and a local commit status does not satisfy it. The check was
 therefore removed rather than left in place to block every merge forever.
 
-**What that means in practice: nothing stops a pull request being merged without the gate
-having run.** The protection that remains is procedural. Treat `npm run ci` as the gate, not
-as a formality.
+**What that means in practice: the MERGE is unchecked.** GitHub will let a pull request
+merge without the gate having run. What is checked is the PUSH, by the hook above -- so a
+branch cannot reach GitHub unverified, but nothing stops an unverified branch being merged
+into `main` once it is there. The protection that remains is procedural, and the hook is what
+keeps it from being purely nominal.
 
 The practical workflow is therefore:
 
 ```bash
 git switch -c my-change
-git commit -m "..."                     # pre-commit gate runs
-git push -u origin my-change            # pre-push gate runs
-npm run ci                              # THE GATE: runs verify:all here, records it
+git commit -m "..."                     # pre-commit: fast gates
+npm run ci                              # THE GATE -- verify:all, then the receipt
+git push -u origin my-change            # pre-push: REFUSES without that receipt
 gh pr create --fill
 gh pr merge --squash --delete-branch    # nothing checks this for you any more
+
+# The order is not a preference. `npm run ci` refuses a DIRTY tree, so it must come after the
+# commit; and `pre-push` refuses without a receipt for HEAD, so it must come before the push.
+# **One order satisfies both and this is it** -- commit, gate, push.
 ```
 
 `required_approving_review_count` is 0, so a solo maintainer can merge their own
