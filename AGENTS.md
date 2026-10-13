@@ -8,13 +8,14 @@ Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The seventeen non-negotiables
+## The eighteen non-negotiables
 
-Rules 1-7 are the original mandate. Rules 8-17 were each learned here the hard way --
+Rules 1-7 are the original mandate. Rules 8-18 were each learned here the hard way --
 each made more than twice before being written down, which is the threshold for a rule
 worth having. Rule 15 cost nothing only because the agent that broke it noticed; rules 16
-and 17 are the only ones whose evidence is a count, and they are the same finding at two
-levels: the author of a thing is the worst person to check it.
+and 17 are the same finding at two levels -- the author of a thing is the worst person to
+check it -- and rule 18 is what their evidence produced: four bugs a person found by looking,
+none of which any assertion could have seen.
 
 ### 1. A red baseline stops everything
 
@@ -278,6 +279,42 @@ author as working. Not one was a lie; each was a check run against the case its 
 mind. **The gap is structural, and no amount of care closes it.**
 
 `docs/AUDITS.md` has the brief templates for both halves.
+
+### 18. A feature is not done until a check asks what a PLAYER sees
+
+**Four player-visible bugs shipped in this session. Every one was found by a person looking at
+the screen, and not one was a logic error.**
+
+| What a player saw                     | The logic                    | What was actually wrong                  | Class        |
+| ------------------------------------- | ---------------------------- | ---------------------------------------- | ------------ |
+| WASD did nothing                      | movement was correct         | `project.godot` had no `[input]` section | Reachability |
+| Menus could not be answered           | upgrades applied correctly   | `grep -c grab_focus` was **0**           | Reachability |
+| The title was off-screen              | the text was right           | anchors put it outside the viewport      | Visibility   |
+| The screen greyed out and stayed grey | the dim was the right colour | `visible = true` with no counterpart     | Lifecycle    |
+
+**362 assertions were checking that the world was CORRECT. None was checking that it was
+REACHABLE, VISIBLE, or REVERSIBLE -- and those are different claims.** A thing can be perfect
+and completely unusable, and no amount of state assertion notices.
+
+**So every player-facing change lands with a check that asks a player's question:**
+
+- **Reachable?** Can the documented control actually produce the action, and is it shadowed?
+  Declaring an action in `[input]` **replaces its built-in default**, so adding WASD while
+  dropping the arrows silently kills the arrows.
+- **Visible?** Is it inside the viewport, and does it survive a frame? The pixel tier is the
+  only check in this repository that asks this. `verify_scene`'s "every simulated collection is
+  ITERATED by `_draw`" is the cheap static half.
+- **Reversible?** Does every state change have its counterpart? `check:lifecycle` exists for
+  this.
+
+**And the meta-rule, which is the one that actually matters: when a person reports something
+they SAW, believe the report over the assertions.** Four times the assertions were green and
+the person was right. The response to "it greys out after the first upgrade" is not to explain
+why the state is correct -- it is to go and look at `visible`.
+
+**`_lower_shade()` is what this rule looks like in code**: one function, called from every path
+that closes the modal, with the reason written above it -- because three call sites are three
+chances to forget, and forgetting is exactly what happened.
 
 ## Before you commit
 
