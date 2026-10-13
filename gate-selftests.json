@@ -159,5 +159,91 @@
         "run": "node scripts/check-reach.mjs",
         "why": "THE SHADOWING TRAP, which is why this gate resolves an action to the bindings it REALLY has. Declaring an action in `[input]` REPLACES its built-in default rather than adding to it, so this -- a `ui_up` that keeps the WASD event and loses the arrow event -- is exactly the edit that silently kills the arrow keys. A gate that only asked \"is the action declared\" would pass on it, and the HUD would advertise arrows that no longer move anything.",
         "touches": ["godot/project.godot"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor 'hint.text = \"Esc / P to resume\"' --replace 'hint.text = \"Esc / P / W to resume\"'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "A VACUOUS RESUME CLAIM, and the gate published one as proof of coverage. `Esc / P to resume` edited to `Esc / P / W to resume` -- W bound to movement and to nothing else -- used to exit 0, because the probe tapped the key twice from PLAYING and asked only whether the state was PLAYING after the SECOND tap: a question a key that does nothing answers correctly (`toggle key=W playing=1 after_first=1 after_second=1`). The key is now pressed while the run is PAUSED, so the verdict is about resuming. `requires: godot` because the failure is produced by DRIVING the game; where the engine is absent the probe does not run and the self-test would blame the gate for a missing dependency.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor 'b.pressed.connect(_on_pick.bind(i))' --replace 'b.pressed.connect(_on_pick.bind(0))'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "ONLY THE FOCUSED CONTROL WAS EVER PRESSED. Binding every picker button to `_on_pick.bind(0)` makes two of the three offered upgrades apply the wrong upgrade, and this gate used to exit 0: the probe tapped `ui_accept` at whatever had focus, and on the picker that is always `Pick0`. Each offered control is now pressed in its own run and the offer it applied is identified against the game's own `Upgrades.apply`. `requires: godot` for the same reason as the entry above.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\tpicker.visible = false\n\t_lower_shade()' --replace '\tpicker.visible = false\n\tvar msg := \"\"\"\nremember to call _lower_shade() sometime\"\"\"\n\tpush_warning(msg)'",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "A MESSAGE IS NOT A LOWERING. The `_lower_shade()` call is replaced by a warning that merely NAMES it, so the dim is never lowered -- and the gate used to exit 0, because the call graph was built from name TOKENS and a name inside a string literal counted as an edge. String contents are stripped before the token graph is built now, so the mention is not a call.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t_offers = []\n\tpicker.visible = false\n\t_lower_shade()' --replace '\t_offers = []\n\tpicker.visible = false' && node scripts/edit.mjs godot/scripts/main.gd --anchor 'func _show_pause(visible_now: bool) -> void:' --replace 'func _show_pause(visible_now: bool) -> void:\n\tshade_rect.visible = false\n\tif not visible_now and game.pending_picks > 0:\n\t\t_show_picks()\n\t\treturn'",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "THE ENGINE ALLOWANCE, IN ITS SECOND AND FINAL FORM. The `_lower_shade()` call goes from `_on_pick` and `shade_rect.visible = false` is parked at the top of `_show_pause` -- so the dim comes down only when the player PAUSES, the exact bug that shipped -- and the parked code NAMES `_show_picks()` in a branch that never runs. The first version of the allowance accepted ANY lowering inside an engine callback (this break without the mention: exit 0); the second accepted a lowering in an engine-driven function that merely NAMED the raiser (this break: exit 0). Both are RED now because the allowance is GONE -- a lowering counts only if the code that RAISES the latch can reach it. The cost is a LATENT false positive, and latent is the honest word: injecting `stats.visible = true` in `_on_pick` with `= false` in `_show_picks` is RED, but this tree does not contain that pair at all -- nothing here sets `stats.visible` (the HUD label's `.text` is set) and `lifecycleExemptions` is `[]`. One false negative removed, one latent false positive taken on, declared in the gate's header.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\tpicker.visible = false\n\t_lower_shade()' --replace '\tpicker.visible = false\n\tvar msg := \"\"\"\nremember to call _lower_shade() sometime\"\"\"\n\tpush_warning(msg)'",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "A NAME INSIDE A MULTI-LINE STRING IS NOT AN EDGE. GDScript's `\"\"\"` literals SPAN LINES, so a stripper that forgets its quote state at the end of a line tokenizes the BODY of one as code: this break exited 0 while the dim was never lowered -- the same hole as the single-line form, one shape over. Measured green before the stripper carried its state and RED after. The control is the same mention inside a `#` comment, which is RED as well.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), entry[\"def\"][\"description\"]]' --replace '\t\tvar other: Dictionary = _offers[(i + 1) % _offers.size()]\n\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), other[\"def\"][\"description\"]]'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "A CONTROL MUST APPLY THE OFFER IT DISPLAYS. Every button is made to SHOW the next offer's name while still APPLYING its own, so the player chooses one upgrade and gets another. This was green on the first version of the per-control check, which compared the hero against `main._offers[i]` -- the offer each button was BUILT from, never the label it SHOWS. The displayed offer is read from `Button.text` now (`displayed=`), and this break reports 'DISPLAYS offer 1 and APPLIED offer 0'. `requires: godot` because the failure is produced by driving the game.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t# The shade goes UP with the picker and DOWN with it. A dim that outlives its modal\n\t# is a dim over the whole game.\n\tif shade_rect != null:' --replace '\tvar reroll := Button.new()\n\treroll.name = \"Reroll\"\n\treroll.text = \"REROLL\"\n\tbox.add_child(reroll)\n\n\t# The shade goes UP with the picker and DOWN with it. A dim that outlives its modal\n\t# is a dim over the whole game.\n\tif shade_rect != null:'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "A CONTROL BEYOND THE OFFERS WAS DISCOVERED, PRINTED AND NEVER DRIVEN. A fourth button on the picker appeared in `REACH offers total=4 paths=...` with no `REACH offer` line, and the gate stayed green: the drive loop was bounded by the number of OFFERS, so silence read as success. Every discovered control is driven now, and a control that is not one of the offers is REPORTED whatever it does -- measured BOTH ways, this unwired button (`wired=0`) and the same button bound to a real `_show_picks()` reroll (`wired=1, changed=1`) are both RED. `requires: godot` for the same reason as the entry above.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\telif state == State.PAUSED:\n\t\tstate = State.PLAYING\n\t\t_show_pause(false)' --replace '\telif state == State.PAUSED:\n\t\tstate = State.PLAYING'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "A RESUME MUST TAKE THE PAUSE SCREEN WITH IT. `_show_pause(false)` is removed from the resume path, so the state flips back to PLAYING and the pause panel stays on screen -- a modal the player has already dismissed, and the same class as the dim that covered the run. The old check asked only for the state (`after_second=1`) and was green on this. `restored=` compares what APPEARED when the run paused against what is visible after the resume, and this break names the three nodes left behind. `requires: godot`: it is measured by driving the game.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\tpicker.visible = false\n\t_lower_shade()' --replace '\tpicker.visible = false\n\tpush_warning(\"shade_rect.visible = false\")'",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "AN ASSIGNMENT INSIDE A STRING IS NOT CODE. The `_lower_shade()` call is replaced by a warning whose TEXT contains `shade_rect.visible = false`, so the lowering exists only as characters in a message and the dim is never lowered -- and this gate used to exit 0, because the TOKEN graph was string-stripped while the ASSIGNMENT matchers still read the raw line. Entry 25 class, one field over: the NAME-in-a-string shape was fixed first and this one was missed. Every matcher that reads CODE now reads the string-stripped line; class D still reads string CONTENTS, because an action name lives inside a literal.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), entry[\"def\"][\"description\"]]' --replace '\t\tvar other: Dictionary = _offers[(i + 1) % _offers.size()]\n\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), other[\"def\"][\"description\"]]'",
+        "creates": [],
+        "requires": ["godot"],
+        "run": "node scripts/check-reach.mjs",
+        "why": "A CONTROL MUST APPLY THE OFFER ITS WHOLE TEXT DESCRIBES. Each button shows its own title and label with the NEXT offer DESCRIPTION, so the player reads one upgrade description and receives another upgrade. This was green while `displayed=` read only the leading NAME -- a title and a label are enough to name an offer, and `description` is read in exactly one place in the whole repository, so no other gate could notice. `displayed=` now requires the name, the label AND the description to belong to one offer, and this break reports \"shows text matching NONE of the offers it could have been built from\". `requires: godot` because the failure is produced by driving the game.",
+        "touches": ["godot/scripts/main.gd"]
     }
 ]

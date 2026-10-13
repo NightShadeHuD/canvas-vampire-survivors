@@ -36,8 +36,12 @@
  *      places, and deleting ONE of those calls — the fix commit's own positive control —
  *      leaves the assignment in the file while the dim again covers the run. An
  *      "is `= false` written anywhere" check stays green on that. This one does not: a
- *      lowering counts only if the code that RAISES the latch can reach it, by call or by
- *      signal connection.
+ *      lowering counts when the code that RAISES the latch can REACH it in the text, by call or
+ *      by signal connection — **reachability, not execution**, and the block above
+ *      `reachableFrom` states both what that catches and what it does not (a reference inside
+ *      code that never runs is still an edge). Two audits removed a frame-loop allowance from
+ *      here: the first accepted ANY lowering inside an engine callback, the second one that
+ *      merely NAMED the raiser, and both let the shipped bug back in.
  *   B. ZERO-GATED COUNTERS. A member that is accumulated (`+=`) and read as a gate
  *      (`if pending_picks > 0:`) must be able to return to zero, or the gate never closes
  *      again. `pending_picks` is decremented, so it PASSES — this class exists to keep it
@@ -79,27 +83,90 @@
  *     the exclusion would create false positives instead of removing them.
  *
  * WHAT STILL GETS PAST THIS — the honest list, because a gate with an unstated ceiling is
- * read as a guarantee
+ * read as a guarantee. Every entry here was MEASURED against this gate; the edit and the
+ * exit code are the record, and none of them is published on reasoning alone.
  *
+ *   - **A reference inside code that NEVER RUNS.** `if false: _lower_shade()` satisfies the edge
+ *     and this gate exits 0 while the dim is still up — measured, with `verify_scene.gd`
+ *     FAILING on the same tree ("and LOWERS the dim … (true -> false)"). Reachability is not
+ *     execution, and no amount of stripping or clause-tightening closes it; see the block above
+ *     `reachableFrom`.
  *   - **Order inside a function.** A lowering written BEFORE the raise in the same function
- *     still counts: `x.visible = false ... x.visible = true` in one body passes. Ordering is
- *     modelled nowhere, deliberately — a half-model (same function only) would report a
- *     legitimate close-then-reopen as a defect, and a false positive is the failure that gets
- *     a gate weakened instead of fixed.
- *   - **A lowering that is called, but not from the closing path.** Reachability follows
- *     calls and signal connections; it cannot know WHICH caller closes this modal.
- *   - **A node whose visibility a parent drives**, or an alias of the receiver —
- *     `var s := shade_rect; s.visible = false` pairs `s.visible`, not `shade_rect.visible`.
- *   - **State set from a `.tscn` scene file.** The scan is `.gd` text, and a node left
- *     visible in `godot/scenes/main.tscn` is outside it — which is the shape of the FIRST
- *     shade bug.
+ *     still counts: `x.visible = false ... x.visible = true` in one body passes. Measured:
+ *     green, with the latch listed as reached. Ordering is modelled nowhere, deliberately — a
+ *     half-model (same function only) would report a legitimate close-then-reopen as a
+ *     defect, and a false positive is the failure that gets a gate weakened instead of fixed.
+ *   - **State set from a `.tscn` scene file.** The scan is `.gd` text, and a node left visible
+ *     in `godot/scenes/main.tscn` is outside it — which is the shape of the FIRST shade bug.
+ *     Measured: a `.tscn`-only latch is invisible to this gate (green).
  *   - **Anything behind a string.** `set("visible", true)`, `call("_lower_shade")`, and an
- *     action name assembled at runtime are all invisible to a text scan.
+ *     action name assembled at runtime are all invisible to a text scan. Measured: green.
+ *     That cuts BOTH ways, and the other direction was a hole: a name merely MENTIONED in a
+ *     string used to count as a reachability edge, so
+ *     `push_warning("remember to call _lower_shade() sometime")` satisfied a lifecycle
+ *     contract while the dim was never lowered — measured exit 0 before the fix and exit 1
+ *     after it. See `stripStrings`.
  *   - **A lifecycle property not in the table** (`freeze` on a RigidBody2D, `stream_paused`,
  *     `autoplay`). Widening the table is a one-line edit that carries a reason; leaving it
  *     narrow is why this gate can ship with zero exemptions.
  *   - **A domain flag on a per-entity object** — see above.
  *
+ * "A LOWERING THAT IS CALLED, BUT NOT FROM THE CLOSING PATH" IS NOT A CEILING — IT FAILS
+ *
+ * This list used to publish that as something which gets past. It does not. Measured: with
+ * the `_lower_shade()` call removed from `_on_pick` and a lowering written inline in
+ * `_restart`, this gate exits 1 — "`shade_rect.visible` is lowered only by _lower_shade() at
+ * …:353, _restart() at …:408 — none of which the raising path can reach."
+ *
+ * **And there is no frame-loop exception, deliberately.** A latch ARMED on the closing path
+ * and RE-ARMED by the frame loop’s open path is reported: measured by INJECTING the raise
+ * `stats.visible = true` in `_on_pick` with the lowering `stats.visible = false` in
+ * `_show_picks` (which `_process` calls), and that pair is RED. This tree does not contain it,
+ * so the cost is LATENT rather than paid on every run. Two audits removed the allowances that
+ * used to accept the re-arm shape; the second because it could be satisfied by NAMING the
+ * raiser from the lowering function (see the block above `reachableFrom`). The declared way to
+ * keep such a pair is a `lifecycleExemptions` entry, and it is bounded to ONE LINE, not to a
+ * property in a file — see the exemption notes below.
+ *
+ * WHAT IT FAILS ON CORRECT CODE — SIX FALSE POSITIVES, MEASURED (these are not ceilings)
+ *
+ * Every one of these was published here as a ceiling, or would be assumed to pass. They are
+ * the opposite: the gate goes RED on code that is correct. **A published ceiling nobody
+ * measured is how a gate gets deleted** — a reader trusts the text, writes the aliased form,
+ * hits a hard fail and concludes the gate is broken. Measured by editing
+ * `godot/scripts/main.gd` and running `node scripts/check-lifecycle.mjs`:
+ *
+ *     ALIASED        `var d := shade_rect` then `d.visible = true`    exit 1 — "nothing in the
+ *                                                                     shipped code sets
+ *                                                                     `d.visible` to false"
+ *     ALIASED        `var s := shade_rect` then `s.visible = false`   exit 1 — "nothing in the
+ *                                                                     shipped code sets
+ *                                                                     `shade_rect.visible`"
+ *     PARENT-DRIVEN  `stats.visible = true` with the PARENT
+ *                    `hud.visible` doing the hiding                   exit 1
+ *     BEHIND A       `shade_rect.set("visible", false)` replaces the
+ *     STRING         assignment                                        exit 1
+ *     BEHIND A       `call("_lower_shade")` replaces the call          exit 1
+ *     STRING
+ *     RE-ARMED       raise in `_on_pick`, lowering in `_show_picks`   exit 1
+ *
+ * The first two are one fact: **this gate pairs by the RECEIVER NAME**, so an alias splits a
+ * pair that is really one pair. The third: a child's latch is not excused by its parent being
+ * hidden. The fourth and fifth: a lowering expressed through `set()` or `call()` is invisible
+ * to a text scan. The sixth: the frame loop re-arming a latch is not modelled at all.
+ *
+ * **That string asymmetry is worth stating exactly, because it cuts both ways and both halves
+ * are measured.** A RAISE behind a string is invisible and genuinely passes —
+ * `stats.set("visible", true)` is green. A LOWERING behind a string is invisible and is
+ * therefore REPORTED. Refusing to guess is what keeps the raise out; the same refusal fails a
+ * real lowering it cannot see. Neither direction is a bug in the scanner; both are the price
+ * of not evaluating the program.
+ *
+ * All six are left as failures rather than closed, and that direction is deliberate: closing
+ * them needs alias resolution, a Control-tree model, an evaluator for dynamic dispatch and a
+ * dataflow model for the frame loop. The cheap versions of each MERGE KEYS or accept a NAME —
+ * which is how the shipped bug would come back.
+
  * AN EXEMPTION IS AS HARD TO ADD AS A SHORTCUT (rule 2)
  *
  * There are NO exemptions in this tree, and that is the strongest position the gate can be
@@ -107,7 +174,8 @@
  * `lifecycleExemptions`, and the gate refuses an entry that:
  *
  *   - is missing `id`, `why`, `bound` or `trackedBy`  (declared),
- *   - names a PATTERN rather than one site            (bounded to one line),
+ *   - names a PATTERN, or a name without a LINE       (bounded to one line:
+ *                                                      `<file>:<line>:<name>`),
  *   - or no longer matches an open finding            (tracked — a stale exemption fails).
  *
  * The count is printed on every run, so an exemption that is added cannot be forgotten.
@@ -304,6 +372,68 @@ function stripComment(line) {
     return out;
 }
 
+/**
+ * A line-by-line stripper for string contents, with the quote state CARRIED ACROSS LINES.
+ *
+ * Carrying it is not tidiness. GDScript's `"""…"""` and `'''…'''` span lines, and a stripper
+ * that forgets it tokenizes the BODY of one as code. Measured before this was stateful, with
+ * the `_lower_shade()` call in `_on_pick` replaced by:
+ *
+ *     var msg := """
+ *     remember to call _lower_shade() sometime"""
+ *     push_warning(msg)
+ *
+ * this gate reported "every SET has its UNSET" and exited 0 while the dim was never lowered --
+ * a name in a multi-line string was an edge, which is the same hole as `stripStrings` closed
+ * for the single-line form.
+ *
+ * ONLY the triple quotes are carried. A `"…"` or `'…'` literal cannot span lines in GDScript,
+ * so an unterminated one is a syntax error and carrying its state would swallow every line
+ * after it -- turning one missed edge into a token graph with no edges at all.
+ */
+function makeStringStripper() {
+    let quote = null;
+    return function stripStrings(line) {
+        let out = '';
+        for (let i = 0; i < line.length; i += 1) {
+            const ch = line[i];
+            if (quote === '"""' || quote === "'''") {
+                if (line.startsWith(quote, i)) {
+                    quote = null;
+                    i += 2;
+                } else if (ch === '\\') {
+                    i += 1;
+                }
+                continue;
+            }
+            if (quote !== null) {
+                if (ch === '\\') {
+                    i += 1;
+                    continue;
+                }
+                if (ch === quote) {
+                    quote = null;
+                    out += ch;
+                }
+                continue;
+            }
+            const triple = line.slice(i, i + 3);
+            if (triple === '"""' || triple === "'''") {
+                quote = triple;
+                i += 2;
+                continue;
+            }
+            if (ch === '"' || ch === "'") {
+                quote = ch;
+                out += ch;
+                continue;
+            }
+            out += ch;
+        }
+        if (quote === '"' || quote === "'") quote = null;
+        return out;
+    };
+}
 /** Not shipped game code: the suites and the assertion library they share. */
 const isSuite = (rel) => /^godot\/(assertions|verify_[a-z_]+)\.gd$/.test(rel);
 
@@ -427,6 +557,9 @@ const closeFunction = () => {
 };
 
 for (const { rel, lines } of files) {
+    // One stripper PER FILE: a triple-quoted literal cannot span files, and a stray one must
+    // not swallow the next file whole.
+    const stripStrings = makeStringStripper();
     let fn = null;
     for (let i = 0; i < lines.length; i += 1) {
         const raw = lines[i];
@@ -436,17 +569,27 @@ for (const { rel, lines } of files) {
             reading = { name: header[1], lines: [] };
             fn = header[1];
         }
-        if (reading !== null) reading.lines.push(raw);
+        // ONE call per line, and the SAME result for both uses: the stripper is STATEFUL (a
+        // `"""` literal spans lines), so calling it twice for one line would consume a quote
+        // twice and desynchronise the rest of the file.
+        //
+        // `code` feeds the token graph AND every matcher below that reads CODE: a string that
+        // merely CONTAINS an assignment used to satisfy this gate's contract.
+        // `push_warning("shade_rect.visible = false")` exited 0 while the dim was never lowered
+        // (measured -- entry 25's class, one field over). `raw` still feeds class D, which needs
+        // the action names INSIDE strings.
+        const code = stripStrings(raw);
+        if (reading !== null) reading.lines.push(code);
         const site = { rel, line: i + 1, text: raw.trim(), fn };
 
-        const member = MEMBER_DECL.exec(raw);
+        const member = MEMBER_DECL.exec(code);
         if (member) members.add(member[1]);
 
         // A. node lifecycle properties
         const assignments = [];
-        const chain = ASSIGN_CHAIN.exec(raw);
+        const chain = ASSIGN_CHAIN.exec(code);
         if (chain) assignments.push([chain[1], chain[2], chain[3]]);
-        const bare = ASSIGN_BARE.exec(raw);
+        const bare = ASSIGN_BARE.exec(code);
         if (bare) assignments.push(['self', bare[1], bare[2]]);
         for (const [receiver, property, value] of assignments) {
             const key = `${leafOf(receiver)}.${property}`;
@@ -461,25 +604,26 @@ for (const { rel, lines } of files) {
         }
 
         // B. counters
-        for (const m of raw.matchAll(INCREMENT)) note(increments, leafOf(m[1]), site);
-        for (const m of raw.matchAll(DECREMENT)) note(releases, leafOf(m[1]), site);
-        if (!IS_DECLARATION.test(raw) && RESET_ZERO.test(raw)) {
-            const reset = new RegExp(`\\b${CHAIN}\\s*${IS_ASSIGN}\\s*0(?:\\.0+)?`).exec(raw);
+        for (const m of code.matchAll(INCREMENT)) note(increments, leafOf(m[1]), site);
+        for (const m of code.matchAll(DECREMENT)) note(releases, leafOf(m[1]), site);
+        if (!IS_DECLARATION.test(code) && RESET_ZERO.test(code)) {
+            const reset = new RegExp(`\\b${CHAIN}\\s*${IS_ASSIGN}\\s*0(?:\\.0+)?`).exec(code);
             if (reset) note(releases, leafOf(reset[1]), site);
         }
-        if (GATE_LINE.test(raw)) {
-            for (const m of raw.matchAll(CMP_ZERO_LEFT)) note(gates, leafOf(m[1]), site);
-            for (const m of raw.matchAll(CMP_ZERO_RIGHT)) note(gates, leafOf(m[1]), site);
+        if (GATE_LINE.test(code)) {
+            for (const m of code.matchAll(CMP_ZERO_LEFT)) note(gates, leafOf(m[1]), site);
+            for (const m of code.matchAll(CMP_ZERO_RIGHT)) note(gates, leafOf(m[1]), site);
         }
 
         // C. acquire/release calls
         for (const pair of CALL_PAIRS) {
             for (const name of [pair.acquire, ...pair.release]) {
-                if (callPattern(name).test(raw)) note(calls, name, site);
+                if (callPattern(name).test(code)) note(calls, name, site);
             }
         }
 
-        // D. input actions
+        // D. input actions — the ONE class that must read the string CONTENTS: the action name
+        // in `Input.is_action_pressed("ui_up")` is inside a literal.
         for (const m of raw.matchAll(INPUT_READ)) {
             for (const q of m[1].matchAll(QUOTED)) note(inputReads, q[1], site);
         }
@@ -503,9 +647,12 @@ for (const { rel, lines } of files) {
 //
 // The edges are NAME TOKENS, not parsed calls: if a function's body mentions the name of
 // another function, there is an edge. That is deliberately generous -- a `Callable` passed
-// by name, a `connect(_foo)`, a `"_foo"` string and a `Foo.bar()` static call all count --
-// because an edge the gate cannot see becomes a FALSE POSITIVE, and a false positive is the
-// one failure that gets a gate weakened rather than fixed.
+// by name, a `connect(_foo)` and a `Foo.bar()` static call all count -- because an edge the
+// gate cannot see becomes a FALSE POSITIVE, and a false positive is the one failure that
+// gets a gate weakened rather than fixed.
+//
+// A `"_foo"` STRING does NOT count, and it used to. That generosity was a hole: a name that
+// exists only inside a message satisfied a lifecycle contract. See `stripStrings`.
 // ---------------------------------------------------------------------------
 const tokensOf = new Map();
 for (const [name, body] of functionBodies) {
@@ -513,44 +660,68 @@ for (const [name, body] of functionBodies) {
 }
 
 /**
- * What the ENGINE runs without being asked: the per-frame and per-event callbacks.
+ * THERE IS NO FRAME-LOOP ALLOWANCE HERE ANY MORE, AND THAT IS THE RESULT OF TWO AUDITS.
  *
- * A lowering in one of these, or in a function one of them names, happens on its own and is
- * therefore a counterpart to a raise anywhere. **This allowance was measured, not guessed.**
- * The break suite added a correct pair — `picker.disabled = true` when a pick is taken,
- * `= false` in `_show_picks`, which `_process` calls when the next offer is due — and the
- * gate called it a defect. A latch that is ARMED when the thing closes and RE-ARMED when it
- * opens again is ordinary code, and a gate that reports it is a gate that gets weakened.
+ * This gate used to accept a lowering written in a function the ENGINE runs without being
+ * asked (`_process`, `_draw`, `_unhandled_input`, …), or one hop from one, wherever the raise
+ * was. That was a universal hole: with `_lower_shade()` deleted from `_on_pick`, a
+ * `shade_rect.visible = false` parked at the top of `_show_pause` -- the dim coming down only
+ * when the player PAUSES, which is the shipped bug -- exited 0, and the same line parked in
+ * `_draw_hero` (a dim that never comes up at all) exited 0 too.
  *
- * **ONE hop, not the transitive closure.** `_process -> _show_game_over -> _restart ->
- * _start_run -> _lower_shade` is four, and following it would blind this gate to the very
- * bug it was written for: in the broken tree the dim IS lowered four calls from the frame
- * loop, when a NEW RUN starts, and that is not the modal being lowered.
+ * The first fix narrowed it to a "cycle": the engine-driven lowering also had to REACH the
+ * code that raises the latch. **A second audit killed that as well, and the reason is worth
+ * writing down**: "reaches" here is a NAME TOKEN, so merely NAMING the raiser satisfied it.
+ * Measured against the cycle version, with the `_lower_shade()` call deleted from `_on_pick`:
  *
- * Signal handlers are deliberately NOT entry points here, for the same measured reason:
- * `_restart` is connected to a button, so treating its contents as universally reachable
- * would accept a dim lowered only on restart — the exact defect, wearing a signal.
+ *     shade_rect.visible = false                    (parked in `_show_pause`)
+ *     if not visible_now and game.pending_picks > 0:
+ *         _show_picks()                             (an inert mention -- it never runs)
+ *         return
+ *                                                                             exit 0
+ *
+ * The dim was lowered only on pause again, and the gate was green. **A clause that looks like
+ * enforcement and can be satisfied by naming a function is worse than no clause**, because it
+ * is trusted; so it is gone rather than narrowed a third time.
+ *
+ * WHAT IS LEFT IS A REACHABILITY RULE, NOT AN EXECUTION RULE, and the difference between those
+ * two is the honest ceiling of a text scanner. A lowering counts when the code that RAISES the
+ * latch reaches it **in the text** — a call edge or a connect edge — and that is all it means.
+ *
+ *   WHAT IT CATCHES: the DIRECT form, which is the shape that actually shipped. A raise with no
+ *   counterpart on any path — `shade_rect.visible = true` and nothing anywhere that lowers it —
+ *   is reported, and so is a raise whose only counterpart lives on a path the raise cannot
+ *   reach (an init function, or a closer that is never called from this path).
+ *
+ *   WHAT IT DOES NOT CATCH, measured, with the `_lower_shade()` call deleted from `_on_pick`:
+ *
+ *       if false:
+ *           _lower_shade()                (a reference in code that NEVER RUNS)
+ *                                                                               exit 0
+ *
+ *   The gate reports `shade_rect.visible … raised and REACHED by their own path` while the dim
+ *   is still up — and `verify_scene.gd` FAILS on the same tree ("and LOWERS the dim -- the bug
+ *   this assertion exists for … (true -> false)"), so the defect is caught a tier up rather
+ *   than by nothing at all. **No amount of string-stripping or clause-tightening fixes this**:
+ *   an unreachable mention is still an edge in a name-token graph, and telling the two apart
+ *   needs dataflow analysis, which does not belong inside a regex tokenizer. The gate says what
+ *   it covers instead of implying more — which is also why the frame-loop allowance above is
+ *   DELETED rather than replaced by a third clause.
+ *
+ * THE RULE ALSO REPORTS ONE THING THIS TREE DOES NOT CONTAIN, stated so the trade is visible.
+ * A latch ARMED on the closing path and RE-ARMED by the frame loop's open path (`stats.visible
+ * = true` in `_on_pick` with `= false` in `_show_picks`) is reported: measured by INJECTING that
+ * pair, which is not in the tree. **That cost is latent, not paid on every run** — nothing here
+ * sets `stats.visible` at all (the HUD label's `.text` is set), and the pristine tree runs with
+ * `lifecycleExemptions: []`. It is taken deliberately: the alternative was a clause that could
+ * be satisfied by NAMING a function, which is worse than a false positive because it is
+ * trusted. `lifecycleExemptions` is the declared way to keep such a pair, and it is bounded to
+ * ONE LINE (see the exemption notes below), not to a property in a file.
+ *
+ * Signal handlers are NOT entry points, for the same measured reason: `_restart` is connected
+ * to a button, so treating its contents as universally reachable would accept a dim lowered
+ * only on restart — the exact defect, wearing a signal.
  */
-const ENGINE_CALLBACKS = new Set([
-    '_process',
-    '_physics_process',
-    '_draw',
-    '_input',
-    '_unhandled_input',
-    '_gui_input',
-    '_shortcut_input',
-    '_notification'
-]);
-
-const engineLowered = new Set();
-for (const name of ENGINE_CALLBACKS) {
-    if (!functionBodies.has(name)) continue;
-    engineLowered.add(name);
-    for (const token of tokensOf.get(name) ?? []) {
-        if (functionBodies.has(token)) engineLowered.add(token);
-    }
-}
-
 /** Every function `start` can reach by name reference. */
 function reachableFrom(start) {
     const seen = new Set([start]);
@@ -604,7 +775,9 @@ for (const [key, sites] of raises) {
             // reachable from anywhere anyway; this says so explicitly so a future refactor
             // that calls an init function by hand cannot quietly count it as a lowering.
             if (low.fn === null || INIT_FUNCTIONS.has(low.fn)) return false;
-            if (engineLowered.has(low.fn)) return true;
+            // THIS IS THE WHOLE RULE. There is no frame-loop allowance: every version of
+            // one was satisfied by NAMING a function rather than by running it. See the
+            // block above `reachableFrom` for both measurements.
             return reached.has(low.fn);
         });
         if (ok.length > 0) {
@@ -616,10 +789,18 @@ for (const [key, sites] of raises) {
             lowerings.length === 0
                 ? `nothing in the shipped code sets \`${key}\` to false.`
                 : `${describe(site)} raises it, and nothing on that path lowers it. ` +
-                  `\`${key}\` is only lowered by ${where.join(', ')} — code that runs once at ` +
-                  'startup, or on a path this raise is not part of.';
+                  `\`${key}\` is lowered only by ${where.join(', ')} — none of which the ` +
+                  'raising path can reach (an init function has already run by then; anything ' +
+                  'else sits on a path this raise cannot get to).';
         findings.push({
-            site: `${site.rel}:${key}`,
+            // THE LINE IS PART OF THE ID, and that is load-bearing rather than tidy. Without it,
+            // two raises of the SAME property in the SAME file share one id — measured: two
+            // raises of `stats.visible` in `main.gd` both printed as
+            // `godot/scripts/main.gd:stats.visible`, so ONE exemption silenced both, including a
+            // genuine latch bug beside an exempted one. An id is `<file>:<line>:<name>` now and
+            // the register refuses anything else, so "bounded to one line" is enforced instead
+            // of asserted in a comment.
+            site: `${site.rel}:${site.line}:${key}`,
             line: `${site.rel}:${site.line}  ${site.text}`,
             because,
             how:
@@ -644,7 +825,7 @@ for (const leaf of counters) {
     }
     const site = increments.get(leaf)[0];
     findings.push({
-        site: `${site.rel}:${leaf}`,
+        site: `${site.rel}:${site.line}:${leaf}`,
         line: `${site.rel}:${site.line}  ${site.text}`,
         because:
             `\`${leaf}\` is accumulated there and read as a gate at ` +
@@ -665,7 +846,7 @@ for (const pair of CALL_PAIRS) {
     if (pair.release.some((name) => calls.has(name))) continue;
     const site = calls.get(pair.acquire)[0];
     findings.push({
-        site: `${site.rel}:${pair.acquire}`,
+        site: `${site.rel}:${site.line}:${pair.acquire}`,
         line: `${site.rel}:${site.line}  ${site.text}`,
         because:
             `${pair.why} — and no ${pair.release.map((r) => `\`${r}\``).join(' / ')} call ` +
@@ -687,7 +868,7 @@ for (const action of actionsRead) {
     if (declared.has(action) || BUILT_IN_ACTIONS.has(action)) continue;
     const site = inputReads.get(action)[0];
     findings.push({
-        site: `${site.rel}:${action}`,
+        site: `${site.rel}:${site.line}:${action}`,
         line: `${site.rel}:${site.line}  ${site.text}`,
         because:
             `\`Input.…("${action}")\` reads an action that \`godot/project.godot\` does not ` +
@@ -729,9 +910,21 @@ for (const [i, entry] of exemptions.entries()) {
     if (typeof entry?.id === 'string' && /[*?[\]]/.test(entry.id)) {
         exemptionProblems.push(
             `${where} (\`${entry.id}\`) is a PATTERN. An exemption names ONE site — ` +
-                '`<file>:<name>` — or it exempts everything that will ever look like it.'
+                '`<file>:<line>:<name>` — or it exempts everything that will ever look like it.'
         );
     }
+    // A FILE AND A NAME ARE NOT A SITE. Measured: two raises of `stats.visible` in `main.gd`
+    // both print as `godot/scripts/main.gd:stats.visible`, so one exemption silenced BOTH --
+    // including a genuine latch bug standing next to the exempted one. The line is required so
+    // that "bounded to one line" is enforced rather than promised in a comment.
+    if (typeof entry?.id === 'string' && !/^[^:]+:\d+:.+$/.test(entry.id)) {
+        exemptionProblems.push(
+            `${where} (\`${entry.id}\`) does not name ONE raise site. Write ` +
+                '`<file>:<line>:<name>` — the file, the line the finding was reported on, and ' +
+                'the name — or the exemption covers every raise of that name in that file.'
+        );
+    }
+
     if (typeof entry?.trackedBy === 'string' && !entry.trackedBy.includes('check-lifecycle')) {
         exemptionProblems.push(
             `${where} claims to be tracked by \`${entry.trackedBy}\`, which is not this gate. ` +
@@ -787,7 +980,10 @@ console.error(
 for (const f of open) {
     console.error(`  ${f.line}`);
     console.error(`      ${f.because}`);
-    console.error(`      ${f.how}\n`);
+    console.error(`      ${f.how}`);
+    // THE ID IS PRINTED because an exemption is only as narrow as its id, and since N4 the id
+    // carries the LINE: a reader can see exactly one site they would be silencing.
+    console.error(`      exempt as \`${f.site}\`\n`);
 }
 for (const e of stale) {
     console.error(`  ${e.id} is exempted and NOT FOUND.`);
@@ -802,8 +998,13 @@ console.error(
         '  nothing set it false, so it covered the rest of the run. The assertions passed\n' +
         '  because they read the dim’s ALPHA, and alpha is a property — this is a lifecycle.\n' +
         '\n' +
+        '  This gate pairs by the RECEIVER NAME, so `var s := shade_rect` then `s.visible =\n' +
+        '  false` pairs `s.visible` and NOT `shade_rect.visible` — an alias splits a pair that\n' +
+        "  is really one. That is a KNOWN FALSE POSITIVE, listed in this file's header with its\n" +
+        '  measurement; the fix is to assign to the receiver itself, not to exempt it.\n' +
+        '\n' +
         '  To exempt one, add to `lifecycleExemptions` in quality-baseline.json:\n' +
-        '      { "id": "<file>:<name>", "why": "...", "bound": "...",\n' +
+        '      { "id": "<file>:<line>:<name>", "why": "...", "bound": "...",\n' +
         '        "trackedBy": "scripts/check-lifecycle.mjs" }\n' +
         '  An exemption that stops matching an open finding FAILS this gate.\n'
 );

@@ -39,6 +39,26 @@
 ##   3. A synthetic `InputEventKey` needs only `keycode` to satisfy `is_action_pressed`; the
 ##      engine's own `ui_accept` template events carry `physical_keycode = 0`. Events are sent
 ##      with BOTH fields set, which is what a real keyboard sends.
+##   4. A `resume` claim is measured FROM PAUSED, and the ROUTE into that state is reported
+##      because the two routes prove different things. The first version tapped the key twice
+##      from PLAYING and asked only whether the SECOND tap left the run playing -- and W answers
+##      that correctly while doing nothing at all, so `Esc / P / W to resume` passed on a build
+##      where W is not a control. The paused state is now reached by pressing a key the game
+##      ADVERTISES for pause (`via=key:<NAME>`, the whole input path) or -- where there is none
+##      -- by the game's own pause entry with the state set beside it (`via=panel`), in which
+##      case `before == PAUSED` holds BY CONSTRUCTION and `check:reach` says so with a NOTICE.
+##      A resume must also take the pause SCREEN with it: `restored=` reports whether what
+##      appeared when the run paused is gone again.
+##
+##   5. The control the game FOCUSES is not the only control a modal offers, the offer a control
+##      was BUILT from is not the offer it SHOWS, and a control beyond the offers is still a
+##      control. `b.pressed.connect(_on_pick.bind(0))` -- two of the three offers applying the
+##      wrong upgrade -- left every check green; so did a button that DISPLAYED the next offer's
+##      name while applying its own; so did a fourth button that was discovered, printed and
+##      never driven. Every control the screen offers is pressed in its own run, `displayed=` is
+##      read from the control's own LABEL, `applied=` is identified against the game's own
+##      `Upgrades.apply`, and a control that is not one of the offers is REPORTED with what it
+##      did (`wired=`, `changed=`) rather than passed over in silence.
 ##
 ## WHAT THIS PROBE CANNOT SEE, stated because the limit matters: it drives a HEADLESS tree
 ## with a 64x64 root viewport, so it says nothing about where anything is DRAWN, and nothing
@@ -59,8 +79,16 @@ const SETTLE_FRAMES := 4
 ## changing some incidental state.
 var _activated: Array = []
 
-## Keys to drive, from `--claim-key=<NAME>,<keycode>`.
+## Keys to drive, from `--claim-key=<NAME>,<keycode>[,<verb>[+<verb>]]`. The verbs are the ones
+## the game ADVERTISES for that key, so each key is driven in the state its claim is about: a
+## `resume` claim is measured from PAUSED, not from the middle of a play session.
 var _keys: Array = []
+
+## The key the gate advertises for PAUSE, from `--pause-key=<NAME>,<keycode>`. It is how the
+## probe reaches the paused state through the game's own input path before testing a `resume`
+## claim. Empty when the game advertises no pause key, in which case the probe falls back to
+## the game's own pause entry point and says so (`via=panel`).
+var _pause_key: Dictionary = {}
 
 ## Actions `project.godot` DECLARES, from `--declared=<name>,<name>`. Passed in rather than
 ## read from `ProjectSettings`, because Godot's built-in `ui_*` actions are also project
@@ -70,8 +98,10 @@ var _declared: Dictionary = {}
 ## One screen snapshot per distinct state the probe observes.
 var _snapshotted: Dictionary = {}
 
-## Buttons whose `pressed` is already wired, by node path. The picker's and the game-over
-## panel's buttons are created mid-run, so the walk has to run again after they exist.
+## Buttons whose `pressed` is already wired, by INSTANCE ID. The picker's and the game-over
+## panel's buttons are created mid-run -- and RE-created at the SAME node path on every
+## level-up -- so a path-keyed set silently skips the new nodes and their `pressed` is never
+## recorded. That is why this is an id and not a path.
 var _watched: Dictionary = {}
 
 ## The observable state of the game, as a string. Deliberately EXCLUDES the clock: a modal
@@ -151,8 +181,9 @@ func _fresh(main) -> void:
 
 
 func _watch_buttons(node: Node) -> void:
-	if node is Button and not _watched.has(str(node.get_path())):
-		_watched[str(node.get_path())] = true
+	var id := node.get_instance_id()
+	if node is Button and not _watched.has(id):
+		_watched[id] = true
 		(node as Button).pressed.connect(_on_any_pressed.bind(node))
 	for child in node.get_children():
 		_watch_buttons(child)
@@ -162,9 +193,21 @@ func _on_any_pressed(node: Node) -> void:
 	_activated.append(str(node.get_path()))
 
 
-## One screen: a Control that is a direct child of a CanvasLayer and is visible to the player.
+## Every Control a player can currently see at the top of a CanvasLayer: one per screen.
 ## Discovered by WALKING THE SCENE, not by naming the panels -- a fourth modal is driven the
 ## day it is added, provided the probe reaches the state it appears in.
+func _visible_screens(main) -> Array:
+	var layers: Array = []
+	_canvas_layers(main, layers)
+	var screens: Array = []
+	for canvas in layers:
+		for child in canvas.get_children():
+			if child is Control and (child as Control).is_visible_in_tree():
+				screens.append(child)
+	return screens
+
+
+## One screen: a Control that is a direct child of a CanvasLayer and is visible to the player.
 ##
 ## A screen that owns anything focusable must ANSWER: focus has to be inside it, `ui_accept`
 ## has to reach a Control inside it, and the observable state has to change. All three, and
@@ -174,14 +217,12 @@ func _on_any_pressed(node: Node) -> void:
 ## stray focus owner in the MENU took the Enter, started a new run, and the picker closed --
 ## so `changed=1` while the picker was never answered. A check that only asked "did anything
 ## change" would have reported the unreachable picker as reachable.
+##
+## This function drives the ONE control the game focused, which is why the pass below exists:
+## `_drive_offers` presses every control the level-up offers, because one answered control is
+## not an answerable modal.
 func _screen(main, label: String) -> void:
-	var layers: Array = []
-	_canvas_layers(main, layers)
-	var screens: Array = []
-	for canvas in layers:
-		for child in canvas.get_children():
-			if child is Control and (child as Control).is_visible_in_tree():
-				screens.append(child)
+	var screens := _visible_screens(main)
 
 	var focus := root.gui_get_focus_owner()
 	var with_focus := 0
@@ -236,13 +277,196 @@ func _screen(main, label: String) -> void:
 		])
 
 
-## What ONE advertised key actually does when a player presses it. Two observations, because
-## a key can be advertised for two different verbs:
+## The focusable Controls a screen offers, by node path, in the order the game CREATED them.
+##
+## NOT sorted, and that is load-bearing: the picker's buttons are `Pick0`..`PickN` in `_offers`
+## order, and the whole point of `_drive_offers` is that control i is the one built from
+## `_offers[i]`. Discovery order is creation order; a sort would break the correspondence the
+## moment two controls are named out of alphabetical order.
+func _focusable_paths(screen: Control) -> Array:
+	var controls := _focusable(screen)
+	if screen.focus_mode != Control.FOCUS_NONE:
+		controls.push_front(screen)
+	var paths: Array = []
+	for c in controls:
+		paths.append(str((c as Control).get_path()))
+	return paths
+
+
+## The visible screen that offers the MOST keyboard-reachable controls. Discovered by walking,
+## not by naming the panel, so a screen added later is driven without editing this file.
+func _offer_screen(main) -> Control:
+	var best: Control = null
+	var best_n := 0
+	for s in _visible_screens(main):
+		var n: int = _focusable_paths(s as Control).size()
+		if n > best_n:
+			best = s as Control
+			best_n = n
+	return best
+
+
+## A level-up, reached the way the GAME reaches it: a pending pick on the next frame.
+func _reach_level_up(main) -> void:
+	_fresh(main)
+	main.game.pending_picks = 1
+	main._process(FRAME)
+	for i in SETTLE_FRAMES:
+		await process_frame
+
+
+## Everything `Upgrades.apply` can change about a hero, as one comparable string.
+##
+## Read from the hero's own fields rather than from the offer, so the expectation is taken
+## through the same door the game uses. Position is deliberately EXCLUDED: a hero that moved is
+## a different claim, and this one is about WHICH upgrade was applied.
+func _hero_sig(hero) -> String:
+	var weapons: Array = []
+	for w in hero.weapons:
+		weapons.append("%s:%d" % [w["id"], int(w["level"])])
+	weapons.sort()
+	var passives: Array = []
+	for id in hero.passives:
+		passives.append("%s:%d" % [id, int(hero.passives[id]["count"])])
+	passives.sort()
+	return "w:%s;p:%s;mh:%.2f;hp:%.2f;sp:%.4f;lv:%d" % [
+		",".join(weapons), ",".join(passives), hero.max_hp, hero.hp, hero.speed, hero.level
+	]
+
+
+## Press EVERY control the level-up offers, one per run, and report WHAT IT DISPLAYS and WHICH
+## OFFER it applied.
+##
+## WHY THIS EXISTS, in three measured pieces:
+##
+##   1. `_screen` drives the control the GAME focused, and on the picker that is always
+##      `Pick0` -- so `b.pressed.connect(_on_pick.bind(0))`, which makes two of the three
+##      offers apply the wrong upgrade, passed every check in the gate.
+##   2. The label is READ (`Button.text`), not inferred from the offer the button was built
+##      from. A button that DISPLAYS the next offer's name while APPLYING its own passed the
+##      first version of this check, which compared the hero against `main._offers[i]` alone.
+##   3. EVERY discovered control is driven, not the first `mini(controls, offers)`. A fourth
+##      button was discovered, printed in `REACH offers`, never driven, and the gate stayed
+##      green -- silence read as success.
+##
+## The identity is MEASURED and not assumed: `Upgrades.apply` is the game's own function, so
+## the expectation cannot drift from the implementation. A fresh hero is deterministic
+## (`Game._init` builds it from `Config`), which is what lets a scratch run compute the
+## expectation -- and that presumption is REPORTED (`pristine=`) rather than trusted: if it
+## ever stops holding, the comparison means nothing and the gate has to say so rather than
+## pass.
+func _drive_offers(main) -> void:
+	await _reach_level_up(main)
+	var screen := _offer_screen(main)
+	if screen == null:
+		print("REACH offers total=0")
+		return
+	var discovered := _focusable_paths(screen)
+	print("REACH offers total=%d paths=%s" % [discovered.size(), ",".join(discovered)])
+
+	for i in discovered.size():
+		await _reach_level_up(main)
+		var screen_now := _offer_screen(main)
+		var paths := _focusable_paths(screen_now) if screen_now != null else []
+		var offers: Array = main._offers.duplicate()
+		if i >= paths.size():
+			print("REACH offer i=%d driven=0 paths=%d" % [i, paths.size()])
+			continue
+		var control: Control = main.get_node_or_null(paths[i])
+		if control == null:
+			print("REACH offer i=%d path=%s driven=0" % [i, paths[i]])
+			continue
+		var names: Array = []
+		for offer in offers:
+			names.append(str(offer["def"]["name"]))
+		# WHAT THE PLAYER READS, taken from the control itself, and ALL of it. `_show_picks`
+		# renders an offer as `name + Upgrades.label + description`, so the parts have to belong
+		# to the SAME offer: the name the text STARTS with (positional, so a name that prefixes
+		# another cannot be mistaken for it), and that offer's label and description somewhere in
+		# the text. Reading only the leading NAME passed a button that showed one offer's title
+		# with ANOTHER offer's description -- measured: `check-reach: ok`, exit 0, while no
+		# `verify_*.gd` reads a picker button's text at all.
+		#
+		# What this still does NOT cover is in `check-reach`'s ceiling list: the parts have to be
+		# PRESENT, not in any particular order or quantity, and two offers whose label strings are
+		# identical (both ` (New!)`) cannot be told apart by the label alone.
+		var label := ""
+		if control is Button:
+			label = (control as Button).text
+		var displayed := -1
+		var longest := -1
+		for j in offers.size():
+			var named := str(offers[j]["def"]["name"])
+			if not label.begins_with(named):
+				continue
+			if label.find(Upgrades.label(offers[j])) == -1:
+				continue
+			if label.find(str(offers[j]["def"]["description"])) == -1:
+				continue
+			if named.length() > longest:
+				displayed = j
+				longest = named.length()
+		# WIRED, counted BEFORE this probe connects its own watcher: a control offered to the
+		# player and connected to nothing is a control that can never do anything.
+		var wired := 0
+		if control is BaseButton:
+			wired = int((control as BaseButton).pressed.get_connections().size() > 0)
+		_watch_buttons(main)
+		var fired_before: int = _activated.size()
+		control.grab_focus()
+		var focused := int(root.gui_get_focus_owner() == control)
+		# `offers` is in the signature as well as the tree: a control that REROLLS what is on
+		# offer changes the screen without changing the state, and a signature that missed it
+		# would report "nothing changed" about a control that plainly did.
+		var before := _observable(main) + "|offers=" + ",".join(names)
+		var hero_before := _hero_sig(main.game.hero)
+		_tap(KEY_ENTER)
+		var fired := int(_activated.size() > fired_before)
+		var after_names: Array = []
+		for offer in main._offers:
+			after_names.append(str(offer["def"]["name"]))
+		var after := _observable(main) + "|offers=" + ",".join(after_names)
+		var actual := _hero_sig(main.game.hero)
+		# THE EXPECTATION, computed AFTER the press from the offers captured BEFORE it. Each
+		# entry is `Upgrades.apply` on a pristine hero, so "what should this control have done"
+		# is answered by the game's own code and not by a model of it living in this probe.
+		var expected: Array = []
+		var pristine := ""
+		for j in offers.size():
+			_fresh(main)
+			if j == 0:
+				pristine = _hero_sig(main.game.hero)
+			Upgrades.apply(main.game.hero, offers[j])
+			expected.append(_hero_sig(main.game.hero))
+		# The offer this control APPLIED. Its own index wins when it matches, so an offer whose
+		# effect is indistinguishable from another's cannot be reported as the wrong one.
+		var applied := -1
+		if i < expected.size() and expected[i] == actual:
+			applied = i
+		else:
+			for j in expected.size():
+				if expected[j] == actual:
+					applied = j
+					break
+		print(
+			"REACH offer i=%d path=%s offers=%s focused=%d fired=%d wired=%d beyond=%d changed=%d pristine=%d labelled=%d displayed=%d applied=%d actual=%s want=%s"
+			% [
+				i, paths[i], ",".join(names), focused, fired, wired, int(i >= offers.size()),
+				int(after != before), int(pristine == hero_before), int(label.strip_edges() != ""),
+				displayed, applied, actual, expected[i] if i < expected.size() else "-"
+			]
+		)
+
+## What ONE advertised key actually does when a player presses it. One observation per verb the
+## game advertises for it, and the VERB decides the state the observation starts from:
 ##
 ##   hold    the hero's displacement while the key is HELD -- the claim "to move"
-##   toggle  the run's state after a press from PLAYING, then after a second -- "to pause"
-##           and "to resume" are the two halves of one chain
-func _observe_key(main, name: String, code: int) -> void:
+##   toggle  the run's state after a press from PLAYING, then after a second -- the claim
+##           "to pause" is the first half of that chain
+##   resume  the run's state after a press from PAUSED, entered through the game's own pause
+##           route -- the claim "to resume", which the toggle chain CANNOT answer: W "resumes"
+##           by that measure while doing nothing at all
+func _observe_key(main, name: String, code: int, verbs: Array) -> void:
 	_fresh(main)
 	var p0 := Vector2(main.game.hero.x, main.game.hero.y)
 	_send(code, true)
@@ -269,6 +493,78 @@ func _observe_key(main, name: String, code: int) -> void:
 	var s2: int = main.state
 	print("REACH toggle key=%s playing=%d after_first=%d after_second=%d" % [name, s0, s1, s2])
 
+	if verbs.has("resume"):
+		await _observe_resume(main, name, code)
+
+
+## Every visible Control's path, sorted: what a player can currently SEE.
+func _visible_paths(main) -> Array:
+	var out: Array = []
+	_collect_visible(main, out)
+	out.sort()
+	return out
+
+
+## Put the game into its PAUSED state, and say EXACTLY which route got there and what that route
+## proves.
+##
+## TWO ROUTES, and they are not equal:
+##
+##   `key:<NAME>`  a key the game itself ADVERTISES for pause (`--pause-key`) was pressed, which
+##                 drives the whole input path. The state is the game's own doing.
+##   `panel`       the game advertises NO pause key to reach it through, so the probe called the
+##                 game's own pause entry point and set the state itself. **`before == PAUSED`
+##                 is then true BY CONSTRUCTION** -- it proves the probe reached the paused
+##                 state, not that a player can -- so only the "does this key leave the paused
+##                 state" half of a resume claim is measured on that route. `check:reach` says
+##                 so out loud with a `NOTICE:` rather than letting the weaker claim pass as the
+##                 stronger one.
+##
+## The state actually reached is reported either way, because a "resume" measured from PLAYING
+## is the vacuous check this replaced: with W advertised as `W to resume` and doing nothing, the
+## second tap of the old chain left the run PLAYING and the gate said ok.
+func _enter_paused(main) -> Dictionary:
+	var visible_before: Array = []
+	_fresh(main)
+	if not _pause_key.is_empty():
+		visible_before = _visible_paths(main)
+		_tap(int(_pause_key["code"]))
+		await process_frame
+		if main.state == main.State.PAUSED:
+			return {"via": "key:%s" % _pause_key["name"], "visible": visible_before}
+		_fresh(main)
+	visible_before = _visible_paths(main)
+	if main.has_method("_show_pause"):
+		main._show_pause(true)
+	main.state = main.State.PAUSED
+	return {"via": "panel", "visible": visible_before}
+
+
+## Does the key leave the paused state, and does it take the pause SCREEN with it?
+##
+## Two questions, because they fail apart: a resume that flips `state` back to PLAYING while the
+## pause panel stays on screen leaves the player looking at a modal they have already dismissed.
+## `restored` is measured against what APPEARED when the run paused, so a screen that
+## legitimately changes something else on resume is not reported -- only the pause overlay is.
+func _observe_resume(main, name: String, code: int) -> void:
+	var entry: Dictionary = await _enter_paused(main)
+	var before: int = main.state
+	var before_paths: Array = entry["visible"]
+	var appeared: Array = []
+	for p in _visible_paths(main):
+		if not before_paths.has(p):
+			appeared.append(p)
+	_tap(code)
+	await process_frame
+	var after_paths := _visible_paths(main)
+	var lingering: Array = []
+	for p in appeared:
+		if after_paths.has(p):
+			lingering.append(p)
+	print("REACH resume key=%s via=%s before=%d after=%d restored=%d lingering=%s" % [
+		name, entry["via"], before, main.state, int(lingering.is_empty()),
+		"-" if lingering.is_empty() else ",".join(lingering)
+	])
 
 func _print_states(main) -> void:
 	# The game's own state names, so the gate does not have to hardcode MENU=0 / PAUSED=4 to
@@ -320,7 +616,14 @@ func _parse_args() -> void:
 		if arg.begins_with("--claim-key="):
 			var parts := arg.substr("--claim-key=".length()).split(",")
 			if parts.size() >= 2:
-				_keys.append({"name": parts[0], "code": int(parts[1])})
+				var verbs: Array = []
+				if parts.size() >= 3:
+					verbs = parts[2].split("+")
+				_keys.append({"name": parts[0], "code": int(parts[1]), "verbs": verbs})
+		elif arg.begins_with("--pause-key="):
+			var parts := arg.substr("--pause-key=".length()).split(",")
+			if parts.size() >= 2:
+				_pause_key = {"name": parts[0], "code": int(parts[1])}
 		elif arg.begins_with("--declared="):
 			for name in arg.substr("--declared=".length()).split(","):
 				if name != "":
@@ -353,7 +656,7 @@ func _init() -> void:
 
 	# 2. Every key the game ADVERTISES, driven in the state its verb is about.
 	for entry in _keys:
-		await _observe_key(main, entry["name"], entry["code"])
+		await _observe_key(main, entry["name"], entry["code"], entry["verbs"])
 
 	# 3. A level-up, reached the way the game reaches it: a pending pick on the next frame.
 	_fresh(main)
@@ -365,6 +668,10 @@ func _init() -> void:
 		main.state, main.game.pending_picks, int(main.picker.visible)
 	])
 	_screen(main, "level-up")
+
+	# 3b. EVERY control the picker offers, not only the one the game focused. One answered
+	#     control is not an answerable modal -- see `_drive_offers`.
+	await _drive_offers(main)
 
 	# 4. Death, reached by killing the hero.
 	_fresh(main)
