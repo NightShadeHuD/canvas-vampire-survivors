@@ -264,14 +264,54 @@ func _init() -> void:
 
 	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
-	for simulated in ["game.shots", "game.enemy_shots", "game.foes", "game.orbs"]:
+	# THE FX LISTS JOIN THIS ONE, and they are why it exists. Those four were every list
+	# `_draw` walked, and that WAS the bug: six of the eight weapon archetypes create no
+	# `Shot` at all, so a Whip or a Soul Drain reached `_draw` through nothing. A list that
+	# is emitted and never iterated is the failure mode this loop catches -- and it can
+	# only catch it for the lists it has been told about.
+	for simulated in [
+		"game.shots",
+		"game.enemy_shots",
+		"game.foes",
+		"game.orbs",
+		"game.fx.strikes",
+		"game.fx.sparks",
+	]:
 		Check.unchanged(
 			contains(draw_src, "for shot in %s" % simulated)
 				or contains(draw_src, "for foe in %s" % simulated)
-				or contains(draw_src, "for orb in %s" % simulated),
+				or contains(draw_src, "for orb in %s" % simulated)
+				or contains(draw_src, "for strike in %s" % simulated)
+				or contains(draw_src, "for spark in %s" % simulated),
 			true,
 			"%s is ITERATED by _draw, not merely simulated" % simulated
 		)
+
+	# THE GARLIC RING MUST NOT LIE ABOUT ITS REACH.
+	#
+	# It was drawn at `game.weapon["baseRange"]` -- 110 -- while the aura fires at
+	# `baseRange x levelArea x areaMult`. After five Area passives that is 177, so a foe
+	# 150px away stood OUTSIDE the drawn ring and took damage from it. A behavioural audit
+	# measured exactly that. The ring is therefore checked AGAINST THE DAMAGE rather than
+	# against the formula: a foe just inside the drawn radius must be hit and one just
+	# outside it must not, which is false for a ring drawn at any radius the aura does not
+	# use.
+	var hero: Hero = main.game.hero
+	hero.weapons.clear()
+	hero.add_weapon(Weapons.WEAPONS["GARLIC"])
+	for i in 5:
+		hero.add_passive(Passives.PASSIVES["AREA"])
+	var garlic_def: Dictionary = hero.weapons[0]["def"]
+	var ring: float = main.garlic_reach(hero)
+	Check.at_least(ring, 150.0, "five Area passives carry the Garlic aura past its base range")
+	var inside := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], hero.x + ring - 0.5, hero.y))
+	var outside := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], hero.x + ring + 0.5, hero.y))
+	WeaponFire.fire(garlic_def, hero, [inside, outside], [])
+	Check.unchanged(
+		[inside.hp < inside.max_hp, outside.hp < outside.max_hp],
+		[true, false],
+		"the aura damages EXACTLY out to the radius the ring is drawn at"
+	)
 	Check.unchanged(main.get_node_or_null("Menu/Start") != null, true, "and a way to start")
 	Check.unchanged(main.state, main.State.MENU, "it is shown first")
 	Check.unchanged(main.menu.visible, true, "and is visible")

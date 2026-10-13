@@ -25,12 +25,23 @@ var cooldowns: Dictionary = {}
 ## sides -- one list with a flag would need every resolve to know which way round it is.
 var shots: Array[Shot] = []
 var enemy_shots: Array[Shot] = []
+## Transient weapon visuals: sparks, and the SHAPE a strike covered.
+##
+## Owned here rather than by the view because `WeaponFire` runs headless and the view is
+## not the only thing that needs to know a weapon fired: six of the eight archetypes apply
+## damage directly and create no `Shot`, so before this the ONLY evidence of a Whip or a
+## Soul Drain hit was a foe losing health. `main.gd` draws it; `verify_weapons.gd` asserts
+## what a weapon emitted.
+var fx := Fx.new()
 ## Foes created DURING a step -- split children, clones. Collected here and appended
 ## after the loop, because appending to `foes` while iterating it is how a for loop
 ## over a growing array skips entries.
 var spawned: Array[Foe] = []
 var elapsed := 0.0
 var kills := 0
+## The weapon a run STARTS with. No longer read by the drawing: the Garlic ring follows
+## the weapon the hero actually holds, through `main.gd`'s `garlic_reach`, because this
+## field is the starting weapon and not the one whose reach is being drawn.
 var weapon: Dictionary
 var foe_def: Dictionary
 ## Lifetime totals from a previous session, which `triple_build` reads.
@@ -135,7 +146,7 @@ func step(delta: float, move_dir: Vector2) -> void:
 		var left := float(cooldowns.get(id, 0.0)) - delta
 		if left <= 0.0:
 			left = cd
-			WeaponFire.fire(w["def"], hero, foes, shots, wl)
+			WeaponFire.fire(w["def"], hero, foes, shots, wl, fx)
 		cooldowns[id] = left
 
 	for foe in foes:
@@ -163,6 +174,10 @@ func step(delta: float, move_dir: Vector2) -> void:
 	_update_shots(delta)
 	_update_enemy_shots(delta)
 	_update_orbs(delta)
+	# The visuals age with the SIMULATION, so a paused game has a still, legible frame
+	# rather than sparks frozen mid-flight. The original does the same through
+	# `effects.update(dt)`, which only the gameplay loop calls.
+	fx.update(delta)
 	_remove_dead()
 	# Children and clones join AFTER the passes above, so nothing iterates an array it
 	# is appending to.
