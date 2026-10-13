@@ -148,6 +148,7 @@ func _start_run() -> void:
 		picker.visible = false
 	if over != null:
 		over.visible = false
+	_lower_shade()
 	if paused_panel != null:
 		paused_panel.visible = false
 	# Aim the camera at the hero before the first frame is drawn, or the first frame
@@ -332,6 +333,17 @@ func _show_picks() -> void:
 	# Space, `1`, Down and numpad-1 at the picker and all five left `pending_picks` at 1.
 	_focus_first("Picker/Choices")
 
+## Lower the modal dim. EVERY path that hides the picker must call this, or the dim outlives
+## the modal and covers the rest of the run.
+##
+## This exists because that is precisely what happened: `shade_rect.visible = true` was added
+## with the picker and the counterpart edit FAILED, and the failure was seen and moved past.
+## Three call sites is three chances to forget, so it is one function.
+func _lower_shade() -> void:
+	if shade_rect != null and not over.visible:
+		shade_rect.visible = false
+
+
 func _on_pick(index: int) -> void:
 	if index < 0 or index >= _offers.size():
 		return
@@ -339,6 +351,7 @@ func _on_pick(index: int) -> void:
 	game.pending_picks -= 1
 	_offers = []
 	picker.visible = false
+	_lower_shade()
 	state = State.PLAYING
 	# Nothing steps while the offer is up, so `elapsed` has not moved and the camera
 	# is already where it should be. Resuming is just changing the state back.

@@ -179,6 +179,54 @@ func _init() -> void:
 		Check.at_most(shade.color.a, 0.6, "and leaves the world readable through it")
 		Check.at_least(shade.color.a, 0.15, "while still separating the modal from it")
 
+	# THE DIM MUST NOT OUTLIVE ITS MODAL.
+	#
+	# The assertions above check the ALPHA and passed while the shade was stuck visible for
+	# the whole run: the counterpart to `shade_rect.visible = true` was never written, so a
+	# player's screen greyed out at the first level-up and STAYED grey. Reported from play.
+	#
+	# **Alpha is a property of the dim; visibility is its LIFECYCLE.** A check on the colour
+	# cannot see a dim that is correctly coloured and permanently on, which is the state the
+	# game was actually in. So this drives the real picker open and shut and reads the flag.
+	#
+	# Nothing below leaves state behind: the picker is opened by a level-up and closed by a
+	# real pick, which is the path a player takes.
+	Check.unchanged(shade.visible, false, "the dim starts LOWERED, before any level-up")
+
+	# DRIVEN BY CALLING THE DRAW PATH DIRECTLY, because the natural route does not work here:
+	# `hero.gain_exp(100000)` leaves `pending_picks` at 0 in this harness, so `_process` never
+	# reaches `_show_picks` and the first version of this check silently tested nothing --
+	# "RAISES the dim" failed while the picker was also never opened. **A harness that cannot
+	# reach the state under test reports the state as absent, which looks exactly like a bug.**
+	main._show_picks()
+	await process_frame
+	await process_frame
+	Check.unchanged(main.picker.visible, true, "the picker is up")
+	Check.unchanged(shade.visible, true, "and the dim is RAISED with it")
+
+	main._on_pick(0)
+	await process_frame
+	Check.unchanged(main.picker.visible, false, "an upgrade choice closes the picker")
+	Check.unchanged(
+		shade.visible,
+		false,
+		"and LOWERS the dim -- the bug this assertion exists for: a dim that outlives its " +
+			"modal is a dim over the rest of the run"
+	)
+	Check.unchanged(main.state, main.State.PLAYING, "and the run resumes")
+
+	# PUT THE WORLD BACK. This block drives the picker, which changes `state` and the menu's
+	# visibility -- and the menu assertions that follow it read both. **The first version of
+	# this check did not restore, and broke "it is shown first" three sections later**, which
+	# is the same mistake made earlier in this file and written down at the time as "a test
+	# that changes the world for the next test is a test that lies about the next test."
+	#
+	# The assertions above are complete before this runs, so restoring here cannot mask a
+	# failure -- and if it could, the restore would be the thing to move, not the assertion.
+	main._show_menu(true)
+	main.state = main.State.MENU
+	await process_frame
+
 	# A MODAL IS CENTRED ON THE SCREEN, not on its own corner.
 	#
 	# `PRESET_CENTER` sets anchors; the grow direction is a SEPARATE property that defaults
