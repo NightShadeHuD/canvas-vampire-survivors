@@ -240,6 +240,35 @@ func _init() -> void:
 			picks += 1
 	Check.at_least(float(picks), 1.0, "and has a control that FOCUS_NONE does not exclude")
 
+	# AND IT STILL WORKS ON THE SECOND ONE.
+	#
+	# Every check above drives the picker ONCE. The panel is REBUILT on each level-up --
+	# `_show_picks` frees the old children and adds new ones -- and `queue_free()` defers the
+	# removal to the end of the frame, so the new child landed while the old one was still
+	# attached and Godot renamed it `@VBoxContainer@N` to avoid the clash. `_focus_first` then
+	# resolved the OLD node and the focus walk died on it with "previously freed".
+	#
+	# **Measured before the fix: round 0 had focus, round 1 had NONE, round 2 had focus.**
+	# A keyboard player could not answer every second level-up -- and a single-round check
+	# cannot see it, which is why this one loops. Fixed by `remove_child` before `queue_free`.
+	var stranded: Array = []
+	for round_index in range(3):
+		main._show_picks()
+		await process_frame
+		await process_frame
+		var round_focus := main.get_viewport().gui_get_focus_owner()
+		if round_focus == null or not main.picker.is_ancestor_of(round_focus):
+			stranded.append("round %d" % round_index)
+		main._on_pick(0)
+		await process_frame
+	Check.unchanged(
+		stranded,
+		[],
+		"the picker is answerable on EVERY level-up, not just the first -- the panel is " +
+			"rebuilt each time, and a node rebuilt in the same frame as its predecessor is " +
+			"renamed out from under any lookup by name"
+	)
+
 	main._on_pick(0)
 	await process_frame
 	Check.unchanged(main.picker.visible, false, "an upgrade choice closes the picker")

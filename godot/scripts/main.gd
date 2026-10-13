@@ -309,6 +309,16 @@ func _input_dir() -> Vector2:
 ## shows the screen again for the next one rather than silently banking it.
 func _show_picks() -> void:
 	for child in picker.get_children():
+		# DETACH FIRST, then free. `queue_free()` alone defers removal to the end of the frame,
+		# so a child added below in the SAME frame lands while the old one is still attached --
+		# and Godot renames the newcomer `@VBoxContainer@N` to avoid the clash. A later lookup by
+		# NAME then resolves the OLD node, still alive and scheduled for deletion.
+		#
+		# **Measured: on every SECOND level-up the box was renamed and the picker had NO focus
+		# owner, so a keyboard player could not answer it.** The focus walk reported "previously
+		# freed" on the node it was handed. Same class as #145 and #151 -- the third time this
+		# panel has been unreachable, each time for a different reason.
+		picker.remove_child(child)
 		child.queue_free()
 
 	var title := Label.new()
@@ -372,6 +382,9 @@ func _on_pick(index: int) -> void:
 ## crash rather than an ending.
 func _show_game_over() -> void:
 	for child in over.get_children():
+		# Detach first for the same reason as the picker above: the game-over panel is rebuilt on
+		# every death, and a name clash on the second one would strand focus there too.
+		over.remove_child(child)
 		child.queue_free()
 
 	var title := Label.new()
