@@ -70,16 +70,19 @@
  *     - a key that reaches the right action and still does nothing: the probe drives W and
  *       asserts the hero MOVED, drives Esc and asserts the run PAUSED.
  *     - **a modal whose controls do not all work**: one control answering is not an answerable
- *       modal. The probe presses EVERY offered control, one per run, and the gate requires each
- *       to apply the offer it DISPLAYS -- measured through the game's own `Upgrades.apply`,
- *       because a probe that pressed only the FOCUSED control was green on
- *       `b.pressed.connect(_on_pick.bind(0))`, with two of the three offers applying the wrong
- *       upgrade.
+ *       modal. The probe presses EVERY control the screen offers, one per run, and requires
+ *       each to apply the offer it DISPLAYS -- the displayed offer read from the control's own
+ *       LABEL, and the applied one identified through the game's own `Upgrades.apply`. A probe
+ *       that pressed only the FOCUSED control was green on `_on_pick.bind(0)`; a check that
+ *       compared against the offer each button was BUILT from was green on buttons that
+ *       displayed one upgrade and applied another; and a loop bounded by the number of OFFERS
+ *       was green on a fourth control that was offered to the player and never driven.
  *     - **a key advertised for a verb it does not perform**: "to resume" is measured from the
- *       PAUSED state, entered through the game's own pause route (the advertised pause key, or
- *       the game's own pause entry when there is none). The older check asked only whether the
- *       run was PLAYING after a SECOND tap -- a question a key that does nothing answers
- *       correctly -- and accepted `Esc / P / W to resume` with W bound to movement alone.
+ *       PAUSED state. The older check asked only whether the run was PLAYING after a SECOND tap
+ *       -- a question a key that does nothing answers correctly -- and accepted
+ *       `Esc / P / W to resume` with W bound to movement alone. The resume must also take the
+ *       pause SCREEN with it: a state that flips back while the panel stays up is a modal the
+ *       player has already dismissed.
  *     Only the dynamic half can say "the picker was answerable", and only the static half
  *     can run where Godot is not installed. Neither half is sufficient; both are required.
  *
@@ -100,12 +103,18 @@
  *     `toggle key=W playing=1 after_first=1 after_second=1` and this gate exited 0. **A
  *     capability the game advertises and does not deliver, which is this gate's whole
  *     purpose.** `REACH resume` exists because of that measurement: the key is now pressed
- *     while the run is PAUSED, and the state it was really in is part of the verdict.
- *   - The control the game FOCUSES is not the only control a modal offers. `_screen` drives
- *     the focused control, and on the picker that is always `Pick0` -- so
- *     `b.pressed.connect(_on_pick.bind(0))`, with two of the three offers applying the wrong
- *     upgrade, was green here too. `_drive_offers` presses each offered control in its own run
- *     and reports which captured offer the press applied.
+ *     while the run is PAUSED, the state it was really in is part of the verdict, and the
+ *     pause SCREEN has to go with it -- measured: removing `_show_pause(false)` from the
+ *     resume path (the state flips, the panel stays) exits 1 and names the three nodes left
+ *     on screen.
+ *   - The control the game FOCUSES is not the only control a modal offers, and the offer a
+ *     control was BUILT from is not the offer it SHOWS. `_screen` drives the focused control,
+ *     and on the picker that is always `Pick0` -- so `b.pressed.connect(_on_pick.bind(0))`,
+ *     with two of the three offers applying the wrong upgrade, was green here too. The first
+ *     fix for it compared the hero against `main._offers[i]` alone, and a button that
+ *     DISPLAYED the next offer's name while applying its own was green as well. `_drive_offers`
+ *     presses every control the screen offers, reads what each one DISPLAYS from its label,
+ *     and reports the offer it applied.
  *
  * WHAT THIS GATE DOES NOT REACH — the ceilings, so that a green light is not read as more
  * than it is
@@ -113,20 +122,57 @@
  *   - **Direction and magnitude are not tested.** The probe asks whether W moved the hero, not
  *     whether it moved it the RIGHT WAY or by the right distance; and it asks whether the run
  *     paused, not what the pause screen says. `verify_play.gd` and `verify_pixels.gd` are the
- *     tiers that own those.
+ *     tiers that own those. Measured on a tree whose `Hero.move` was changed to
+ *     `x -= d.x * step * 0.01` -- reversed AND 100x smaller, `dy=1.200` where the baseline reads
+ *     `dy=-120.000`: `check-reach: ok`, exit 0.
  *   - **`keycode` and `physical_keycode` are indistinguishable here.** The probe sends events
  *     with both fields set, which is what a real keyboard sends, so a binding that works only
  *     because of one of the two is not told apart.
  *   - **A screen with nothing focusable is SKIPPED, not failed** -- unless it offers buttons,
  *     which is D5a's finding. Measured on this tree: the gate prints `9 screen(s) skipped
  *     (nothing focusable)` and exits 0, and the paused panel is one of them.
- *   - **Each screen is driven ONCE per state**, at the moment the game reveals it. A defect
- *     that only appears on a REBUILT panel is outside this gate: the probe's own discovery
- *     shows the picker's `Choices` box renamed to `@VBoxContainer@N` on some rebuilds, and
+ *   - **Only the LEVEL-UP screen is re-reached per control.** The accept check drives each
+ *     screen once, at the moment the game reveals it, and `_drive_offers` re-enters the
+ *     level-up state once per offered control. A defect that only appears on a rebuilt panel of
+ *     ANOTHER screen is outside this gate: the probe's own discovery shows the picker's
+ *     `Choices` box renamed to `@VBoxContainer@N` on some rebuilds, and
  *     `_focus_first("Picker/Offers/Choices")` then finds the previous, queued-for-deletion
  *     node -- a real defect, measured with a throwaway probe, that this gate does not fail on
  *     because its accept check drives the FIRST level-up and that one is clean.
- *
+ *   - **An offered control that is not one of the offers is REPORTED, not modelled.** A control
+ *     the level-up screen presents that is not an upgrade is a failure whether or not it works,
+ *     because this gate cannot say what it is for -- measured BOTH ways: a fourth `Reroll`
+ *     button bound to nothing exits 1 (`wired=0`), and the same button bound to a real
+ *     `_show_picks()` reroll exits 1 as well (`wired=1, changed=1`). A bona fide extra control
+ *     needs this gate TAUGHT, which is the same stance the static half takes for a key it
+ *     cannot read -- not an exemption. The alternative, accepting anything that changes
+ *     something, is what let a control be offered and never driven in the first place.
+ *   - **A resume reached through the `panel` route is half a check, and says so.** Where the
+ *     game advertises NO pause key, the probe calls the game's own pause entry and sets the
+ *     state itself, so `before === PAUSED` holds BY CONSTRUCTION and only the "leaves the paused
+ *     state" half is measured. That run prints a `NOTICE:` -- a declared, visible gap rather
+ *     than a pass, counted by `verify` as a gate that checked less -- and measured on this tree
+ *     with the pause hint changed into a second resume hint: `via=panel` for ESCAPE and P, exit
+ *     0, and `noticesIn()` collects the line. On a tree with an advertised pause key the
+ *     stronger route runs and no NOTICE is printed.
+ *   - **The displayed text is matched by PRESENCE, not by shape.** A control passes when its
+ *     text STARTS with the name of the offer it applied and CONTAINS that offer's label and
+ *     description, so every part has to belong to one offer — measured: a title from one offer
+ *     with another's DESCRIPTION exits 1, and a label belonging to no offer on screen exits 1.
+ *     What it does not do: it does not check the ORDER or the QUANTITY of the parts (extra text
+ *     appended still passes), and two offers whose labels render IDENTICALLY cannot be told
+ *     apart by the label — measured: swapping the label between two ` (New!)` offers is GREEN,
+ *     and the rendered text is byte-identical, so there is nothing for a player to see either.
+ *     `description` is read in exactly one place in this repository — the line `_show_picks`
+ *     builds each button with — and no `verify_*.gd` reads a picker button's text at all, which
+ *     is why this gate reads it back instead of trusting it.
+ *   - **Two offers whose effects are indistinguishable are not told apart.** `applied` is a
+ *     scan over `_hero_sig`, which covers weapons, passives, `max_hp`, `hp`, `speed` and
+ *     `level`. A control whose index matches is credited to its own index deliberately (the
+ *     player got the same thing either way), and a control that applied something matching NONE
+ *     of the offers is reported. `Upgrades.choose` picks distinct entries, so this does not
+ *     arise today; a future upgrade that changes a hero field outside that set would be
+ *     reported rather than silently credited.
  *   Exit 0 and one line when it holds; non-zero with the diagnosis when it does not.
  */
 
@@ -1001,6 +1047,14 @@ for (const claim of claims) {
                         `the state at ${resumed.after}, not PLAYING (${PLAYING}). The key is ` +
                         'advertised as the way out of the pause screen and does not take it.'
                 );
+            } else if (resumed.restored !== '1') {
+                dynamic.push(
+                    `${claim.source}: "${claim.clause}" -- pressing ${name} returned the state ` +
+                        `to PLAYING but left ${resumed.lingering} on screen. A pause screen that ` +
+                        'outlives the resume is a modal the player has already dismissed, and it ' +
+                        'is the same class as the dim that covered the run: the state says the ' +
+                        'thing is over and the screen says it is not.'
+                );
             }
         }
     }
@@ -1012,11 +1066,32 @@ for (const claim of claims) {
 // upgrade, passed every check in this gate (measured: `check-reach: ok`, exit 0). A modal is
 // not answerable because ONE of its controls answers.
 //
-// Each offered control is pressed in its own run, and WHICH OFFER it applied is identified by
-// comparing the hero against `Upgrades.apply` on a fresh hero for every offer that was on
-// screen -- the game's own function, so the expectation cannot drift from the implementation.
-for (const summary of offerScreens) {
-    if (Number(summary.total) >= 1) continue;
+// Each offered control is pressed in its own run. Three things are required of it, and each
+// one was a measured hole in the version before it:
+//
+//   1. IT IS DRIVEN. `for i in mini(controls, offers)` left a fourth control discovered,
+//      printed in `REACH offers`, and never driven -- silence read as success.
+//   2. IT APPLIES THE OFFER IT DISPLAYS. Comparing the hero against `main._offers[i]` alone
+//      passed a button that DISPLAYED the next offer's name while applying its own, because
+//      the offer a button was BUILT from is not the offer it SHOWS. `displayed` is read from
+//      the control's own label now, and ALL of it: the name it starts with plus that offer's
+//      label and description, so one offer's title cannot be shown over another's text.
+//   3. IT IS ONE OF THE OFFERS AT ALL. A control the gate has no model of is reported rather
+//      than driven-and-forgotten: an offered control nothing can say anything about is the
+//      class of silence this gate exists to break.
+const summary = offerScreens[0] ?? {};
+const offeredCount = Number(summary.total ?? 0);
+const drivenIndexes = new Set(offerDrives.map((d) => Number(d.i)));
+for (let i = 0; i < offeredCount; i += 1) {
+    if (drivenIndexes.has(i)) continue;
+    dynamic.push(
+        `the level-up screen offers ${offeredCount} keyboard-reachable control(s) and control ` +
+            `${i} was DISCOVERED and never driven, so nothing about it was checked. A control ` +
+            'that is offered to the player and produces no verdict is silence, and silence is ' +
+            'not a pass.'
+    );
+}
+if (offerScreens.length > 0 && offeredCount === 0) {
     dynamic.push(
         'the level-up screen offered NO control a keyboard can reach, so which offer each ' +
             'control applies was never measured. A screen that offers a choice and cannot be ' +
@@ -1024,16 +1099,39 @@ for (const summary of offerScreens) {
     );
 }
 for (const drive of offerDrives) {
-    const where = `the level-up control ${drive.path} (offer ${drive.i})`;
+    const where = `the level-up control ${drive.path} (control ${drive.i})`;
     if (drive.driven === '0') {
         dynamic.push(
             `${where} was never driven -- the control was not in the tree when its turn came, ` +
-                'so which offer it applies is unchecked.'
+                'so nothing about it is checked.'
         );
         continue;
     }
     if (drive.focused !== '1') {
         dynamic.push(`${where} could not take focus, so Enter could not reach it.`);
+        continue;
+    }
+    if (drive.fired !== '1') {
+        dynamic.push(
+            `${where} held focus and its own \`pressed\` never fired when Enter was sent, so ` +
+                'the control cannot be activated at all.'
+        );
+        continue;
+    }
+    if (drive.beyond === '1') {
+        const what =
+            drive.wired === '0'
+                ? 'it is bound to NOTHING, so activating it can never do anything'
+                : drive.changed === '0'
+                  ? 'it is wired, and activating it changes nothing observable'
+                  : 'it is wired, and activating it did change something';
+        dynamic.push(
+            `${where} is not one of the offers on screen (${drive.offers}) -- it is an extra ` +
+                `control this screen presents, and ${what}. This gate has no model of what such ` +
+                'a control is for, so it cannot say whether it works, and a control offered to ' +
+                'the player with no verdict is exactly the silence this gate exists to break. ' +
+                'Teach `check-reach` what this control does, or remove it.'
+        );
         continue;
     }
     if (drive.pristine !== '1') {
@@ -1045,23 +1143,39 @@ for (const drive of offerDrives) {
         );
         continue;
     }
+    if (drive.labelled !== '1') {
+        dynamic.push(
+            `${where} carries no text, so which offer it DISPLAYS could not be read from the ` +
+                'control and was not measured. Comparing it against the offer it was BUILT ' +
+                'from is the weaker claim that passed a mislabelled button.'
+        );
+        continue;
+    }
+    if (Number(drive.displayed) !== Number(drive.applied)) {
+        dynamic.push(
+            `${where} ` +
+                (drive.displayed === '-1'
+                    ? 'shows text matching NONE of the offers it could have been built from'
+                    : `DISPLAYS offer ${drive.displayed}`) +
+                ` and APPLIED offer ${drive.applied}. The offers on screen were ` +
+                `${drive.offers}, and the whole displayed text has to belong to ONE of them -- ` +
+                'title, label and description -- or the player is choosing from a description ' +
+                'that belongs to a different upgrade.'
+        );
+        continue;
+    }
     if (Number(drive.applied) !== Number(drive.i)) {
         dynamic.push(
-            `${where} applied ` +
-                (drive.applied === '-1'
-                    ? 'a change matching NONE of the offers it was built from'
-                    : `offer ${drive.applied}`) +
-                `, not offer ${drive.i}. The offers on screen were ${drive.offers}. A control ` +
-                'that applies a different upgrade than the one it displays is a capability the ' +
-                'player cannot reach: with every button bound to the same handler argument, two ' +
-                'of the three offers apply the wrong upgrade and nothing else notices.'
+            `${where} applied offer ${drive.applied} rather than its own. The offers on screen ` +
+                `were ${drive.offers}. With every button bound to the same handler argument, ` +
+                'two of the three offers apply the wrong upgrade and nothing else notices.'
         );
         continue;
     }
     if (drive.changed !== '1') {
         dynamic.push(
-            `${where} applied its own offer and the game did not change at all, so the pick ` +
-                'was not taken.'
+            `${where} applied its own offer, which it displays, and the game did not change at ` +
+                'all, so the pick was not taken.'
         );
     }
 }
@@ -1087,3 +1201,18 @@ console.log(
         `${consumedActions.size} polled action(s) bound, ${skipped} screen(s) skipped ` +
         '(nothing focusable), engine constants and bindings AGREE'
 );
+// THE WEAKER ROUTE IS SAID OUT LOUD. See `_enter_paused` in the probe: where the game
+// advertises no pause key, the probe sets the paused state itself, so `before === PAUSED` holds
+// by construction and only the other half of those resume claims was measured. A `NOTICE:` here
+// is what makes `verify` count this run as having checked less than the line above suggests --
+// the same shape `check:godot` uses when the engine is absent.
+const panelResumes = [...resumes.values()].filter((r) => r.via === 'panel');
+if (panelResumes.length > 0) {
+    console.log(
+        `check-reach: ${NOTICE_PREFIX} ${panelResumes.length} resume claim(s) ` +
+            `(${panelResumes.map((r) => r.key).join(', ')}) were measured from a PAUSED state ` +
+            'the PROBE set, because the game advertises no pause key to reach it through. ' +
+            '`before === PAUSED` therefore holds by construction, and only the "leaves the ' +
+            'paused state" half of those claims was measured.'
+    );
+}

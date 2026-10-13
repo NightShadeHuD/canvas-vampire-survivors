@@ -39,18 +39,26 @@
 ##   3. A synthetic `InputEventKey` needs only `keycode` to satisfy `is_action_pressed`; the
 ##      engine's own `ui_accept` template events carry `physical_keycode = 0`. Events are sent
 ##      with BOTH fields set, which is what a real keyboard sends.
-##   4. A `resume` claim is measured FROM PAUSED. The first version tapped the key twice from
-##      PLAYING and asked only whether the SECOND tap left the run playing -- and W answers
-##      that correctly while doing nothing at all, so `Esc / P / W to resume` passed on a
-##      build where W is not a control. The probe now reaches the paused state (through the
-##      advertised pause key when the gate knows one, else the game's own pause entry) and
-##      reports the state it was really in when the resume key was pressed.
+##   4. A `resume` claim is measured FROM PAUSED, and the ROUTE into that state is reported
+##      because the two routes prove different things. The first version tapped the key twice
+##      from PLAYING and asked only whether the SECOND tap left the run playing -- and W answers
+##      that correctly while doing nothing at all, so `Esc / P / W to resume` passed on a build
+##      where W is not a control. The paused state is now reached by pressing a key the game
+##      ADVERTISES for pause (`via=key:<NAME>`, the whole input path) or -- where there is none
+##      -- by the game's own pause entry with the state set beside it (`via=panel`), in which
+##      case `before == PAUSED` holds BY CONSTRUCTION and `check:reach` says so with a NOTICE.
+##      A resume must also take the pause SCREEN with it: `restored=` reports whether what
+##      appeared when the run paused is gone again.
 ##
-##   5. The control the game FOCUSES is not the only control a modal offers. On the level-up
-##      picker the focused control is always `Pick0`, so `b.pressed.connect(_on_pick.bind(0))`
-##      -- two of the three offers applying the wrong upgrade -- left every check green. The
-##      probe now presses EVERY offered control, one per run, and reports which captured offer
-##      each press actually applied, measured against the game's own `Upgrades.apply`.
+##   5. The control the game FOCUSES is not the only control a modal offers, the offer a control
+##      was BUILT from is not the offer it SHOWS, and a control beyond the offers is still a
+##      control. `b.pressed.connect(_on_pick.bind(0))` -- two of the three offers applying the
+##      wrong upgrade -- left every check green; so did a button that DISPLAYED the next offer's
+##      name while applying its own; so did a fourth button that was discovered, printed and
+##      never driven. Every control the screen offers is pressed in its own run, `displayed=` is
+##      read from the control's own LABEL, `applied=` is identified against the game's own
+##      `Upgrades.apply`, and a control that is not one of the offers is REPORTED with what it
+##      did (`wired=`, `changed=`) rather than passed over in silence.
 ##
 ## WHAT THIS PROBE CANNOT SEE, stated because the limit matters: it drives a HEADLESS tree
 ## with a 64x64 root viewport, so it says nothing about where anything is DRAWN, and nothing
@@ -90,8 +98,10 @@ var _declared: Dictionary = {}
 ## One screen snapshot per distinct state the probe observes.
 var _snapshotted: Dictionary = {}
 
-## Buttons whose `pressed` is already wired, by node path. The picker's and the game-over
-## panel's buttons are created mid-run, so the walk has to run again after they exist.
+## Buttons whose `pressed` is already wired, by INSTANCE ID. The picker's and the game-over
+## panel's buttons are created mid-run -- and RE-created at the SAME node path on every
+## level-up -- so a path-keyed set silently skips the new nodes and their `pressed` is never
+## recorded. That is why this is an id and not a path.
 var _watched: Dictionary = {}
 
 ## The observable state of the game, as a string. Deliberately EXCLUDES the clock: a modal
@@ -171,8 +181,9 @@ func _fresh(main) -> void:
 
 
 func _watch_buttons(node: Node) -> void:
-	if node is Button and not _watched.has(str(node.get_path())):
-		_watched[str(node.get_path())] = true
+	var id := node.get_instance_id()
+	if node is Button and not _watched.has(id):
+		_watched[id] = true
 		(node as Button).pressed.connect(_on_any_pressed.bind(node))
 	for child in node.get_children():
 		_watch_buttons(child)
@@ -323,20 +334,27 @@ func _hero_sig(hero) -> String:
 	]
 
 
-## Press EVERY control the level-up offers, one per run, and report WHICH OFFER each press
-## applied.
+## Press EVERY control the level-up offers, one per run, and report WHAT IT DISPLAYS and WHICH
+## OFFER it applied.
 ##
-## WHY THIS EXISTS. `_screen` drives the control the GAME focused, and on the picker that is
-## always `Pick0` -- so `b.pressed.connect(_on_pick.bind(0))`, which makes two of the three
-## offers apply the wrong upgrade, passed every check in the gate. A modal is not answerable
-## because ONE of its controls answers.
+## WHY THIS EXISTS, in three measured pieces:
 ##
-## The identity is MEASURED and not assumed: `main._offers[i]` is the entry button i was built
-## from, and `Upgrades.apply` is the game's own function, so the expectation cannot drift from
-## the implementation. A fresh hero is deterministic (`Game._init` builds it from `Config`),
-## which is what lets a scratch run compute the expectation -- and that presumption is REPORTED
-## (`pristine=`) rather than trusted: if it ever stops holding, the comparison means nothing and
-## the gate has to say so rather than pass.
+##   1. `_screen` drives the control the GAME focused, and on the picker that is always
+##      `Pick0` -- so `b.pressed.connect(_on_pick.bind(0))`, which makes two of the three
+##      offers apply the wrong upgrade, passed every check in the gate.
+##   2. The label is READ (`Button.text`), not inferred from the offer the button was built
+##      from. A button that DISPLAYS the next offer's name while APPLYING its own passed the
+##      first version of this check, which compared the hero against `main._offers[i]` alone.
+##   3. EVERY discovered control is driven, not the first `mini(controls, offers)`. A fourth
+##      button was discovered, printed in `REACH offers`, never driven, and the gate stayed
+##      green -- silence read as success.
+##
+## The identity is MEASURED and not assumed: `Upgrades.apply` is the game's own function, so
+## the expectation cannot drift from the implementation. A fresh hero is deterministic
+## (`Game._init` builds it from `Config`), which is what lets a scratch run compute the
+## expectation -- and that presumption is REPORTED (`pristine=`) rather than trusted: if it
+## ever stops holding, the comparison means nothing and the gate has to say so rather than
+## pass.
 func _drive_offers(main) -> void:
 	await _reach_level_up(main)
 	var screen := _offer_screen(main)
@@ -346,13 +364,13 @@ func _drive_offers(main) -> void:
 	var discovered := _focusable_paths(screen)
 	print("REACH offers total=%d paths=%s" % [discovered.size(), ",".join(discovered)])
 
-	for i in mini(discovered.size(), main._offers.size()):
+	for i in discovered.size():
 		await _reach_level_up(main)
 		var screen_now := _offer_screen(main)
 		var paths := _focusable_paths(screen_now) if screen_now != null else []
 		var offers: Array = main._offers.duplicate()
-		if i >= paths.size() or i >= offers.size():
-			print("REACH offer i=%d driven=0 paths=%d offers=%d" % [i, paths.size(), offers.size()])
+		if i >= paths.size():
+			print("REACH offer i=%d driven=0 paths=%d" % [i, paths.size()])
 			continue
 		var control: Control = main.get_node_or_null(paths[i])
 		if control == null:
@@ -361,12 +379,53 @@ func _drive_offers(main) -> void:
 		var names: Array = []
 		for offer in offers:
 			names.append(str(offer["def"]["name"]))
+		# WHAT THE PLAYER READS, taken from the control itself, and ALL of it. `_show_picks`
+		# renders an offer as `name + Upgrades.label + description`, so the parts have to belong
+		# to the SAME offer: the name the text STARTS with (positional, so a name that prefixes
+		# another cannot be mistaken for it), and that offer's label and description somewhere in
+		# the text. Reading only the leading NAME passed a button that showed one offer's title
+		# with ANOTHER offer's description -- measured: `check-reach: ok`, exit 0, while no
+		# `verify_*.gd` reads a picker button's text at all.
+		#
+		# What this still does NOT cover is in `check-reach`'s ceiling list: the parts have to be
+		# PRESENT, not in any particular order or quantity, and two offers whose label strings are
+		# identical (both ` (New!)`) cannot be told apart by the label alone.
+		var label := ""
+		if control is Button:
+			label = (control as Button).text
+		var displayed := -1
+		var longest := -1
+		for j in offers.size():
+			var named := str(offers[j]["def"]["name"])
+			if not label.begins_with(named):
+				continue
+			if label.find(Upgrades.label(offers[j])) == -1:
+				continue
+			if label.find(str(offers[j]["def"]["description"])) == -1:
+				continue
+			if named.length() > longest:
+				displayed = j
+				longest = named.length()
+		# WIRED, counted BEFORE this probe connects its own watcher: a control offered to the
+		# player and connected to nothing is a control that can never do anything.
+		var wired := 0
+		if control is BaseButton:
+			wired = int((control as BaseButton).pressed.get_connections().size() > 0)
+		_watch_buttons(main)
+		var fired_before: int = _activated.size()
 		control.grab_focus()
 		var focused := int(root.gui_get_focus_owner() == control)
-		var before := _observable(main)
+		# `offers` is in the signature as well as the tree: a control that REROLLS what is on
+		# offer changes the screen without changing the state, and a signature that missed it
+		# would report "nothing changed" about a control that plainly did.
+		var before := _observable(main) + "|offers=" + ",".join(names)
 		var hero_before := _hero_sig(main.game.hero)
 		_tap(KEY_ENTER)
-		var after := _observable(main)
+		var fired := int(_activated.size() > fired_before)
+		var after_names: Array = []
+		for offer in main._offers:
+			after_names.append(str(offer["def"]["name"]))
+		var after := _observable(main) + "|offers=" + ",".join(after_names)
 		var actual := _hero_sig(main.game.hero)
 		# THE EXPECTATION, computed AFTER the press from the offers captured BEFORE it. Each
 		# entry is `Upgrades.apply` on a pristine hero, so "what should this control have done"
@@ -379,19 +438,24 @@ func _drive_offers(main) -> void:
 				pristine = _hero_sig(main.game.hero)
 			Upgrades.apply(main.game.hero, offers[j])
 			expected.append(_hero_sig(main.game.hero))
+		# The offer this control APPLIED. Its own index wins when it matches, so an offer whose
+		# effect is indistinguishable from another's cannot be reported as the wrong one.
 		var applied := -1
-		for j in expected.size():
-			if expected[j] == actual:
-				applied = j
-				break
+		if i < expected.size() and expected[i] == actual:
+			applied = i
+		else:
+			for j in expected.size():
+				if expected[j] == actual:
+					applied = j
+					break
 		print(
-			"REACH offer i=%d path=%s offers=%s focused=%d changed=%d pristine=%d applied=%d actual=%s want=%s"
+			"REACH offer i=%d path=%s offers=%s focused=%d fired=%d wired=%d beyond=%d changed=%d pristine=%d labelled=%d displayed=%d applied=%d actual=%s want=%s"
 			% [
-				i, paths[i], ",".join(names), focused, int(after != before),
-				int(pristine == hero_before), applied, actual, expected[i]
+				i, paths[i], ",".join(names), focused, fired, wired, int(i >= offers.size()),
+				int(after != before), int(pristine == hero_before), int(label.strip_edges() != ""),
+				displayed, applied, actual, expected[i] if i < expected.size() else "-"
 			]
 		)
-
 
 ## What ONE advertised key actually does when a player presses it. One observation per verb the
 ## game advertises for it, and the VERB decides the state the observation starts from:
@@ -433,38 +497,74 @@ func _observe_key(main, name: String, code: int, verbs: Array) -> void:
 		await _observe_resume(main, name, code)
 
 
-## Put the game into its PAUSED state the way a PLAYER does, and say which route got there.
+## Every visible Control's path, sorted: what a player can currently SEE.
+func _visible_paths(main) -> Array:
+	var out: Array = []
+	_collect_visible(main, out)
+	out.sort()
+	return out
+
+
+## Put the game into its PAUSED state, and say EXACTLY which route got there and what that route
+## proves.
 ##
-## Preferred route: press a key the game itself ADVERTISES for pause (`--pause-key`), which
-## drives the whole input path. Fallback: call the game's own pause entry point and set the
-## state, which is what a game with no advertised pause key leaves available.
+## TWO ROUTES, and they are not equal:
 ##
-## The state actually reached is REPORTED either way, and `check:reach` requires it, because a
-## "resume" measured from PLAYING is the vacuous check this replaced: with W advertised as
-## `W to resume` and doing nothing, the second tap of the old chain left the run PLAYING and
-## the gate said ok.
-func _enter_paused(main) -> String:
+##   `key:<NAME>`  a key the game itself ADVERTISES for pause (`--pause-key`) was pressed, which
+##                 drives the whole input path. The state is the game's own doing.
+##   `panel`       the game advertises NO pause key to reach it through, so the probe called the
+##                 game's own pause entry point and set the state itself. **`before == PAUSED`
+##                 is then true BY CONSTRUCTION** -- it proves the probe reached the paused
+##                 state, not that a player can -- so only the "does this key leave the paused
+##                 state" half of a resume claim is measured on that route. `check:reach` says
+##                 so out loud with a `NOTICE:` rather than letting the weaker claim pass as the
+##                 stronger one.
+##
+## The state actually reached is reported either way, because a "resume" measured from PLAYING
+## is the vacuous check this replaced: with W advertised as `W to resume` and doing nothing, the
+## second tap of the old chain left the run PLAYING and the gate said ok.
+func _enter_paused(main) -> Dictionary:
+	var visible_before: Array = []
 	_fresh(main)
 	if not _pause_key.is_empty():
+		visible_before = _visible_paths(main)
 		_tap(int(_pause_key["code"]))
 		await process_frame
 		if main.state == main.State.PAUSED:
-			return "key:%s" % _pause_key["name"]
+			return {"via": "key:%s" % _pause_key["name"], "visible": visible_before}
 		_fresh(main)
+	visible_before = _visible_paths(main)
 	if main.has_method("_show_pause"):
 		main._show_pause(true)
 	main.state = main.State.PAUSED
-	return "panel"
+	return {"via": "panel", "visible": visible_before}
 
 
-## Does the key leave the paused state? The one question the claim "to resume" is.
+## Does the key leave the paused state, and does it take the pause SCREEN with it?
+##
+## Two questions, because they fail apart: a resume that flips `state` back to PLAYING while the
+## pause panel stays on screen leaves the player looking at a modal they have already dismissed.
+## `restored` is measured against what APPEARED when the run paused, so a screen that
+## legitimately changes something else on resume is not reported -- only the pause overlay is.
 func _observe_resume(main, name: String, code: int) -> void:
-	var via: String = await _enter_paused(main)
+	var entry: Dictionary = await _enter_paused(main)
 	var before: int = main.state
+	var before_paths: Array = entry["visible"]
+	var appeared: Array = []
+	for p in _visible_paths(main):
+		if not before_paths.has(p):
+			appeared.append(p)
 	_tap(code)
 	await process_frame
-	print("REACH resume key=%s via=%s before=%d after=%d" % [name, via, before, main.state])
-
+	var after_paths := _visible_paths(main)
+	var lingering: Array = []
+	for p in appeared:
+		if after_paths.has(p):
+			lingering.append(p)
+	print("REACH resume key=%s via=%s before=%d after=%d restored=%d lingering=%s" % [
+		name, entry["via"], before, main.state, int(lingering.is_empty()),
+		"-" if lingering.is_empty() else ",".join(lingering)
+	])
 
 func _print_states(main) -> void:
 	# The game's own state names, so the gate does not have to hardcode MENU=0 / PAUSED=4 to
