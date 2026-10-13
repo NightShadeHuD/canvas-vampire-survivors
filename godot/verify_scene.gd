@@ -39,6 +39,18 @@ func contains(haystack: String, needle: String) -> bool:
 	return haystack.find(needle) != -1
 
 
+## Every Control under `root`, depth-first. Used to assert that a menu's leading edges are
+## inside the viewport -- a claim nothing checked until two player-visible geometry defects
+## shipped green.
+func _all_controls(root: Node) -> Array:
+	var out: Array = []
+	for child in root.get_children():
+		if child is Control:
+			out.append(child)
+		out.append_array(_all_controls(child))
+	return out
+
+
 func _init() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	Check.unchanged(packed != null, true, "the scene loads")
@@ -333,6 +345,50 @@ func _init() -> void:
 		true,
 		"and it is START, the control a keyboard player needs first"
 	)
+
+	# EVERY VISIBLE CONTROL'S LEADING EDGE IS INSIDE THE VIEWPORT.
+	#
+	# The existing check is `r.position.y + r.size.y >= 0` -- "not ENTIRELY above the screen" --
+	# and it passed while `Menu/HowTo` rendered 96% off the top with only the descender tips of
+	# "How to play" visible, and while `Menu/Start` was a 1352x692 panel starting at x = -100
+	# that washed the title out 54%. **`-20 + 758 >= 0` is true.** Two player-visible defects,
+	# 26 gates green.
+	#
+	# The claim is the LEADING EDGE, not the trailing one. A full-rect Control may legitimately
+	# extend past the bottom (HowTo is 758px tall in a 648px window and only its top 130px carry
+	# ink), so the trailing edge is not asserted; the leading edge always is, because nothing
+	# drawn at a negative position is read by anyone.
+	#
+	# Found by an adversarial audit that rendered the menu and measured it -- neither this suite
+	# nor the pixel tier had ever captured the menu at all.
+	var frame: Vector2 = main.get_viewport_rect().size
+	var offscreen: Array = []
+	var seen := 0
+	for node in _all_controls(main.get_node("Menu")):
+		var c := node as Control
+		if not c.visible:
+			continue
+		seen += 1
+		if c.position.x < 0.0 or c.position.y < 0.0:
+			offscreen.append(
+				"%s at (%.0f, %.0f)" % [c.name, c.position.x, c.position.y]
+			)
+	Check.at_least(float(seen), 4.0, "the menu has visible controls to check")
+	Check.unchanged(
+		offscreen,
+		[],
+		"and NO visible control starts off-screen -- a leading edge above or left of the " +
+			"viewport is content the player cannot read"
+	)
+	# The panel that did the damage, asserted directly: a button must be the size it reads as.
+	var start_button := main.get_node_or_null("Menu/Start") as Control
+	# ABSOLUTE BOUNDS, not a fraction of the viewport: `get_viewport_rect()` returns the
+	# headless surface (a few dozen pixels), so a proportional bound would fail on correct code
+	# -- which is exactly what the first version of this did. A button is a button.
+	if start_button != null:
+		Check.at_most(start_button.size.x, 400.0, "START is a button, not a full-width panel")
+		Check.at_most(start_button.size.y, 120.0, "and not a full-height one either")
+		Check.at_least(start_button.size.y, 24.0, "and it is big enough to hit")
 
 	var draw_src := FileAccess.get_file_as_string("res://scripts/main.gd")
 	Check.at_least(float(draw_src.length()), 1.0, "the draw source is readable")
