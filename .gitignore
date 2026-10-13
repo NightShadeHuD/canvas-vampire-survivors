@@ -42,3 +42,6 @@ dist/
 
 # Godot import cache -- regenerated on demand, machine-specific.
 godot/.godot/
+
+# Local verify receipt — evidence about THIS checkout, meaningless to anyone else.
+.verify-receipt.json

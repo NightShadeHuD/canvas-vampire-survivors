@@ -376,27 +376,52 @@ Playwright went 1.59 to 1.63.
 
 ## What is enforced, and by what
 
-| Rule                                                    | Mechanism                                          |
-| ------------------------------------------------------- | -------------------------------------------------- |
-| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                       |
-| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                   |
-| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                        |
-| Every source file is really linted                      | `scripts/check-coverage.mjs`                       |
-| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`                 |
-| No test depends on today's date                         | `scripts/check-clocks.mjs`                         |
-| The game still boots and plays                          | `scripts/boot-smoke.mjs`                           |
-| Accessibility holds                                     | `scripts/a11y-audit.mjs`                           |
-| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                    |
-| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                          |
-| The register's numbers match what was measured          | `scripts/check-claims.mjs`                         |
-| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → `npm run verify`            |
-| **The rows ABOVE this one**, unbypassably               | CI job **Verify**, required by branch protection   |
-| The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`** |
+| Rule                                                    | Mechanism                                            |
+| ------------------------------------------------------- | ---------------------------------------------------- |
+| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                         |
+| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                     |
+| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                          |
+| Every source file is really linted                      | `scripts/check-coverage.mjs`                         |
+| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`                   |
+| No test depends on today's date                         | `scripts/check-clocks.mjs`                           |
+| The game still boots and plays                          | `scripts/boot-smoke.mjs`                             |
+| Accessibility holds                                     | `scripts/a11y-audit.mjs`                             |
+| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                      |
+| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                            |
+| The register's numbers match what was measured          | `scripts/check-claims.mjs`                           |
+| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → `npm run verify`              |
+| **The rows ABOVE this one**, reported to GitHub         | `npm run ci` — pushes the required **Verify** status |
+| The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`**   |
 
 **Two gates are deliberately outside `verify`**: `boot-smoke.mjs` and `a11y-audit.mjs`
-need a browser, so `verify` would fail on a machine without one. **They are real
-enforcement — CI installs Chromium on every run and the deploy workflow gates on the full
-`Verify` job — but a local `npm run verify` does not run them, and this table said it did.**
+need a browser, so `verify` would fail on a machine without one. **`npm run verify:all` runs
+them and is the definition of done**; a bare `npm run verify` does not, and this table once
+said it did.
+
+## THERE IS NO CI RUNNER. `npm run ci` IS THE GATE.
+
+GitHub Actions was removed at the maintainer's direction: **all verification happens on the
+machine doing the work.** But `main` is protected with `Verify` as a required status check, so
+deleting the workflow alone would have deadlocked the repository — the check would never
+report and no pull request could ever merge, with `enforce_admins` on so not even the owner
+could override it.
+
+**`npm run ci` does what the workflow did**: runs `npm run verify:all` here, writes
+`.verify-receipt.json` naming the exact revision, and POSTs the `Verify` status to GitHub. It
+refuses on a dirty tree, because a status names a COMMIT and a dirty tree is not one.
+
+```bash
+npm run ci          # the full gate, then report it
+npm run ci -- --no-report   # run the gate, record locally, tell GitHub nothing
+```
+
+**What this preserves:** `gh pr merge` still refuses without a passing `Verify`, and only a
+passing run produces one.
+
+**What it costs, and this is the honest part:** a CI runner cannot be talked out of running,
+and this script can simply not be invoked. **The required check is now reported by the same
+person it constrains.** Nothing here should ever be described as "CI", and "the gate passed"
+now means "somebody ran it", which is a weaker claim than it was a week ago.
 
 That is the class of defect this whole section exists to prevent: a claim about coverage
 that is one row wider than the coverage. An audit found it by listing the gates

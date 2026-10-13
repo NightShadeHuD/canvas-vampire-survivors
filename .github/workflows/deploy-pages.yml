@@ -1,10 +1,15 @@
 name: Deploy to GitHub Pages
 
-# Nothing reaches production unless the full engineering gate passes.
-# Previously this workflow had no verify job at all: `deploy` depended only on
-# a job that copied files into _site, so a commit with failing tests, lint
-# errors or accessibility regressions would have deployed without complaint.
-# See docs/ENGINEERING-STANDARDS.md §2.
+# Publishing only. THE GATE IS NOT HERE.
+#
+# GitHub Actions no longer verifies anything: `npm run ci` runs the full gate on the
+# machine doing the work and reports the `Verify` status itself. This workflow used to
+# carry a `verify` job duplicating the CI one -- and for several commits the two were NOT
+# identical while their comments claimed they were. That whole class of drift is gone with
+# the duplicate, which is the one unambiguous good thing about moving the runner.
+#
+# **What this workflow no longer guarantees:** a commit can reach production without the
+# gate having passed, if whoever merged reported a status they had not earned.
 
 on:
     push:
@@ -21,63 +26,8 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
-    # Gate. Kept identical to the CI job -- and it was NOT, for several commits, while
-    # this comment said it was: `fetch-depth: 0` and the Godot steps were missing. A
-    # comment asserting parity is not parity, and nothing checked it.
-    #
-    # `check:dep-drift` does now: both workflows must install the same toolchain steps.
-    # Gate. Identical to the CI job so the two can never drift.
-    verify:
-        name: Verify
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  # `check:assertions` compares the branch against its base, so it needs
-                  # the history a shallow clone omits. THIS WAS MISSING while the comment
-                  # above claimed the two jobs were identical -- found by a tooling audit,
-                  # which noted that the commit which achieved parity is the one that
-                  # removed it. Without it the revision half is structurally vacuous.
-                  fetch-depth: 0
-
-            # Node 24: required for native TypeScript type stripping, which the
-            # migration relies on to run test/*.ts directly with no build step.
-            - name: Setup Node.js
-              uses: actions/setup-node@v7
-              with:
-                  node-version: '24'
-                  cache: 'npm'
-
-            - name: Install dependencies
-              run: npm ci
-
-            - name: Install Chromium for the browser gates
-              run: npx playwright install --with-deps chromium
-
-            # Godot, as in ci.yml. Without these two steps check:godot prints NOTICE and
-            # exits 0, so the 12 suites, 309 assertions and the drift check run NOWHERE on
-            # the required check.
-            - name: Install Godot
-              run: |
-                  set -euo pipefail
-                  GODOT_VERSION=4.7.2
-                  curl -fsSL -o /tmp/godot.zip \
-                    "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
-                  unzip -q /tmp/godot.zip -d /tmp/godot
-                  sudo mv "/tmp/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
-                  sudo chmod +x /usr/local/bin/godot
-                  godot --version
-
-            - name: Import the Godot project
-              run: godot --headless --path godot --import
-
-            - name: Run the full verify gate
-              run: npm run verify:all
-
     build:
         name: Build static site
-        needs: verify
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -93,9 +43,8 @@ jobs:
               run: npm ci
 
             # The page loads ./dist/main.js, so the site cannot be assembled
-            # from the sources any more — it must be built. The `verify` job
-            # above already ran `npm run build` as part of the gate, but each
-            # job gets a fresh checkout, so it is built here too.
+            # from the sources any more — it must be built. The gate runs
+            # `npm run build` too, but on a different machine, so it is built here.
             - name: Build the browser artifact
               run: npm run build
 

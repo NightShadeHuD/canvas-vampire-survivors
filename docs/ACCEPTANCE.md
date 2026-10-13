@@ -11,7 +11,7 @@ The evidence column below quotes values. These are the ones checked automaticall
 | `tests`               | 846   |
 | `testFloor`           | 816   |
 | `suppressionCeilings` | 9     |
-| `verifySteps`         | 26    |
+| `verifySteps`         | 25    |
 
 <!-- claims:end -->
 
