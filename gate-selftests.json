@@ -143,5 +143,21 @@
         "run": "node scripts/check-strict.mjs",
         "why": "A ceiling that may only fall must refuse a RISE. Turning a flag on when the ceiling says it is off is a change the baseline has to record deliberately.",
         "touches": ["tsconfig.json"]
+    },
+    {
+        "gate": "check:lifecycle",
+        "break": "printf 'func _lower_shade() -> void:\\n\\tif shade_rect != null and not over.visible:\\n\\t\\tshade_rect.visible = false\\n' > /tmp/lifecycle-anchor.txt && printf 'func _lower_shade() -> void:\\n\\tif shade_rect != null and not over.visible:\\n\\t\\tpass\\n' > /tmp/lifecycle-replace.txt && node scripts/edit.mjs godot/scripts/main.gd --anchor-file /tmp/lifecycle-anchor.txt --replace-file /tmp/lifecycle-replace.txt",
+        "creates": [],
+        "run": "node scripts/check-lifecycle.mjs",
+        "why": "THE SHIPPED DEFECT: `shade_rect.visible = true` was added with the picker and the counterpart that lowered it was never written, so the dim covered the rest of the run. This break deletes the lowering and keeps everything else. The HARDER variant is also watched failing: remove the `_lower_shade()` CALL from `_on_pick` (`--anchor $'\\tpicker.visible = false\\n\\t_lower_shade()'` -> `--replace $'\\tpicker.visible = false'`) \u2014 that is the fix commit's own positive control, and it leaves the assignment in the file, so a gate that only asked whether `= false` appears anywhere would stay GREEN. This one fails on both, because the lowering must be REACHABLE from the code that raises the latch.",
+        "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:reach",
+        "break": "node scripts/edit.mjs godot/project.godot --anchor '\"events\": [Object(InputEventKey,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"window_id\":0,\"alt_pressed\":false,\"shift_pressed\":false,\"ctrl_pressed\":false,\"meta_pressed\":false,\"pressed\":false,\"keycode\":4194320,\"physical_keycode\":0,\"key_label\":0,\"unicode\":0,\"location\":0,\"echo\":false,\"script\":null), Object(InputEventKey,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"window_id\":0,\"alt_pressed\":false,\"shift_pressed\":false,\"ctrl_pressed\":false,\"meta_pressed\":false,\"pressed\":false,\"keycode\":0,\"physical_keycode\":87,\"key_label\":0,\"unicode\":0,\"location\":0,\"echo\":false,\"script\":null)]' --replace '\"events\": [Object(InputEventKey,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"window_id\":0,\"alt_pressed\":false,\"shift_pressed\":false,\"ctrl_pressed\":false,\"meta_pressed\":false,\"pressed\":false,\"keycode\":0,\"physical_keycode\":87,\"key_label\":0,\"unicode\":0,\"location\":0,\"echo\":false,\"script\":null)]'",
+        "creates": [],
+        "run": "node scripts/check-reach.mjs",
+        "why": "THE SHADOWING TRAP, which is why this gate resolves an action to the bindings it REALLY has. Declaring an action in `[input]` REPLACES its built-in default rather than adding to it, so this -- a `ui_up` that keeps the WASD event and loses the arrow event -- is exactly the edit that silently kills the arrow keys. A gate that only asked \"is the action declared\" would pass on it, and the HUD would advertise arrows that no longer move anything.",
+        "touches": ["godot/project.godot"]
     }
 ]

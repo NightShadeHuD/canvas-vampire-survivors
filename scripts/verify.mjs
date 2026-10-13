@@ -42,6 +42,14 @@ const STEPS = [
         proves: 'the two CI workflows install the same toolchain, so neither drifts'
     },
     {
+        script: 'check:lifecycle',
+        proves: 'every piece of state that is SET is also UNSET, on a path that can reach it'
+    },
+    {
+        script: 'check:reach',
+        proves: 'every key the game advertises can be pressed, and every modal answered'
+    },
+    {
         script: 'check:selftests',
         proves: 'every gate has been WATCHED failing on a deliberately broken input'
     },
@@ -177,9 +185,39 @@ if (notCheckingAnything.length > 0) {
 
 if (gaps.length > 0) {
     console.log(`\nDeclared gaps still open (${gaps.length}) — tracked, not forgotten:`);
+    // THE FIELD NAMES, which were wrong for every gap this printer has ever shown.
+    //
+    // It read `g.what` and `g.bound`; `quality-baseline.json` stores `id`, `why` and
+    // `removal`. So the one place a declared gap is surfaced to a human printed:
+    //
+    //     - godot-not-installed-in-ci: undefined
+    //           bound: undefined
+    //
+    // **The mechanism whose entire job is to keep a shortcut visible was printing
+    // `undefined` for all six of them**, and it stayed that way because nothing asserts on
+    // a console line. An audit found it by reading the output rather than the code.
+    //
+    // Printed in full, and truncated at a width that keeps a terminal readable: a gap the
+    // reader cannot finish is a gap the reader skips.
+    const wrap = (text, indent) => {
+        const words = String(text ?? '(no reason given)').split(/\s+/);
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+            if ((line + ' ' + w).trim().length > 96) {
+                lines.push(line.trim());
+                line = w;
+            } else {
+                line += ' ' + w;
+            }
+        }
+        if (line.trim()) lines.push(line.trim());
+        return lines.map((l) => `${indent}${l}`).join('\n');
+    };
     for (const g of gaps) {
-        console.log(`  - ${g.id}: ${g.what}`);
-        console.log(`      bound: ${g.bound}`);
+        console.log(`  - ${g.id}`);
+        console.log(wrap(g.why, '      why: '));
+        console.log(wrap(g.removal, '      removal: '));
     }
     console.log('\nSee docs/ENGINEERING-STANDARDS.md §5.');
 }
