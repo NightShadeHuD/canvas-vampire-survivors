@@ -28,6 +28,8 @@ func _init() -> void:
 	_multi_projectile_fires_a_volley()
 	_every_weapon_scales_with_its_level()
 	_cooldowns_are_per_weapon()
+	_melee_sweeps_a_band()
+	_every_weapon_leaves_something_to_draw()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
@@ -279,6 +281,136 @@ func _cooldowns_are_per_weapon() -> void:
 		"and the slow one is not reset by the fast one",
 		"lightning %0.2f vs garlic %0.2f" % [g.cooldowns["lightning"], g.cooldowns["garlic"]]
 	)
+
+## THE WHIP'S SWEEP IS A BAND, AND THE BAND DRAWN IS THE BAND THAT DAMAGED.
+##
+## `_fireMelee` in `src/weapons.ts`:
+##
+##     if (Math.abs(dx) > range) continue;
+##     if (Math.abs(dy) > 40) continue;
+##
+## The port damaged a 360-degree disc. A behavioural audit measured what that costs: on a
+## ring of eight foes the original hits the two on the horizontal axis, and the disc hits
+## all eight -- so the Whip was eight times the weapon it is, and the shape a player was
+## shown (none) could not have told them either way.
+##
+## Pinned at BOTH edges and one past each, which is the only form of this claim a disc
+## cannot also satisfy.
+func _melee_sweeps_a_band() -> void:
+	var def: Dictionary = _weapon("whip")
+	var reach := float(def["baseRange"])
+
+	# Eight foes on a ring at 90% of the reach. The diagonal ones are ~57px off the
+	# horizontal axis: outside the 40px band, inside the disc the port used to damage.
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	g.hero.add_weapon(def)
+	var ring: Array = []
+	for i in 8:
+		var angle := TAU * float(i) / 8.0
+		var f := Check.sturdy(
+			Foe.new(
+				Enemies.ENEMIES["BAT"],
+				g.hero.x + cos(angle) * reach * 0.9,
+				g.hero.y + sin(angle) * reach * 0.9
+			)
+		)
+		ring.append(f)
+		g.foes.append(f)
+
+	# The FIRE, through the real archetype, with the real visual sink attached.
+	WeaponFire.fire(def, g.hero, g.foes, [], 1, g.fx)
+
+	var hurt := 0
+	for f in ring:
+		if f.hp < f.max_hp:
+			hurt += 1
+	Check.unchanged(g.foes.size(), 8, "the ring being measured holds eight foes")
+	Check.unchanged(hurt, 2, "the Whip sweeps a BAND: 2 of 8 on a ring, not 8 of 8")
+
+	# THE DRAWN SHAPE ANSWERS THE SAME QUESTION THE DAMAGE DID. Read out of the emitted
+	# record rather than out of the constant, so a sweep DRAWN at one height and APPLIED
+	# at another fails here -- which is the class of lie the Garlic ring was telling.
+	Check.at_least(float(g.fx.strikes.size()), 1.0, "and the sweep is recorded for _draw")
+	if g.fx.strikes.size() > 0:
+		var sweep: Fx.Strike = g.fx.strikes[0]
+		var agree := true
+		for f in ring:
+			var inside: bool = (
+				absf(f.x - sweep.x) <= sweep.reach and absf(f.y - sweep.y) <= sweep.half_height
+			)
+			var damaged: bool = f.hp < f.max_hp
+			if inside != damaged:
+				agree = false
+		Check.unchanged(agree, true, "the band DRAWN is the band that DAMAGED, foe for foe")
+
+	# ONE PAST EACH EDGE. `>` and not `>=`: a foe at exactly `dy == 40` or `dx == reach` is
+	# swept, and one at 40.001 or reach + 0.001 is not. The original's own comparison, so
+	# the boundary is the original's boundary.
+	Check.unchanged(
+		_sweep_hits(def, [Vector2(60.0, 40.0), Vector2(60.0, 40.001), Vector2(reach, 0.0), Vector2(reach + 0.001, 0.0)]),
+		[true, false, true, false],
+		"pinned at both edges: dy 40 in, 40.001 out, dx reach in, reach + 0.001 out"
+	)
+
+
+## Which of `offsets` the Whip's sweep damages, one fresh sturdy foe per offset.
+func _sweep_hits(def: Dictionary, offsets: Array) -> Array:
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	g.hero.add_weapon(def)
+	var foes: Array = []
+	for off in offsets:
+		var f := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + off.x, g.hero.y + off.y))
+		foes.append(f)
+		g.foes.append(f)
+	WeaponFire.fire(def, g.hero, g.foes, [])
+	var out: Array = []
+	for f in foes:
+		out.append(f.hp < f.max_hp)
+	return out
+
+
+## EVERY WEAPON'S FIRE LEAVES SOMETHING FOR `_draw` TO ITERATE.
+##
+## This is the whole bug in one assertion. `_draw` walked `game.shots`, `game.foes`,
+## `game.orbs` and `game.enemy_shots`; six of the eight archetypes create no `Shot` at all,
+## so firing a Whip, a Garlic, a Frost Nova, a Lightning, an Area Mine or a Soul Drain put
+## NOTHING in any of those lists. A behavioural audit measured the Whip's frame moving 232
+## pixels -- every one of them a foe's HP bar -- against 224 for a single Orbiter shard.
+##
+## DRIVEN BY THE DATA, so a weapon added to `src/data.ts` later fails here until its fire
+## is visible. The claim is "a shot OR an effect": the pure-projectile archetypes are
+## already drawn as shots, and demanding fx from them would be a different, false claim.
+func _every_weapon_leaves_something_to_draw() -> void:
+	var silent: Array = []
+	for def in Weapons.WEAPONS.values():
+		var g := Game.without_spawns()
+		g.hero.weapons.clear()
+		g.hero.add_weapon(def)
+		# Inside the weapon's reach, so every archetype actually fires -- the same
+		# placement `_every_weapon_damages` uses, and for the same reason.
+		var at: float = float(def["baseRange"])
+		if def["type"] != "orbit":
+			at *= 0.4
+		g.foes.append(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + at, g.hero.y))
+
+		# The AURA emits on 40% of its fires -- a rate in the original too, so a single
+		# fire proves nothing either way. Fifty of them make "the aura draws nothing" a
+		# 1-in-10^11 accident rather than a coin flip. Every other archetype emits on
+		# every fire, so the repetition costs them nothing.
+		var fires := 50 if str(def["type"]) == "aura" else 1
+		var visible := 0
+		for i in fires:
+			var shots: Array = []
+			g.fx.clear()
+			WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx)
+			if not shots.is_empty() or not g.fx.is_empty():
+				visible += 1
+		if visible == 0:
+			silent.append("%s (%s)" % [def["id"], def["type"]])
+	Check.unchanged(silent, [], "EVERY weapon's fire leaves something to DRAW")
+
 
 ## A weapon def by its `id`, regardless of how the table is keyed.
 func _weapon(id: String) -> Dictionary:

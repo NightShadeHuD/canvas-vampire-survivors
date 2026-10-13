@@ -27,6 +27,31 @@
             "id": "godot-not-installed-in-ci",
             "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent, and .github/ installs neither Godot nor a display. So on every CI run the whole Godot half of this repository -- 12 suites, 309 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced \"all 23 gates passed\" under CI PATH, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor with Godot gets a stronger gate than the required check does.",
             "removal": "The CI workflow installs Godot 4.7.x, or check:godot is removed from the chain and the port is declared locally-verified only."
+        },
+        {
+            "id": "godot-frost-nova-slow-missing",
+            "why": "The data declares `slowPct: 0.5` and `slowDuration: 1.2` for Frost Nova and the TypeScript applies them (src/weapons.ts reads both, src/entities.ts applies them, src/entity-render.ts tints a slowed foe #88ccff). The Godot `Foe` has NO slow field at all, so the advertised slow does nothing. Found by the agent that fixed weapon visibility, which was asked to draw the weapon and reported this instead of quietly implementing it.",
+            "removal": "Foe gains slow_timer/slow_pct, WeaponFire applies them on the nova branch, and a suite asserts a slowed foe moves slower."
+        },
+        {
+            "id": "godot-lightning-nearest-not-random",
+            "why": "The original smites a RANDOM foe in range (src/weapons.ts: `targets[Math.floor(Math.random() * targets.length)]`) and chains at level >= 3 over `chainCount` hops. The port smites the NEAREST foe and never chains. WORSE: `verify_weapons.gd` asserts \"lightning hits the NEAREST foe\", so a TEST currently pins the wrong behaviour -- rule 12 inverted, a test enforcing what the data contradicts.",
+            "removal": "Port the random selection and the chain, and change the assertion to match the data rather than the implementation."
+        },
+        {
+            "id": "godot-weapon-evolution-unported",
+            "why": "`evolveLevel`, `evolveName`, `evolveDamageMult`, `evolveBonusCrit` and `evolveCooldownMult` are all in src/data.ts and NONE is read by the Godot port. A level-5 weapon does not evolve. The Whip is the visible consequence: the original switches to a full-circle sweep at level 5 and the port sweeps a band at every level.",
+            "removal": "Evolution is implemented, or the fields are removed from the shared data so the two games do not disagree about what a weapon does at level 5."
+        },
+        {
+            "id": "godot-mine-fuse-unread",
+            "why": "`\"fuse\": 1.2` is in the data and the TypeScript has a `Mine` entity with `fuse`/`maxFuse`, an armed state drawn at half-fuse, and a delayed blast. The Godot port strikes immediately on the fire frame with no mine entity, so there is no armed state to draw. Reported rather than invented when the visibility fix asked for the mine visual.",
+            "removal": "A Mine entity is ported with its fuse, or the field is declared unread."
+        },
+        {
+            "id": "godot-crit-rolled-once-per-fire",
+            "why": "The port rolls crit ONCE per fire (weapon-fire.gd) while the original rolls PER TARGET inside each archetype loop, and Soul Drain heals `dmg * pct` where the original heals `totalDmg * steal` summed over every drained target. Both make multi-target weapons weaker than the original in a way no assertion covers.",
+            "removal": "Crit is rolled per target and the drain heals from the summed damage, with an assertion on each."
         }
     ],
     "coverageFloors": {
@@ -338,15 +363,16 @@
     "godotAssertionFloors": {
         "res://verify_data.gd": 8,
         "res://verify_slice.gd": 11,
-        "res://verify_scene.gd": 79,
+        "res://verify_scene.gd": 83,
         "res://verify_play.gd": 14,
         "res://verify_xp.gd": 26,
-        "res://verify_weapons.gd": 19,
+        "res://verify_weapons.gd": 25,
         "res://verify_passives.gd": 20,
         "res://verify_invariants.gd": 11,
         "res://verify_archetypes.gd": 19,
         "res://verify_assertions.gd": 50,
         "res://verify_achievements.gd": 35,
         "res://verify_save.gd": 21
-    }
+    },
+    "pixelAssertionFloor": 34
 }

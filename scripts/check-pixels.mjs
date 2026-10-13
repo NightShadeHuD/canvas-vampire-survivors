@@ -17,7 +17,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { writeBaseline } from './lib/baseline-file.mjs';
 import path from 'node:path';
 import { NOTICE_PREFIX } from './lib/gate-input.mjs';
 
@@ -66,8 +68,45 @@ if (verdict[1] === 'FAIL') {
     process.exit(1);
 }
 
+// A FLOOR, because this file had none and its assertions were deletable in silence.
+//
+// `verify_pixels.gd` is not in `check-godot`'s headless list, so `godotAssertionFloors` cannot
+// see it and this runner accepted any non-zero count. Its 34 assertions could have been
+// removed one at a time with every gate still green -- the same hole `check:assertions` had
+// when it read only `test/*.test.ts`, in a file written after that was fixed.
+//
+// A FLOOR rather than a ceiling: for assertions a FALL is the bad direction. Same shape as
+// `godotAssertionFloors`, and `--update` raises it.
 const ok = (out.match(/^ {2}ok {3}/gm) ?? []).length;
+const baseline = JSON.parse(readFileSync(path.join(repoRoot, 'quality-baseline.json'), 'utf8'));
+const floor = baseline.pixelAssertionFloor;
+if (typeof floor !== 'number') {
+    console.error(
+        'check-pixels: FAILED — no `pixelAssertionFloor` in quality-baseline.json. Without a ' +
+            'recorded count, a suite whose assertions were deleted passes exactly like one ' +
+            'that was never weakened.'
+    );
+    process.exit(1);
+}
+if (ok < floor) {
+    console.error(
+        `check-pixels: FAILED — the pixel tier asserts ${ok} thing(s), below its floor of ` +
+            `${floor}. An assertion was deleted or a section stopped running.\n`
+    );
+    process.exit(1);
+}
+if (ok > floor) {
+    if (process.argv.includes('--update')) {
+        baseline.pixelAssertionFloor = ok;
+        writeBaseline(path.join(repoRoot, 'quality-baseline.json'), baseline);
+        console.log(`check-pixels: floor raised ${floor} -> ${ok}`);
+    } else {
+        console.log(
+            `check-pixels: NOTICE: ${ok} assertion(s), above the floor of ${floor}. Run \`npm run check:pixels -- --update\`.`
+        );
+    }
+}
 console.log(
-    `check-pixels: ${ok} pixel assertion(s) hold — the hero, the hostile bolts and the modal ` +
-        'dim all contribute pixels, and each was WATCHED FAILING on a deliberately broken build.'
+    `check-pixels: ${ok} pixel assertion(s) hold (floor ${floor}) — every weapon that damages ` +
+        'something is DRAWN, and each assertion was WATCHED FAILING on a deliberately broken build.'
 );

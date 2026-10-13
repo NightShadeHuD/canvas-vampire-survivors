@@ -407,6 +407,12 @@ func _draw() -> void:
 	if game == null:
 		return
 
+	# The STRIKE SHAPES, on the floor and under the actors: what a weapon's damage
+	# covered, drawn where it covered it. A foe standing inside the band has to stay
+	# visible, so the shapes go under everything rather than over it.
+	for strike in game.fx.strikes:
+		_draw_strike(strike)
+
 	# Orbs first, under the actors: a pickup the player cannot see behind a foe is a
 	# pickup they will not notice they took.
 	for orb in game.orbs:
@@ -426,6 +432,10 @@ func _draw() -> void:
 		_draw_foe(foe)
 	if not game.hero.dead:
 		_draw_hero(game.hero)
+	# Sparks LAST and over everything, which is the original's order: `game-render.ts`
+	# draws `game.particles` after the player and the projectiles, never before it.
+	for spark in game.fx.sparks:
+		_draw_spark(spark)
 
 ## The hero, matching `src/entity-render.ts`: a soft glow, a solid body, a pale core,
 ## and the weapon's reach as a pulsing ring.
@@ -441,10 +451,86 @@ func _draw_hero(hero: Hero) -> void:
 
 	# The Garlic ring, pulsing -- `rgba(160,255,160,0.25 + sin(t) * 0.08)` in the
 	# original, reproduced with the same period.
-	var t := game.elapsed / 0.4
-	draw_arc(
-		Vector2(hero.x, hero.y), float(game.weapon["baseRange"]),
-		0.0, TAU, 64, Color(160 / 255.0, 1.0, 160 / 255.0, 0.25 + sin(t) * 0.08), 2.0
+	#
+	# DRAWN AT THE AURA'S OWN REACH. It used to be drawn at `game.weapon["baseRange"]`,
+	# a number the aura never uses: `WeaponFire` fires at baseRange x levelArea x areaMult,
+	# so after five Area passives the real reach was 177 while the ring stopped at 110. A
+	# behavioural audit measured the consequence exactly -- a foe 150px away, OUTSIDE the
+	# drawn ring, took damage. `garlic_reach` asks `WeaponFire.reach_for`, which is the
+	# same function the damage comes from, so the ring cannot drift from the aura again.
+	var garlic := garlic_reach(hero)
+	if garlic > 0.0:
+		var t := game.elapsed / 0.4
+		draw_arc(
+			Vector2(hero.x, hero.y), garlic,
+			0.0, TAU, 64, Color(160 / 255.0, 1.0, 160 / 255.0, 0.25 + sin(t) * 0.08), 2.0
+		)
+
+## The radius the Garlic aura is FIRING at, or 0.0 when the hero holds no garlic.
+##
+## The original draws this ring only for a hero who holds the weapon
+## (`self.weapons.find((w) => w.id === 'garlic')`) and rings it at `garlic.getRange(self)`
+## -- the same call the aura damages with. This delegates to `WeaponFire.reach_for` for
+## that reason, and it is PUBLIC so `verify_scene.gd` can compare the ring against the
+## aura rather than taking the drawing code's word for it.
+func garlic_reach(hero: Hero) -> float:
+	for w in hero.weapons:
+		if w["id"] == "garlic":
+			return WeaponFire.reach_for(w["def"], hero, int(w["level"]))
+	return 0.0
+
+## The area one weapon's fire covered. One branch per `Fx.Strike.Kind`, and every branch
+## draws at `strike.reach` -- the radius the damage actually used -- because a shape that
+## stops short of its own hitbox is a drawing that lies about what the code does. That
+## exact lie is what the Garlic ring was doing: reach 177, ring 110.
+##
+##   SWEEP  the Whip's band. NOT in the original, which throws two particle bursts at the
+##          ends of the band and draws no band at all. Drawn here because the band is the
+##          one shape in this game a player can be wronged by -- a foe at |dy| == 41 takes
+##          nothing -- and the edge is the claim. Fill at 0.10 so a foe inside it is still
+##          legible; a 2px edge at 0.65 so the boundary reads as a boundary.
+##   RING   a nova, growing from the hero OUT TO the reach, so the moment of maximum
+##          danger is the moment the ring arrives at the radius that hurts.
+##   BEAM   the drain tether, hero to foe.
+##   BLAST  the mine, at the radius the port hit with.
+func _draw_strike(strike: Fx.Strike) -> void:
+	var a := strike.fade()
+	var c := strike.color
+	match strike.kind:
+		Fx.Strike.Kind.SWEEP:
+			var r := Rect2(
+				strike.x - strike.reach,
+				strike.y - strike.half_height,
+				strike.reach * 2.0,
+				strike.half_height * 2.0
+			)
+			draw_rect(r, Color(c.r, c.g, c.b, 0.10 * a))
+			draw_rect(r, Color(c.r, c.g, c.b, 0.65 * a), false, 2.0)
+		Fx.Strike.Kind.RING, Fx.Strike.Kind.BLAST:
+			# GROWS TO THE REACH. `1.0 - a` is elapsed time as a fraction of the life, so
+			# the ring is at 25% of the radius on the frame it is born -- visible at once --
+			# and at 100% on the frame it dies, which is the frame the damage landed.
+			var radius := strike.reach * (0.25 + 0.75 * (1.0 - a))
+			if strike.kind == Fx.Strike.Kind.BLAST:
+				# `renderMine` fills this circle while the mine is armed. This port has no
+				# armed mine, so the fill belongs to the detonation instead.
+				draw_circle(Vector2(strike.x, strike.y), strike.reach, Color(c.r, c.g, c.b, 0.16 * a))
+			draw_arc(Vector2(strike.x, strike.y), radius, 0.0, TAU, 64, Color(c.r, c.g, c.b, 0.7 * a), 3.0)
+		Fx.Strike.Kind.BEAM:
+			draw_line(
+				Vector2(strike.x, strike.y),
+				Vector2(strike.x2, strike.y2),
+				Color(c.r, c.g, c.b, 0.75 * a),
+				3.0
+			)
+
+## One particle, matching `renderParticle` in `src/entity-render.ts`: a filled circle in
+## the spark's colour, its alpha taken from what is left of its life.
+func _draw_spark(spark: Fx.Spark) -> void:
+	draw_circle(
+		Vector2(spark.x, spark.y),
+		spark.size,
+		Color(spark.color.r, spark.color.g, spark.color.b, clampf(spark.life, 0.0, 1.0))
 	)
 
 ## A shot in flight. Orbit shards are drawn as a ring segment, everything else as a
