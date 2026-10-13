@@ -10,8 +10,8 @@ drift silently.
 
 | name              | value |
 | ----------------- | ----- |
-| `godotSuites`     | 12    |
-| `godotAssertions` | 323   |
+| `godotSuites`     | 13    |
+| `godotAssertions` | 356   |
 | `weapons`         | 11    |
 | `achievements`    | 21    |
 
