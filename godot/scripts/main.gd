@@ -188,6 +188,15 @@ func _show_menu(visible_now: bool) -> void:
 func _focus_first(path: String) -> void:
 	var root := get_node_or_null(path)
 	if root == null:
+		# LOUD, not silent. Every call site here was a no-op for a whole release because the
+		# path was wrong (`Picker/Choices` where the node is `Picker/Offers/Choices`) and this
+		# returned without a word. **A focus request that silently does nothing is
+		# indistinguishable from a focus request that works** -- and the only assertion
+		# covering it checked a different panel, so nothing noticed.
+		#
+		# An error rather than a warning: there is no situation in which asking for focus on a
+		# node that does not exist is correct.
+		push_error("_focus_first: no node at '%s' -- the keyboard cannot reach this panel" % path)
 		return
 	await get_tree().process_frame
 	for node in _focusable_under(root):
@@ -331,7 +340,7 @@ func _show_picks() -> void:
 	picker.visible = true
 	# A level-up can only be ANSWERED with the mouse without this. The audit tried Enter,
 	# Space, `1`, Down and numpad-1 at the picker and all five left `pending_picks` at 1.
-	_focus_first("Picker/Choices")
+	_focus_first("Picker/Offers/Choices")
 
 ## Lower the modal dim. EVERY path that hides the picker must call this, or the dim outlives
 ## the modal and covers the rest of the run.
@@ -389,7 +398,7 @@ func _show_game_over() -> void:
 	over.add_child(again)
 
 	over.visible = true
-	_focus_first("Picker/GameOver")
+	_focus_first("Picker")
 
 ## `m:ss`, matching the original's run timer rather than raw seconds.
 func _format_time(seconds: float) -> String:
