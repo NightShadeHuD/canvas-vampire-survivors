@@ -49,8 +49,8 @@ horizontal_alignment = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -20.0
-offset_bottom = 90.0
+offset_top = 12.0
+offset_bottom = 122.0
 label_settings = SubResource("Menu")
 text = "How to play
 • WASD / arrow keys to move
@@ -60,13 +60,11 @@ text = "How to play
 horizontal_alignment = 1
 
 [node name="Start" type="Button" parent="Menu"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -100.0
-offset_top = 130.0
-offset_right = 100.0
-offset_bottom = 174.0
+anchors_preset = 0
+offset_left = 476.0
+offset_top = 300.0
+offset_right = 676.0
+offset_bottom = 344.0
 text = "START"
 
 [node name="HUD" type="CanvasLayer" parent="."]
