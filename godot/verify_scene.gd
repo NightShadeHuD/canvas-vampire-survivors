@@ -204,6 +204,30 @@ func _init() -> void:
 	Check.unchanged(main.picker.visible, true, "the picker is up")
 	Check.unchanged(shade.visible, true, "and the dim is RAISED with it")
 
+	# AND IT CAN ACTUALLY BE ANSWERED. The block above checks the menu's focus, and for a whole
+	# release that was the ONLY focus assertion -- so `_focus_first("Picker/Choices")` was a
+	# no-op (the node is at `Picker/Offers/Choices`) and nothing noticed. **A commit whose
+	# message read "the keyboard can start a run and answer a level-up" shipped a picker no
+	# keyboard could answer**, and every assertion was green.
+	#
+	# `focus owner != null` is not enough on its own: focus could be on a node OUTSIDE the
+	# picker, left over from the menu, which would leave the panel just as unanswerable. So
+	# this asserts the owner is INSIDE the picker.
+	var pick_focus := main.get_viewport().gui_get_focus_owner()
+	Check.unchanged(pick_focus != null, true, "the level-up picker has a focus owner")
+	Check.unchanged(
+		pick_focus != null and main.picker.is_ancestor_of(pick_focus),
+		true,
+		"and it is INSIDE the picker, not left behind on the menu"
+	)
+	# And the buttons can hold focus at all -- `grab_focus()` on a FOCUS_NONE node is a no-op,
+	# which is the other way this can silently do nothing.
+	var picks := 0
+	for node in main._focusable_under(main.picker):
+		if (node as Control).focus_mode != Control.FOCUS_NONE:
+			picks += 1
+	Check.at_least(float(picks), 1.0, "and has a control that FOCUS_NONE does not exclude")
+
 	main._on_pick(0)
 	await process_frame
 	Check.unchanged(main.picker.visible, false, "an upgrade choice closes the picker")
