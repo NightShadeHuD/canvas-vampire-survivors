@@ -66,6 +66,18 @@ const CLUSTER_RADIUS_MULT := 0.8
 ## `_fireNova`'s evolved second ring: `schedule(0.4, ...)` at `baseDmg * 0.6`.
 const NOVA_PULSE_DELAY := 0.4
 const NOVA_PULSE_DAMAGE := 0.6
+## `_fireNova`'s slow, and its own two inline fallbacks:
+##
+##     const slowPct = this.def.slowPct ?? 0.5;
+##     const slowDur = this.def.slowDuration ?? 1.2;
+##
+## The data declares BOTH on Frost Nova, so neither fallback is reachable today -- they are
+## here because the original writes them there. `CONFIG.NOVA_SLOW_DEFAULT` (0.5) is NOT the
+## source of the first one: it is declared in `src/config.ts` and read by nothing in the
+## whole TypeScript, and reproducing an unread constant as if it were the read site would be
+## exactly the kind of "ported but doing nothing" this port keeps finding.
+const NOVA_SLOW_PCT := 0.5
+const NOVA_SLOW_DURATION := 1.2
 
 ## The reach a weapon fires with, in ONE place.
 ##
@@ -240,12 +252,21 @@ static func fire(
 					1
 				)
 		"nova":
-			# `slowPct` (0.5) and `slowDuration` (1.2) are on the data and `src/entities.ts`
-			# reads them (`slowTimer`/`slowPct`, with `#88ccff` tinting in
-			# `entity-render.ts`), but `Foe` here has no slow field at all -- so Frost Nova
-			# damages and does not slow. REPORTED, NOT FIXED: a slow is a gameplay change
-			# and this round is a drawing one.
-			_strike_all_in_range(hero, foes, reach, dmg)
+			# THE SLOW. `slowPct` and `slowDuration` are on the Frost Nova def and
+			# `_fireNova` in `src/weapons.ts` reads BOTH and applies them to every foe the
+			# burst caught. `Foe` had no slow field at all, so until this was ported Frost
+			# Nova's own description -- "Expanding ring of ice slows foes caught in the
+			# burst" -- was a promise the code did not keep.
+			#
+			# THE FOES SLOWED ARE THE FOES THE DISC HIT, handed back by the same
+			# `_strike_disc` predicate the damage used, rather than a second disc
+			# re-derived here. A radius that damages one set and slows another is the
+			# Garlic ring's lie one weapon along.
+			var nova_hits := _strike_all_in_range(hero, foes, reach, dmg)
+			var nova_slow_pct: float = float(weapon.get("slowPct", NOVA_SLOW_PCT))
+			var nova_slow_dur: float = float(weapon.get("slowDuration", NOVA_SLOW_DURATION))
+			for caught in nova_hits:
+				caught.apply_slow(nova_slow_pct, nova_slow_dur)
 			if fx != null:
 				# `createParticles(player.x, player.y, '#aaeeff', 24)`, reproduced. The ring
 				# is NOT in the original -- `RingPulse` exists in `src/effects.ts` and nova
@@ -263,6 +284,12 @@ static func fire(
 			# CENTRE is read when the callback RUNS, so a hero who walked away takes the
 			# second ring where they are standing. The pulse carries those two numbers
 			# and `Game.step` lands it, which is the port of `effects.schedule`.
+			#
+			# AND THE SECOND RING DOES NOT SLOW. Read the original's callback again: it
+			# calls `e.takeDamage(d2)` and `createParticles` and writes NO `slowTimer`.
+			# The slow is the FIRST ring's alone -- the evolved Glacial Cascade is more
+			# damage, not more ice. A port that slowed on both would be kinder than the
+			# original and wrong, so `verify_weapons.gd` pins the asymmetry.
 			if evolved and fx != null:
 				fx.schedule_pulse(NOVA_PULSE_DELAY, reach, dmg * NOVA_PULSE_DAMAGE)
 		"instant":
@@ -454,13 +481,23 @@ static func _strike_sweep(hero: Hero, foes: Array, reach: float, dmg: float, evo
 
 ## Everything within `reach`. Garlic, Frost Nova and Area Mine all land here -- what
 ## separates them is range and cadence, which is in the data.
-static func _strike_all_in_range(hero: Hero, foes: Array, reach: float, dmg: float) -> void:
-	_strike_disc(hero.x, hero.y, foes, reach, dmg)
+##
+## Returns the foes it HIT, because Frost Nova has to do a second thing to exactly those
+## foes. Garlic and the mine ignore the result.
+static func _strike_all_in_range(hero: Hero, foes: Array, reach: float, dmg: float) -> Array:
+	return _strike_disc(hero.x, hero.y, foes, reach, dmg)
 
 ## The same disc, around an arbitrary point rather than the hero. `_strike_all_in_range`
 ## is this centred on the hero; the evolved Cluster Mine's second charge is the SECOND
 ## mine's own position, which is the only caller that needs it.
-static func _strike_disc(cx: float, cy: float, foes: Array, reach: float, dmg: float) -> void:
+##
+## `<= reach`, and the hits are returned so a caller that applies a SECOND effect -- the
+## nova's slow -- applies it to the set this predicate actually reached rather than to a
+## set it worked out again for itself.
+static func _strike_disc(
+	cx: float, cy: float, foes: Array, reach: float, dmg: float
+) -> Array:
+	var hit: Array = []
 	for foe in foes:
 		if foe.dead:
 			continue
@@ -468,6 +505,8 @@ static func _strike_disc(cx: float, cy: float, foes: Array, reach: float, dmg: f
 		var dy: float = foe.y - cy
 		if sqrt(dx * dx + dy * dy) <= reach:
 			foe.take_damage(dmg)
+			hit.append(foe)
+	return hit
 
 ## ONE LIGHTNING STRIKE: a RANDOM foe in range, and then the chain.
 ##

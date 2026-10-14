@@ -613,11 +613,17 @@ func _draw_orb(orb: Orb) -> void:
 	if orb.magnet_speed > 0.0:
 		draw_circle(p, orb.size * 0.45, Color(1, 1, 1, 0.85 * a))
 
-## A foe, matching `src/entity-render.ts`: body in its data colour, a pale core, and
-## an HP bar once it has been hit.
+## A foe, matching `src/entity-render.ts`: body in its data colour -- or the iced blue of a
+## SLOWED one -- a pale core, and an HP bar once it has been hit.
+##
+## THE BODY COLOUR COMES FROM THE FOE rather than from a second copy of the rule written
+## here. `renderEnemy`'s chain is `flashTimer` -> `slowTimer` -> the armed bomber's blink ->
+## the data colour, and `Foe.body_color` owns the slow branch of it -- so the colour a suite
+## asserts and the colour a player sees are the same value, and a slowed foe cannot be
+## simulated without being drawn.
 func _draw_foe(foe: Foe) -> void:
 	var p := Vector2(foe.x, foe.y)
-	draw_circle(p, foe.size, Color(foe.color))
+	draw_circle(p, foe.size, foe.body_color())
 	draw_circle(p, foe.size * 0.5, Color(1, 1, 1, 0.25))
 
 	if foe.hp < foe.max_hp:

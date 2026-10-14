@@ -444,6 +444,18 @@ func _init() -> void:
 			"%s is ITERATED by _draw, not merely simulated" % simulated
 		)
 
+	# AND A SLOWED FOE IS DRAWN SLOWED. `Foe.body_color` owns `renderEnemy`'s slow branch
+	# -- `else if (self.slowTimer > 0) ctx.fillStyle = '#88ccff'`. This is the cheap STATIC
+	# half of "the player can see it": `verify_weapons.gd` pins the value and
+	# `verify_pixels.gd` measures the pixel, and neither of them can notice a `_draw` that
+	# stopped calling the function -- which is the "state correct, representation wrong"
+	# defect this repository has shipped four times.
+	Check.unchanged(
+		contains(draw_src, "foe.body_color()"),
+		true,
+		"the foe's body is drawn in the colour its slow changes"
+	)
+
 	# THE GARLIC RING MUST NOT LIE ABOUT ITS REACH.
 	#
 	# It was drawn at `game.weapon["baseRange"]` -- 110 -- while the aura fires at

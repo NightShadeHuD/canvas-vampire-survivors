@@ -62,10 +62,16 @@ func _init() -> void:
 	_melee_evolves_into_a_circle()
 	_instant_evolves_into_a_storm()
 
-	# FROST NOVA'S SLOW. `slowPct`/`slowDuration` are on the data and the TypeScript reads
-	# both; the port read neither, so the advertised slow did nothing. See the section at
-	# the end of this file for what is measured and for the corpse it is measured against.
-	_frost_nova_slows_what_it_hits()
+	# FROST NOVA'S SLOW. `src/data.ts` declares `slowPct` and `slowDuration` on the def,
+	# `src/weapons.ts` reads both, `src/entities.ts` applies them to the foe's speed and
+	# `src/entity-render.ts` tints the result. `Foe` had no slow field at all, so the
+	# nova's own description -- "Expanding ring of ice slows foes caught in the burst" --
+	# was a promise nothing kept. Every measurement below drives the real table.
+	_the_slow_is_read_from_the_data()
+	_a_slowed_foe_moves_slower()
+	_a_slowed_foe_is_drawn_iced_blue()
+	_the_slow_expires_exactly_on_its_duration()
+	_the_evolved_second_ring_does_not_slow()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
@@ -1237,6 +1243,218 @@ func _instant_evolves_into_a_storm() -> void:
 		)
 
 
+# ---------------------------------------------------------------------------
+# FROST NOVA'S SLOW
+#
+# `src/data.ts` declares `slowPct: 0.5` and `slowDuration: 1.2` on Frost Nova, and the
+# description on that def is a promise: "Expanding ring of ice slows foes caught in the
+# burst." `src/weapons.ts` reads BOTH fields, `src/entities.ts` declares `slowPct`/
+# `slowTimer` and multiplies the foe's movement by them, and `src/entity-render.ts` tints
+# a slowed foe `#88ccff`. The Godot `Foe` had no slow field at all -- the nova damaged and
+# did not slow, and the field was invisible as well as absent.
+#
+# Every claim below drives the DATA rather than a hardcoded 0.5/1.2, so a retuned nova is
+# measured at its new numbers and a second weapon that declares a slow fails here until
+# its own branch reads it. The ways a slow can be wrong are each asserted: it never
+# applies, it applies but changes no speed, it changes the speed but nothing on screen, it
+# never expires, and -- the one a careful port adds rather than discovers -- the evolved
+# second ring slows when the original's does not.
+# ---------------------------------------------------------------------------
+
+## Every weapon whose def carries a `slowPct` must slow what its fire caught, by the
+## declared fraction, for the declared duration.
+##
+## Rule 12's shape -- iterate the real table. `declaring` keeps the loop from being
+## vacuous: a table where nothing declared a slow would otherwise pass by checking nothing.
+func _the_slow_is_read_from_the_data() -> void:
+	print("\n-- the frost nova slow: declared, applied, visible, expired --")
+	var declaring := 0
+	for def in Weapons.WEAPONS.values():
+		if not def.has("slowPct"):
+			continue
+		declaring += 1
+		var id: String = def["id"]
+		var s := _scene(id, float(def["baseRange"]) * 0.4)
+		var foe: Foe = s["foe"]
+		Check.unchanged(
+			foe.slow_timer, 0.0, "%s's target starts unslowed, so a slow is attributable" % id
+		)
+		WeaponFire.fire(def, s["game"].hero, s["game"].foes, [])
+		Check.rose(0.0, foe.slow_timer, "%s SLOWS the foe its fire caught" % id)
+		if foe.slow_timer <= 0.0:
+			continue
+		Check.approx(
+			foe.slow_timer, float(def["slowDuration"]), "%s slows for its declared slowDuration" % id
+		)
+		Check.approx(
+			foe.slow_pct, float(def["slowPct"]), "%s removes its declared slowPct of speed" % id
+		)
+	Check.at_least(float(declaring), 1.0, "a weapon declares slowPct, so the loop above is not vacuous")
+
+
+## How far the scene's foe travels in ONE frame of `chase`, with or without the slow.
+##
+## Both runs are the SAME scene -- same foe, same standoff, same frame, same direction --
+## and differ in exactly one thing: whether the nova was fired first. So the ratio between
+## them is the slow, and not the geometry, the speed or the aim.
+func _frame_step(def: Dictionary, slowed: bool) -> float:
+	var s := _scene(str(def["id"]), float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	if slowed:
+		WeaponFire.fire(def, g.hero, g.foes, [])
+	var before: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	return absf(foe.x - before)
+
+
+## THE CLAIM A PLAYER CAN ACTUALLY SEE: a slowed foe moves slower, by the fraction the data
+## declares. Measured as DISTANCE PER FRAME, because distance is what the player sees and
+## it is the number the slow is supposed to change.
+func _a_slowed_foe_moves_slower() -> void:
+	var def := _weapon("frost_nova")
+	var free_step := _frame_step(def, false)
+	var slowed_step := _frame_step(def, true)
+	Check.rose(0.0, free_step, "an unslowed foe moves at all, so the comparison is measurable")
+	Check.approx(
+		slowed_step / free_step,
+		1.0 - float(def["slowPct"]),
+		"a slowed foe moves at `1 - slowPct` of its speed",
+		0.001
+	)
+
+
+## A SLOW THE PLAYER CANNOT SEE IS HALF A FEATURE. `renderEnemy`, `src/entity-render.ts`:
+##
+##     } else if (self.slowTimer > 0) {
+##         ctx.fillStyle = '#88ccff';
+##
+## `Foe.body_color` is that branch and `main.gd`'s `_draw_foe` draws its result, so this
+## asserts the colour a player would see rather than one worked out for the test.
+func _a_slowed_foe_is_drawn_iced_blue() -> void:
+	var def := _weapon("frost_nova")
+	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	Check.unchanged(foe.body_color(), Color(foe.color), "an unslowed foe wears its own data colour")
+	WeaponFire.fire(def, g.hero, g.foes, [])
+	Check.rose(0.0, foe.slow_timer, "the foe under test is slowed, or the colour below means nothing")
+	Check.unchanged(foe.body_color(), Color("88ccff"), "a slowed foe is drawn in the original's #88ccff")
+	# ...AND THE TINT REVERSES. The half of a state change that gets forgotten is the way
+	# back: an expired slow has to give the foe its own colour again.
+	foe.slow_timer = 0.0
+	Check.unchanged(
+		foe.body_color(), Color(foe.color), "and it gets its own colour back once the slow is over"
+	)
+
+
+## THE SLOW MUST EXPIRE, and `slowDuration` is 1.2s -- so the edge is the tick that lands
+## elapsed exactly ON that number.
+##
+## Pinned BOTH ways, because either half alone is satisfied by a wrong implementation: a
+## slow that never expires passes "still slowed before the edge", and a slow that never
+## applies passes "free at the edge". The countdown is driven frame by frame through the
+## foe's own `chase`, which is the only thing that ages it in play.
+func _the_slow_expires_exactly_on_its_duration() -> void:
+	var def := _weapon("frost_nova")
+	var pct := float(def["slowPct"])
+	var dur := float(def["slowDuration"])
+	# DERIVED from the data and the frame rate rather than written as 72, so a retuned
+	# `slowDuration` moves the edge with it.
+	var steps := int(round(dur / FRAME))
+	var free_step := _frame_step(def, false)
+
+	# THE EDGE WITHOUT ANY ACCUMULATION IN IT, first, because this half cannot be a float
+	# accident in either direction: a timer of exactly one frame is slowed, and ONE tick of
+	# exactly that frame takes it to exactly zero (`x - x` is exact in IEEE 754).
+	var edge := Foe.new(Enemies.ENEMIES["BAT"], 0.0, 0.0)
+	edge.slow_pct = pct
+	edge.slow_timer = FRAME
+	Check.unchanged(edge.slow_mult(), 1.0 - pct, "a timer of exactly one frame is still slowed")
+	edge.chase(100.0, 0.0, FRAME)
+	Check.approx(edge.slow_timer, 0.0, "and one tick of that frame lands it on exactly zero", 0.0)
+	Check.unchanged(edge.slow_mult(), 1.0, "so zero is the boundary: NOT slowed")
+
+	# ...and the same edge driven from the data, through a real fire.
+	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	WeaponFire.fire(def, g.hero, g.foes, [])
+	Check.approx(foe.slow_timer, dur, "the nova arms the timer at its declared slowDuration")
+
+	# ONE STEP SHORT OF THE EDGE: still slowed, and still moving at the slowed rate.
+	for i in steps - 2:
+		foe.chase(g.hero.x, g.hero.y, FRAME)
+	var x_last: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.approx(
+		absf(foe.x - x_last),
+		free_step * (1.0 - pct),
+		"the frame one step short of slowDuration is still SLOWED",
+		1e-9
+	)
+
+	# THE EDGE ITSELF: elapsed == slowDuration, to the frame.
+	var x_edge: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.approx(foe.slow_timer, 0.0, "the timer reaches zero at exactly slowDuration", 1e-9)
+	Check.unchanged(foe.slow_mult(), 1.0, "so AT exactly slowDuration the slow is OVER")
+	Check.approx(
+		absf(foe.x - x_edge), free_step, "and that frame covers the full UNSLOWED distance", 1e-9
+	)
+
+	# ONE STEP PAST IT: still over, and the countdown stops rather than running away.
+	var x_past: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.unchanged(foe.slow_mult(), 1.0, "one step PAST the boundary it is still over")
+	Check.unchanged(foe.slow_timer, 0.0, "and the timer stopped at zero instead of counting on")
+	Check.approx(absf(foe.x - x_past), free_step, "and that frame is unslowed too", 1e-9)
+
+
+## THE EVOLVED SECOND RING DOES NOT SLOW, and that is the ORIGINAL'S asymmetry rather than
+## an omission here. `_fireNova`'s scheduled callback, from `src/weapons.ts`:
+##
+##     game.effects?.schedule?.(0.4, () => {
+##         ...
+##         for (const e of cands) {
+##             const d = Math.hypot(e.x - player.x, e.y - player.y);
+##             if (d < r) e.takeDamage(d2);
+##         }
+##         game.createParticles(player.x, player.y, '#88ccff', 16);
+##     });
+##
+## `takeDamage` and NOTHING ELSE: no `slowTimer` write appears inside it, unlike the first
+## ring's loop three lines above it in the same function. The evolved Glacial Cascade is
+## more damage, not more ice -- and a port that slowed on both rings would be kinder than
+## the original and wrong.
+func _the_evolved_second_ring_does_not_slow() -> void:
+	var def := _weapon("frost_nova")
+	var level := int(def["evolveLevel"])
+	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	var full: float = foe.hp
+	WeaponFire.fire(def, g.hero, g.foes, [], level, g.fx)
+	Check.fell(full, foe.hp, "at level %d the first ring lands" % level)
+	Check.rose(0.0, foe.slow_timer, "and the first ring slows")
+	# PRECONDITION: the first ring's slow is cleared, so a slow found after the pulse can
+	# only have come from the pulse. Without this the pulse's own silence is unobservable.
+	foe.slow_timer = 0.0
+	foe.slow_pct = 0.0
+	# Nothing may fire during the step either, or a second FIRST ring would be
+	# indistinguishable from the second ring under test.
+	g.hero.weapons.clear()
+	var before: float = foe.hp
+	# 0.5s of real play, past the 0.4s the pulse is scheduled for. `Game.step` is what lands
+	# it, so this drives the same path a run drives.
+	for i in 30:
+		g.step(FRAME, Vector2.ZERO)
+	Check.fell(before, foe.hp, "the evolved second ring lands its damage 0.4s later")
+	Check.unchanged(
+		foe.slow_timer, 0.0, "and it does NOT slow -- the original's callback writes no slowTimer"
+	)
+
+
 func _check(cond: bool, label: String, detail: String) -> void:
 
 	if cond:
@@ -1244,438 +1462,3 @@ func _check(cond: bool, label: String, detail: String) -> void:
 	else:
 		print("  FAIL %s  (%s)" % [label, detail])
 		ok = false
-
-
-# ---------------------------------------------------------------------------
-# FROST NOVA'S SLOW -- `slowPct` AND `slowDuration`, WHICH THIS PORT DID NOT READ
-#
-# `src/data.ts` declares two fields on Frost Nova that no other weapon has:
-#
-#     slowPct: 0.5,
-#     slowDuration: 1.2,
-#
-# and the data's own description sells them to the player: "Expanding ring of ice slows
-# foes caught in the burst." Three places in the TypeScript read them, and this file
-# quotes each rather than paraphrasing it:
-#
-#   `src/weapons.ts` `_fireNova`:
-#       const slowPct = this.def.slowPct ?? 0.5;
-#       const slowDur = this.def.slowDuration ?? 1.2;
-#       ...
-#       if (d < range) { ... enemy.takeDamage(dmg);
-#           if (!enemy.slowTimer || enemy.slowTimer < slowDur) {
-#               enemy.slowTimer = slowDur; enemy.slowPct = slowPct; } }
-#
-#   `src/entities.ts` `update`, once per frame and BEFORE the archetype branch:
-#       if (this.slowTimer > 0) this.slowTimer -= dt;
-#       const slowMult = this.slowTimer > 0 ? 1 - (this.slowPct || 0) : 1;
-#   and `slowMult` multiplies `this.speed` on every movement branch -- chaser, ranged,
-#   dasher and bomber alike.
-#
-#   `src/entity-render.ts`: `else if (self.slowTimer > 0) ctx.fillStyle = '#88ccff';`
-#
-# The Godot `Foe` had NO slow state at all, so Frost Nova damaged and did not slow.
-# `weapon-fire.gd`'s nova branch said so in a comment and reported it rather than
-# inventing it.
-#
-# WHAT IS MEASURED, AND WHAT IS REFUSED
-#
-# The claim is "a foe Frost Nova hit MOVES SLOWER, and RECOVERS after `slowDuration`".
-# This measures DISTANCE MOVED, through the real simulation. It never asks whether a
-# field exists, which function set it, or whether a variable was assigned -- a `Foe`
-# handed a `slow_pct` field that `chase()` ignores fails every assertion below, which is
-# the whole point of measuring pedestrians rather than declarations.
-#
-# THE INSTRUMENT. A chaser walks straight at the hero at `speed` px/s, so its displacement
-# in one 1/60s frame is exactly `speed * FRAME` -- a CONSTANT. That constancy is asserted
-# as a control before anything is concluded from it, because a per-frame distance is only
-# an instrument if it reads the same number for a foe nothing has touched. A slowed foe
-# reads `speed * FRAME * (1 - slowPct)`, which is a different number the same instrument
-# can see. Both scenes are stepped through `Game.step`, so the weapon fires on the game's
-# own schedule and the foe walks its own archetype's path.
-#
-# THE ONE THING THAT MAKES THIS HARD: A CORPSE ALSO STANDS STILL.
-#
-# Frost Nova DAMAGES. A foe it killed travels 0px for the rest of time, and 0px is exactly
-# what a 100% slow would look like -- so a naive before/after distance comparison reads a
-# corpse as a PERFECT slow and goes green on a port that never implemented one. Four
-# separate things separate the two, and all four are asserted:
-#
-#   * `Check.sturdy` gives the measured foe a million HP, so the blast's ~28 damage cannot
-#     kill it. That is a stated PRECONDITION, not the claim.
-#   * the measured foe must be alive, above zero HP AND still in `game.foes` on EVERY
-#     measured frame. `_remove_dead` takes a dead foe out of that list in the frame it dies,
-#     so presence plus HP is what makes "it moved slowly" a statement about a living foe.
-#   * the control scene's foe is required to be alive on every frame too, so "nothing
-#     changed" cannot be a corpse on both sides.
-#   * a PURPOSE-BUILT CORPSE is measured beside them (`_a_corpse_is_not_a_slow`): the same
-#     blast, a 1 HP foe, reading 0px. The slowed foe's step must be strictly GREATER than
-#     the corpse's and strictly LESS than the control's -- three distinct numbers, so
-#     "slower" cannot be satisfied by "dead".
-#
-# AND THE DURATION BOUNDARY IS PINNED AT BOTH ENDS, in the project's usual form. The last
-# frame that lies wholly inside the declared window must be slow; the first frame that lies
-# wholly outside it must be full speed. The single frame ON the arithmetic boundary is
-# deliberately NOT pinned: `src/entities.ts` decays the timer BEFORE it reads it, so a port
-# that read it first would release one frame later, and failing a correct port over that
-# would be this repository's oldest verification mistake. The frame COUNT is asserted to
-# within one frame of `slowDuration`, which is the claim a player can actually perceive.
-# ---------------------------------------------------------------------------
-
-## How many frames past the declared slow the profile is watched, so the RELEASE lands
-## INSIDE the measured window instead of on its edge. Eight is a seventh of a second --
-## long enough to watch full speed come back, short enough that the weapon cannot re-fire
-## inside the window. Frost Nova's cooldown is 3.2s against a 1.2s slow, and that bound is
-## READ from the weapon rather than trusted (`_slowing_window`).
-const SLOW_TAIL := 8
-## Where "slowed" ends and "full speed" begins, as a fraction of the way between them.
-## Half way, so neither reading is near the line: the two values this sorts are
-## `speed * FRAME` and `speed * FRAME * (1 - slowPct)`.
-const SLOW_MIDPOINT := 0.5
-## How many FRAMES of slack a duration assertion allows.
-##
-## ONE of it is the decay-order difference and is deliberate. `src/entities.ts` writes
-## `if (this.slowTimer > 0) this.slowTimer -= dt;` BEFORE it reads the timer, so the frame
-## the slow was applied on already burns a frame of it and a 1.2s slow covers 71 frames. A
-## port that reads first and decays after covers 72. Both are defensible readings of the
-## same two lines, both recover within 1/60s of the declared duration, and failing one of
-## them would be this repository's oldest verification mistake -- a check that calls a
-## working fix broken. The frame exactly ON the arithmetic boundary is therefore NOT pinned;
-## the last frame inside the window and the first frame past it both are.
-##
-## THE HALF IS FLOAT, AND IT WAS MEASURED. `(1.2 + 0.6) / (1.0 / 60.0)` is
-## 107.99999999999999, so a slack of exactly 1.0 rejects a port that is precisely one frame
-## over -- which the read-first variant above is. Measured: it read 109 against 108 and
-## failed on a 1.0000000000000142 difference.
-const SLOW_FRAME_SLACK := 1.5
-## How many frames the corpse probe is watched for. One would settle it -- a dead foe never
-## moves again -- and ten say so without resting on a single frame.
-const CORPSE_FRAMES := 10
-
-
-## EVERY weapon in the data that declares a slow, in table order.
-##
-## The sweep is the point of rule 12: a weapon ADDED to `src/data.ts` with a `slowPct` is
-## measured by this code the day it is added, rather than the day somebody remembers to
-## extend a hand-written list.
-func _slowing_weapons() -> Array:
-	var out: Array = []
-	for def in Weapons.WEAPONS.values():
-		if def.has("slowPct") and def.has("slowDuration"):
-			out.append(def)
-	return out
-
-
-## THE HEADLINE. For every weapon in the data that declares a slow: a foe it hits must
-## move slower than the same foe it did not hit, for the declared duration, and must be
-## back to full speed one step past it.
-func _frost_nova_slows_what_it_hits() -> void:
-	print("\n-- a foe hit by Frost Nova moves SLOWER --")
-	var slowness := _slowing_weapons()
-	Check.at_least(
-		float(slowness.size()),
-		1.0,
-		"the data declares a slow a weapon is supposed to apply (%d weapon(s))" % slowness.size()
-	)
-	for def in slowness:
-		_one_weapon_slows(def)
-	# THE TRAP, measured rather than described, so the discrimination above is demonstrated
-	# rather than asserted in a comment.
-	if not slowness.is_empty():
-		_a_corpse_is_not_a_slow(slowness[0])
-
-
-## The window a slow is measured over, in frames, in two parts.
-##
-## `want` is the declared duration plus `SLOW_TAIL`, which puts the release inside the
-## measurement. `ceiling` is the weapon's OWN cooldown: the slow is re-applied on every
-## fire, so a window that ran past a cooldown would measure a SECOND application and report
-## it as a first one. Frost Nova's 3.2s against a 1.2s slow makes that bound loose, and it
-## is read from `WeaponFire.cooldown_for` rather than assumed, so a slow retuned past its
-## own cooldown fails loudly at `_one_weapon_slows` instead of quietly measuring nonsense.
-func _slowing_window(def: Dictionary) -> Dictionary:
-	var slow_dur := float(def["slowDuration"])
-	var want := int(ceil(slow_dur / FRAME)) + SLOW_TAIL
-	var hero := Game.without_spawns().hero
-	var cd_frames := int(WeaponFire.cooldown_for(def, hero, 1) / FRAME)
-	return {"frames": mini(want, cd_frames - 2), "want": want, "cooldown": cd_frames, "slow_dur": slow_dur}
-
-
-## PER-FRAME DISPLACEMENT of one foe, driven by the real simulation, with its CONTROL
-## scene built in the same loop.
-##
-## `firing` is the ONLY difference between the two runs: whether the hero holds the weapon.
-## Same foe, same distance, same frames, same hero movement -- so a difference between the
-## two per-frame distances is the weapon's doing and not the geometry's.
-##
-## THE HERO RUNS. `Config.PLAYER_SPEED` is 240 against a bat's 110, so the measured foe is
-## always left behind and never arrives. A foe that reached the hero would sit inside
-## `chase`'s `d <= 0.001` guard and read 0px -- which is the corpse reading this section
-## exists to keep out, arrived at from the other direction.
-func _slow_profile(def: Dictionary, frames: int) -> Dictionary:
-	var out := {}
-	for firing in [true, false]:
-		var g := Game.without_spawns()
-		g.hero.weapons.clear()
-		if firing:
-			g.hero.add_weapon(def)
-		# BEHIND the hero's run and well inside the weapon's reach -- and the reach is READ
-		# from the weapon, so a retuned Frost Nova moves the placement with it.
-		var reach := WeaponFire.reach_for(def, g.hero, 1)
-		var foe := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x - reach * 0.6, g.hero.y))
-		g.foes.append(foe)
-		var hp_before: float = foe.hp
-		var disp: Array = []
-		var living := 0
-		for i in frames:
-			var bx: float = foe.x
-			var by: float = foe.y
-			g.step(FRAME, Vector2.RIGHT)
-			disp.append(sqrt(pow(foe.x - bx, 2) + pow(foe.y - by, 2)))
-			if not foe.dead and foe.hp > 0.0 and g.foes.has(foe):
-				living += 1
-		out["firing" if firing else "control"] = {
-			"disp": disp,
-			"living": living,
-			"foe": foe,
-			"damage": hp_before - float(foe.hp),
-			"steps": _distinct(disp)
-		}
-	return out
-
-
-## How many DIFFERENT per-frame distances a run produced, to four decimals.
-##
-## One is what a foe walking a straight line at a constant speed produces, and it is the
-## control that says the instrument is steady. More than one means the foe's speed changed
-## for a reason other than the thing under test -- arriving at the hero, or an archetype's
-## own cycle -- and the reading is not the clean one the assertions below assume.
-func _distinct(values: Array) -> int:
-	var seen := {}
-	for v in values:
-		seen[snappedf(v, 0.0001)] = true
-	return seen.size()
-
-
-## The total distance `values` covers in its first `n` frames.
-func _travelled(values: Array, n: int) -> float:
-	var total := 0.0
-	for i in mini(n, values.size()):
-		total += float(values[i])
-	return total
-
-
-## The 1-indexed frames of a run whose step is closer to "slowed" than to "full speed".
-func _slowed_frames(nova: Array, control: Array, slow_pct: float) -> Array:
-	var out: Array = []
-	var cut := 1.0 - slow_pct * SLOW_MIDPOINT
-	for i in mini(nova.size(), control.size()):
-		if float(nova[i]) <= float(control[i]) * cut:
-			out.append(i + 1)
-	return out
-
-
-## The step ONE FOE takes on the frame the weapon first fires, over the step an untouched
-## foe takes. The measured `1 - slowPct`, as a single number, so a mutated `slowPct` can be
-## compared with the declared one without a second copy of the scene.
-func _first_step_ratio(def: Dictionary, frames: int) -> float:
-	var p := _slow_profile(def, frames)
-	var nova: Array = p["firing"]["disp"]
-	var control: Array = p["control"]["disp"]
-	if control.is_empty() or float(control[0]) <= 0.0:
-		return -1.0
-	return float(nova[0]) / float(control[0])
-
-
-## ONE WEAPON'S SLOW. All of it, from the data's own two numbers.
-func _one_weapon_slows(def: Dictionary) -> void:
-	var id: String = def["id"]
-	var slow_pct := float(def["slowPct"])
-	var slow_dur := float(def["slowDuration"])
-	var window := _slowing_window(def)
-	var frames: int = window["frames"]
-	var w := slow_dur / FRAME  # the declared slow, in FRAMES
-	print("\n   %s: slowPct %0.3f, slowDuration %0.3fs (%0.1f frames), over %d frames" % [id, slow_pct, slow_dur, w, frames])
-
-	# THE WINDOW MUST COVER THE CLAIM. A window shorter than the declared slow cannot test
-	# it, and a window longer than the cooldown measures a second application -- both fail
-	# here, by name, rather than being silently measured wrong.
-	Check.at_least(
-		float(frames),
-		w + 2.0,
-		"%s: the window covers the declared slow and one step past it" % id
-	)
-	Check.at_most(
-		float(frames),
-		float(window["cooldown"]) - 2.0,
-		"%s: PRECONDITION -- the window ends before the weapon can fire again" % id
-	)
-
-	var profile := _slow_profile(def, frames)
-	var nova_run: Dictionary = profile["firing"]
-	var ctrl_run: Dictionary = profile["control"]
-	var nova: Array = nova_run["disp"]
-	var control: Array = ctrl_run["disp"]
-	if frames < 2 or nova.size() < frames or control.size() < frames:
-		Check.unchanged(false, true, "%s: the profile produced %d frames" % [id, frames])
-		return
-
-	# ---- PRECONDITIONS. Each one is a way this measurement could be impossible or
-	# ---- meaningless, stated before anything is concluded from it.
-	Check.unchanged(
-		str(Enemies.ENEMIES["BAT"]["archetype"]),
-		"chaser",
-		"PRECONDITION: a bat walks a straight line at one speed, which is what makes a step an instrument"
-	)
-	Check.rose(0.0, float(nova_run["damage"]), "%s: the blast REACHED the foe" % id)
-	Check.unchanged(
-		int(nova_run["living"]),
-		frames,
-		"%s: and that foe is ALIVE and in the world on every frame -- a corpse moves 0px too" % id
-	)
-	Check.unchanged(
-		int(ctrl_run["living"]),
-		frames,
-		"%s: CONTROL -- the un-hit foe is alive and in the world on every frame" % id
-	)
-	# THE INSTRUMENT ITSELF, against the data rather than against a number written here.
-	var full_step := float(Enemies.ENEMIES["BAT"]["speed"]) * FRAME
-	Check.approx(
-		float(control[0]),
-		full_step,
-		"%s: CONTROL -- an untouched foe steps `speed * dt`, the data's own speed" % id,
-		0.001
-	)
-	Check.unchanged(
-		int(ctrl_run["steps"]),
-		1,
-		"%s: CONTROL -- and that step is CONSTANT, so a change in the other run is the slow" % id
-	)
-
-	# ---- THE CLAIM: the foe that was hit moves slower.
-	# FRAMES 1..w COVER THE DECLARED WINDOW (frame k is the half-open interval
-	# [(k-1)*dt, k*dt)), so frame w is the frame ON the arithmetic boundary and frame w + 1
-	# is the first wholly outside it. `w` ITSELF IS NOT PINNED -- see `SLOW_FRAME_SLACK` --
-	# and `still_in` is the last frame EVERY faithful reading must still be slowing.
-	var at_boundary := int(floor(w))
-	var still_in := at_boundary - 1
-	var one_past := at_boundary + 1
-	Check.fell(
-		_travelled(control, at_boundary),
-		_travelled(nova, at_boundary),
-		"%s: over the declared slowDuration the hit foe travels LESS" % id
-	)
-	Check.approx(
-		_travelled(nova, at_boundary) / _travelled(control, at_boundary),
-		1.0 - slow_pct,
-		"%s: ... by the fraction the declared slowPct says" % id,
-		0.02
-	)
-	Check.approx(
-		float(nova[0]) / float(control[0]),
-		1.0 - slow_pct,
-		"%s: the very first frame after the blast is already at 1 - slowPct" % id,
-		0.02
-	)
-
-	# ---- THE BOUNDARY, pinned at both ends and one frame past each.
-	var slowed := _slowed_frames(nova, control, slow_pct)
-	var released := (int(slowed[-1]) + 1) if not slowed.is_empty() else -1
-	Check.approx(
-		float(slowed.size()),
-		w,
-		"%s: the slow lasts the declared slowDuration, to within one frame" % id,
-		SLOW_FRAME_SLACK
-	)
-	Check.approx(
-		float(released),
-		w,
-		"%s: ... and RELEASES at it (frame %d of %0.1f)" % [id, released, w],
-		SLOW_FRAME_SLACK
-	)
-	Check.approx(
-		float(nova[still_in - 1]) / float(control[still_in - 1]),
-		1.0 - slow_pct,
-		"%s: STILL SLOWED on frame %d, inside the declared window" % [id, still_in],
-		0.02
-	)
-	Check.approx(
-		float(nova[one_past - 1]) / float(control[one_past - 1]),
-		1.0,
-		"%s: and back to FULL SPEED on frame %d, the first frame past it" % [id, one_past],
-		0.02
-	)
-
-	# ---- THE DATA IS READ, not the numbers 0.5 and 1.2. The same def with ONE field
-	# ---- changed, so nothing else about the scene moves.
-	var gentler: Dictionary = def.duplicate()
-	gentler["slowPct"] = slow_pct * 0.5
-	Check.approx(
-		_first_step_ratio(gentler, frames),
-		1.0 - slow_pct * 0.5,
-		"%s: halving slowPct halves the slow -- the number is READ, not hardcoded" % id,
-		0.02
-	)
-	var longer: Dictionary = def.duplicate()
-	longer["slowDuration"] = slow_dur + 0.6
-	var longer_window := _slowing_window(longer)
-	var longer_profile := _slow_profile(longer, int(longer_window["frames"]))
-	var longer_slowed := _slowed_frames(
-		longer_profile["firing"]["disp"], longer_profile["control"]["disp"], slow_pct
-	)
-	Check.approx(
-		float(longer_slowed.size()),
-		(slow_dur + 0.6) / FRAME,
-		"%s: and slowDuration + 0.6s is 0.6s more slow -- the duration is READ too" % id,
-		SLOW_FRAME_SLACK
-	)
-
-
-## A CORPSE IS NOT A SLOW, MEASURED RATHER THAN ARGUED.
-##
-## The same weapon and the same blast, on a foe with 1 HP. It dies, `_remove_dead` takes it
-## out of `game.foes` in that frame, and it never moves again -- which is EXACTLY the
-## reading a naive "did it travel less?" test would accept as a perfect slow. The reading is
-## put on the record beside the slowed foe's, and the slowed foe's is required to sit
-## strictly between it and the untouched control: three distinct numbers, so "slower" cannot
-## be satisfied by "dead".
-func _a_corpse_is_not_a_slow(def: Dictionary) -> void:
-	print("\n-- a corpse is NOT a slow --")
-	var g := Game.without_spawns()
-	g.hero.weapons.clear()
-	g.hero.add_weapon(def)
-	var reach := WeaponFire.reach_for(def, g.hero, 1)
-	var corpse := Foe.new(Enemies.ENEMIES["BAT"], g.hero.x - reach * 0.6, g.hero.y)
-	corpse.max_hp = 1.0
-	corpse.hp = 1.0
-	g.foes.append(corpse)
-	var moved := 0.0
-	var removed := true
-	for i in CORPSE_FRAMES:
-		var bx: float = corpse.x
-		var by: float = corpse.y
-		g.step(FRAME, Vector2.RIGHT)
-		moved += sqrt(pow(corpse.x - bx, 2) + pow(corpse.y - by, 2))
-		if g.foes.has(corpse):
-			removed = false
-	Check.unchanged(corpse.dead, true, "the same blast KILLS a 1 HP foe")
-	Check.approx(moved, 0.0, "and a dead foe travels 0px -- what a naive distance test reads as a 100% slow")
-	Check.unchanged(
-		removed,
-		true,
-		"`_remove_dead` takes it OUT of `game.foes` in the frame it dies, which is what `living` counts"
-	)
-
-	# THE THREE-WAY SEPARATION, on the frame that matters.
-	var window := _slowing_window(def)
-	var profile := _slow_profile(def, int(window["frames"]))
-	var slowed_step := float(profile["firing"]["disp"][0])
-	var full_step := float(profile["control"]["disp"][0])
-	Check.differs(slowed_step, moved, 0.01, "the slowed foe MOVED, where the corpse did not")
-	Check.differs(full_step, slowed_step, 0.01, "and moved LESS than the foe the nova never touched")
-	Check.unchanged(
-		[slowed_step > moved, slowed_step < full_step],
-		[true, true],
-		"so the slowed foe sits strictly BETWEEN a corpse and an untouched one"
-	)
-
