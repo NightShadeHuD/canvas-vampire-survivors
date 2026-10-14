@@ -204,7 +204,7 @@
     },
     {
         "gate": "check:reach",
-        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), entry[\"def\"][\"description\"]]' --replace '\t\tvar other: Dictionary = _offers[(i + 1) % _offers.size()]\n\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), other[\"def\"][\"description\"]]'",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t\tb.text = offer_text' --replace '\t\tvar other: Dictionary = _offers[(i + 1) % _offers.size()]\n\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), other[\"def\"][\"description\"]]'",
         "creates": [],
         "requires": ["godot"],
         "run": "node scripts/check-reach.mjs",
@@ -239,7 +239,7 @@
     },
     {
         "gate": "check:reach",
-        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), entry[\"def\"][\"description\"]]' --replace '\t\tvar other: Dictionary = _offers[(i + 1) % _offers.size()]\n\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), other[\"def\"][\"description\"]]'",
+        "break": "node scripts/edit.mjs godot/scripts/main.gd --anchor '\t\tb.text = offer_text' --replace '\t\tvar other: Dictionary = _offers[(i + 1) % _offers.size()]\n\t\tb.text = \"%s%s\\n%s\" % [entry[\"def\"][\"name\"], Upgrades.label(entry), other[\"def\"][\"description\"]]'",
         "creates": [],
         "requires": ["godot"],
         "run": "node scripts/check-reach.mjs",
