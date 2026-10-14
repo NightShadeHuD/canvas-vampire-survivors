@@ -141,6 +141,30 @@ try {
     // exit code and the command. So: stderr, verbatim, plus the two facts a reader needs to
     // reproduce it by hand.
     const stderr = String(err.stderr ?? '').trim();
+
+    // A COMMIT THAT IS NOT ON GITHUB YET IS THE NORMAL CASE, NOT A FAILURE.
+    //
+    // `npm run ci` runs BEFORE `git push` -- it has to, because `pre-push` refuses without the
+    // receipt it writes. But a commit status can only be attached to a commit the server has
+    // seen, so on an unpushed branch GitHub answers HTTP 422 "No commit found for SHA".
+    //
+    // **That is not an error, and the first version of this reported it as one** -- then sent
+    // the reader to `gh auth status`, which was fine. The right answer is to say what actually
+    // happened and name the command that finishes the job once the commit exists.
+    const notPushedYet = /No commit found for SHA/i.test(stderr);
+
+    if (notPushedYet) {
+        say(`the commit ${short} is not on GitHub yet, so the status cannot be set.`);
+        say('  That is expected: `npm run ci` runs before `git push`, and a status needs a');
+        say('  commit the server has. The RECEIPT is written and `pre-push` will accept it.');
+        say('');
+        say('  To publish the status once it is pushed:');
+        say('');
+        say('      git push -u origin <branch>');
+        say('      npm run ci:report');
+        process.exit(ok ? 0 : 1);
+    }
+
     say(`FAILED to report the status to GitHub.`);
     if (stderr) say(`  gh said: ${stderr.split('\n').slice(0, 3).join('\n            ')}`);
     say(`  The gate itself ${ok ? 'PASSED' : 'FAILED'}; only the reporting failed.`);

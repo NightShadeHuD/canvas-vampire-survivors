@@ -440,9 +440,17 @@ commit, and **nothing reads it**. Its only job is to make "I ran the gate" check
 somebody else.
 
 ```bash
-npm run ci          # the full gate, then report it
+npm run ci                  # the full gate, writes the receipt, tries the status
 npm run ci -- --no-report   # run the gate, record locally, tell GitHub nothing
+npm run ci:report           # AFTER pushing: publish the status for that commit
 ```
+
+**The receipt and the status happen at different moments, and that is unavoidable.** A commit
+status can only attach to a commit GitHub has seen; `npm run ci` must run _before_ `git push`
+because `pre-push` reads the receipt. So the receipt is written first (enforcement) and
+`ci:report` publishes afterwards (evidence). **`ci` says so on an unpushed branch rather than
+reporting a failure** -- the first version treated GitHub's `422 No commit found for SHA` as an
+error and blamed `gh auth status`, which was fine.
 
 **What it costs, and this is the honest part — it is more than was planned.** The intent was
 to keep the required check and move only the runner. **That turned out to be impossible**: the
