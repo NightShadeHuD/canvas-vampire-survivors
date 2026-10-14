@@ -208,6 +208,60 @@ func _init() -> void:
 		"the hero CONTRIBUTES PIXELS (the bug that started all of this)"
 	)
 
+	# --- THE SLOW IS VISIBLE ----------------------------------------------------------
+	# Frost Nova's slow halves a foe's speed AND casts it `#88ccff` -- `renderEnemy`'s
+	# `else if (self.slowTimer > 0)` branch. The speed half is asserted headlessly in
+	# `verify_weapons.gd`, against the field. This is the half a player actually receives,
+	# and it is measured the way this tier measures everything: put the state on a foe,
+	# capture, and require the screen to say so.
+	#
+	# PAUSED, so the ONLY difference between the captures is the odd one out -- `game.foes`
+	# is not in `NOT_AN_EFFECT` by accident, and an unpaused frame differs from the next one
+	# by thousands of pixels of walking.
+	var slow_state: int = main.state
+	main.state = main.State.PAUSED
+	main.paused_panel.visible = false
+	main.game.foes.clear()
+	var slow_foe := _stray_foe(main.game, 90.0, 0.0)
+	# A pixel that is BODY and nothing else: outside the pale core (`size * 0.5`) and
+	# inside the rim, on the horizontal through the foe's centre. At full health the HP bar
+	# is not drawn at all, so no other element reaches here.
+	var foe_on_screen: Vector2 = main.get_canvas_transform() * Vector2(slow_foe.x, slow_foe.y)
+	var sx := int(foe_on_screen.x + slow_foe.size * 0.75)
+	var sy := int(foe_on_screen.y)
+	var slow_before := await _capture_of(main)
+	var free_px := slow_before.get_pixel(sx, sy)
+	slow_foe.slow_timer = float(_weapon_by_id("frost_nova")["slowDuration"])
+	var slow_after := await _capture_of(main)
+	var slowed_px := slow_after.get_pixel(sx, sy)
+	# THE CONTROL BESIDE IT, and it is the one that makes the first claim mean something:
+	# taking the slow OFF has to put the pixel BACK, so what moved was the slow and not the
+	# act of capturing a frame.
+	slow_foe.slow_timer = 0.0
+	var slow_back := await _capture_of(main)
+	var back_px := slow_back.get_pixel(sx, sy)
+	main.state = slow_state
+	# A DIRECTION, not a magnitude: the bat is `#8844ff` and the tint is `#88ccff`, so the
+	# channel the slow moves on THIS foe is green (0.267 -> 0.800). The exact colour is
+	# pinned to the VALUE in `verify_weapons.gd` (`body_color() == Color("88ccff")`), which
+	# no renderer can influence; this side pins that the value reaches the screen. Asserting
+	# the absolute pixel here instead would be a golden colour, and this tier exists partly
+	# because a golden image fails on every legitimate change.
+	Check.rose(
+		float(free_px.g),
+		float(slowed_px.g),
+		"a slowed foe's body is drawn visibly COLDER on screen than its own colour"
+	)
+	# THE CONTROL BESIDE IT: taking the slow off has to put the pixel BACK, so what moved
+	# was the slow and not the act of capturing a frame. Its own limit, stated: it cannot
+	# fail for a foe that is tinted always or never -- the claim above fails for both of
+	# those, which is why the two are written as a pair.
+	Check.unchanged(back_px, free_px, "CONTROL: and the tint REVERSES when the slow expires")
+	print(
+		"  note  the foe's body pixel: free %s -> slowed %s -> back %s (data colour %s)"
+		% [free_px, slowed_px, back_px, Color(slow_foe.color)]
+	)
+
 	# --- HOSTILE BOLTS ----------------------------------------------------------------
 	# Simulated every frame, drawn by nothing. The audit's method, kept: put a bolt in the
 	# world, take it away, and require the frame to change.

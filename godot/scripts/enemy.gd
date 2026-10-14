@@ -53,6 +53,19 @@ var wants_clone := false
 ## and the population is exponential. Measured: 27,165 foes in 25 seconds.
 var is_clone := false
 
+## FROST NOVA'S SLOW, which the data declares and this port used to ignore entirely.
+##
+## `src/data.ts` carries `slowPct: 0.5` and `slowDuration: 1.2` on Frost Nova, and
+## `src/entities.ts` declares AND reads both:
+##
+##     if (this.slowTimer > 0) this.slowTimer -= dt;
+##     const slowMult = this.slowTimer > 0 ? 1 - (this.slowPct || 0) : 1;
+##
+## -- `Enemy.update`. `slow_timer` is the seconds LEFT and `slow_pct` the fraction of
+## speed removed while it is positive, so a slowed bat moves at half speed for 1.2s.
+var slow_timer := 0.0
+var slow_pct := 0.0
+
 func _init(d: Dictionary, start_x: float, start_y: float, hp_mult := 1.0, dmg_mult := 1.0) -> void:
 	def = d
 	def_id = d["id"]
@@ -104,8 +117,46 @@ func standoff() -> float:
 		return float(def.get("keepDistance", 0.0))
 	return 0.0
 
+## Apply Frost Nova's slow. `_fireNova` in `src/weapons.ts`:
+##
+##     if (!enemy.slowTimer || enemy.slowTimer < slowDur) {
+##         enemy.slowTimer = slowDur;
+##         enemy.slowPct = slowPct;
+##     }
+##
+## The guard is on TIME ALONE, and that asymmetry is the original's, not an oversight
+## here: a weak slow landing on a strongly-slowed foe REPLACES it when it lasts longer,
+## because nothing compares `slowPct`. `!enemy.slowTimer` is `slow_timer <= 0.0` -- absent
+## and zero both mean "not currently slowed".
+func apply_slow(pct: float, duration: float) -> void:
+	if slow_timer <= 0.0 or slow_timer < duration:
+		slow_timer = duration
+		slow_pct = pct
+
+## What this foe's speed is multiplied by RIGHT NOW.
+##
+##     const slowMult = this.slowTimer > 0 ? 1 - (this.slowPct || 0) : 1;
+##
+## STRICTLY greater than zero: a timer that has reached exactly zero has expired, which is
+## the boundary `verify_weapons.gd` pins. Read AFTER the tick in `chase`, so the frame that
+## takes the timer to zero is a frame the foe moves at FULL speed -- the original's order.
+func slow_mult() -> float:
+	if slow_timer > 0.0:
+		return 1.0 - slow_pct
+	return 1.0
+
 ## Move toward the hero, in whatever way this archetype moves.
+##
+## THE SLOW TICKS FIRST, and it ticks for EVERY foe -- including one standing exactly on
+## the hero and one that has nowhere to go. `Enemy.update` decays it at the top, before any
+## archetype branch and before anything can return early, so a slowed foe cannot outlive
+## its slow by standing still. `slow` is then read ONCE and multiplied into every movement
+## below, which is what the original does at all five of its movement sites.
 func chase(target_x: float, target_y: float, delta: float) -> void:
+	if slow_timer > 0.0:
+		slow_timer -= delta
+	var slow := slow_mult()
+
 	var dx := target_x - x
 	var dy := target_y - y
 	var d := sqrt(dx * dx + dy * dy)
@@ -122,29 +173,37 @@ func chase(target_x: float, target_y: float, delta: float) -> void:
 			# left a wolf SLOWER than a bat over four seconds: a dasher that never
 			# catches anything.
 			var move_speed := float(def.get("dashSpeed", speed)) if dashing else speed
-			x += dir_x * move_speed * delta
-			y += dir_y * move_speed * delta
+			# THE DASH IS SLOWED TOO. `_fireNova`'s slow is on the foe, not on its
+			# walk, and the original multiplies `dashSpeed` by `slowMult` at this exact
+			# line -- so a frozen wolf lunges at half its burst speed. The dash TIMER is
+			# not slowed in either version.
+			x += dir_x * move_speed * slow * delta
+			y += dir_y * move_speed * slow * delta
 		"ranged":
 			_tick_ranged(d, delta)
 			# Backs off if too close, advances if too far, holds still in the band.
 			var band := standoff()
 			if d > band + 20.0:
-				x += dir_x * speed * delta
-				y += dir_y * speed * delta
+				x += dir_x * speed * slow * delta
+				y += dir_y * speed * slow * delta
 			elif d < band - 20.0:
-				x -= dir_x * speed * delta
-				y -= dir_y * speed * delta
+				x -= dir_x * speed * slow * delta
+				y -= dir_y * speed * slow * delta
 		"bomber":
 			_tick_bomber(d, delta)
-			x += dir_x * speed * delta
-			y += dir_y * speed * delta
+			# An ARMED bomber still walks: `src/entities.ts` sets `vx`/`vy` AFTER its fuse
+			# check, so it never stops -- `_tick_bomber`'s "holds position" describes what
+			# that comment intended, not what the original does. The slow lands on THIS line
+			# because this is the line the original multiplies. The fuse is not slowed.
+			x += dir_x * speed * slow * delta
+			y += dir_y * speed * slow * delta
 		"illusionist":
 			_tick_clone(delta)
-			x += dir_x * speed * delta
-			y += dir_y * speed * delta
+			x += dir_x * speed * slow * delta
+			y += dir_y * speed * slow * delta
 		_:
-			x += dir_x * speed * delta
-			y += dir_y * speed * delta
+			x += dir_x * speed * slow * delta
+			y += dir_y * speed * slow * delta
 
 func _tick_dash(delta: float) -> void:
 	var interval := float(def.get("dashInterval", 3.5))
@@ -193,3 +252,30 @@ func _tick_clone(delta: float) -> void:
 	if _clone_timer <= 0.0:
 		_clone_timer = float(def.get("cloneCooldown", 5.5))
 		wants_clone = true
+
+# ---------------------------------------------------------------------------
+# WHAT THIS FOE LOOKS LIKE
+#
+# A slow the player cannot SEE is half a feature, and the half that is missing is the one
+# that tells them the weapon worked. `renderEnemy` in `src/entity-render.ts` is a chain:
+#
+#     if (self.flashTimer > 0) ctx.fillStyle = '#ffffff';
+#     else if (self.slowTimer > 0) ctx.fillStyle = '#88ccff';
+#     else if (self.bomber && self.fuseArmed) { ...blink white / colour... }
+#     else ctx.fillStyle = self.color;
+#
+# The slow branch is the one with a field behind it here. The flash branch has no timer in
+# this port at all and the armed bomber has no draw site, so those two are REPORTED rather
+# than invented -- and the slow branch keeps the ORIGINAL'S POSITION in the chain, so
+# whichever of them is ported next lands ABOVE this one rather than below it.
+# ---------------------------------------------------------------------------
+
+## `#88ccff`: "Slowed foes get a cold cast."
+const SLOW_TINT := Color("88ccff")
+
+## The colour the BODY is drawn in, so the rule has one home and the drawn body and the
+## asserted body cannot disagree. `main.gd`'s `_draw_foe` is the only caller.
+func body_color() -> Color:
+	if slow_timer > 0.0:
+		return SLOW_TINT
+	return Color(color)

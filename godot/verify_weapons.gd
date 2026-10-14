@@ -62,6 +62,17 @@ func _init() -> void:
 	_melee_evolves_into_a_circle()
 	_instant_evolves_into_a_storm()
 
+	# FROST NOVA'S SLOW. `src/data.ts` declares `slowPct` and `slowDuration` on the def,
+	# `src/weapons.ts` reads both, `src/entities.ts` applies them to the foe's speed and
+	# `src/entity-render.ts` tints the result. `Foe` had no slow field at all, so the
+	# nova's own description -- "Expanding ring of ice slows foes caught in the burst" --
+	# was a promise nothing kept. Every measurement below drives the real table.
+	_the_slow_is_read_from_the_data()
+	_a_slowed_foe_moves_slower()
+	_a_slowed_foe_is_drawn_iced_blue()
+	_the_slow_expires_exactly_on_its_duration()
+	_the_evolved_second_ring_does_not_slow()
+
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
 	# to remove, introduced by the tooling itself.
@@ -1230,6 +1241,218 @@ func _instant_evolves_into_a_storm() -> void:
 			3,
 			"and at level %d, THREE DISTINCT foes: `strikes = Math.min(3, targets.length)`" % e
 		)
+
+
+# ---------------------------------------------------------------------------
+# FROST NOVA'S SLOW
+#
+# `src/data.ts` declares `slowPct: 0.5` and `slowDuration: 1.2` on Frost Nova, and the
+# description on that def is a promise: "Expanding ring of ice slows foes caught in the
+# burst." `src/weapons.ts` reads BOTH fields, `src/entities.ts` declares `slowPct`/
+# `slowTimer` and multiplies the foe's movement by them, and `src/entity-render.ts` tints
+# a slowed foe `#88ccff`. The Godot `Foe` had no slow field at all -- the nova damaged and
+# did not slow, and the field was invisible as well as absent.
+#
+# Every claim below drives the DATA rather than a hardcoded 0.5/1.2, so a retuned nova is
+# measured at its new numbers and a second weapon that declares a slow fails here until
+# its own branch reads it. The ways a slow can be wrong are each asserted: it never
+# applies, it applies but changes no speed, it changes the speed but nothing on screen, it
+# never expires, and -- the one a careful port adds rather than discovers -- the evolved
+# second ring slows when the original's does not.
+# ---------------------------------------------------------------------------
+
+## Every weapon whose def carries a `slowPct` must slow what its fire caught, by the
+## declared fraction, for the declared duration.
+##
+## Rule 12's shape -- iterate the real table. `declaring` keeps the loop from being
+## vacuous: a table where nothing declared a slow would otherwise pass by checking nothing.
+func _the_slow_is_read_from_the_data() -> void:
+	print("\n-- the frost nova slow: declared, applied, visible, expired --")
+	var declaring := 0
+	for def in Weapons.WEAPONS.values():
+		if not def.has("slowPct"):
+			continue
+		declaring += 1
+		var id: String = def["id"]
+		var s := _scene(id, float(def["baseRange"]) * 0.4)
+		var foe: Foe = s["foe"]
+		Check.unchanged(
+			foe.slow_timer, 0.0, "%s's target starts unslowed, so a slow is attributable" % id
+		)
+		WeaponFire.fire(def, s["game"].hero, s["game"].foes, [])
+		Check.rose(0.0, foe.slow_timer, "%s SLOWS the foe its fire caught" % id)
+		if foe.slow_timer <= 0.0:
+			continue
+		Check.approx(
+			foe.slow_timer, float(def["slowDuration"]), "%s slows for its declared slowDuration" % id
+		)
+		Check.approx(
+			foe.slow_pct, float(def["slowPct"]), "%s removes its declared slowPct of speed" % id
+		)
+	Check.at_least(float(declaring), 1.0, "a weapon declares slowPct, so the loop above is not vacuous")
+
+
+## How far the scene's foe travels in ONE frame of `chase`, with or without the slow.
+##
+## Both runs are the SAME scene -- same foe, same standoff, same frame, same direction --
+## and differ in exactly one thing: whether the nova was fired first. So the ratio between
+## them is the slow, and not the geometry, the speed or the aim.
+func _frame_step(def: Dictionary, slowed: bool) -> float:
+	var s := _scene(str(def["id"]), float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	if slowed:
+		WeaponFire.fire(def, g.hero, g.foes, [])
+	var before: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	return absf(foe.x - before)
+
+
+## THE CLAIM A PLAYER CAN ACTUALLY SEE: a slowed foe moves slower, by the fraction the data
+## declares. Measured as DISTANCE PER FRAME, because distance is what the player sees and
+## it is the number the slow is supposed to change.
+func _a_slowed_foe_moves_slower() -> void:
+	var def := _weapon("frost_nova")
+	var free_step := _frame_step(def, false)
+	var slowed_step := _frame_step(def, true)
+	Check.rose(0.0, free_step, "an unslowed foe moves at all, so the comparison is measurable")
+	Check.approx(
+		slowed_step / free_step,
+		1.0 - float(def["slowPct"]),
+		"a slowed foe moves at `1 - slowPct` of its speed",
+		0.001
+	)
+
+
+## A SLOW THE PLAYER CANNOT SEE IS HALF A FEATURE. `renderEnemy`, `src/entity-render.ts`:
+##
+##     } else if (self.slowTimer > 0) {
+##         ctx.fillStyle = '#88ccff';
+##
+## `Foe.body_color` is that branch and `main.gd`'s `_draw_foe` draws its result, so this
+## asserts the colour a player would see rather than one worked out for the test.
+func _a_slowed_foe_is_drawn_iced_blue() -> void:
+	var def := _weapon("frost_nova")
+	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	Check.unchanged(foe.body_color(), Color(foe.color), "an unslowed foe wears its own data colour")
+	WeaponFire.fire(def, g.hero, g.foes, [])
+	Check.rose(0.0, foe.slow_timer, "the foe under test is slowed, or the colour below means nothing")
+	Check.unchanged(foe.body_color(), Color("88ccff"), "a slowed foe is drawn in the original's #88ccff")
+	# ...AND THE TINT REVERSES. The half of a state change that gets forgotten is the way
+	# back: an expired slow has to give the foe its own colour again.
+	foe.slow_timer = 0.0
+	Check.unchanged(
+		foe.body_color(), Color(foe.color), "and it gets its own colour back once the slow is over"
+	)
+
+
+## THE SLOW MUST EXPIRE, and `slowDuration` is 1.2s -- so the edge is the tick that lands
+## elapsed exactly ON that number.
+##
+## Pinned BOTH ways, because either half alone is satisfied by a wrong implementation: a
+## slow that never expires passes "still slowed before the edge", and a slow that never
+## applies passes "free at the edge". The countdown is driven frame by frame through the
+## foe's own `chase`, which is the only thing that ages it in play.
+func _the_slow_expires_exactly_on_its_duration() -> void:
+	var def := _weapon("frost_nova")
+	var pct := float(def["slowPct"])
+	var dur := float(def["slowDuration"])
+	# DERIVED from the data and the frame rate rather than written as 72, so a retuned
+	# `slowDuration` moves the edge with it.
+	var steps := int(round(dur / FRAME))
+	var free_step := _frame_step(def, false)
+
+	# THE EDGE WITHOUT ANY ACCUMULATION IN IT, first, because this half cannot be a float
+	# accident in either direction: a timer of exactly one frame is slowed, and ONE tick of
+	# exactly that frame takes it to exactly zero (`x - x` is exact in IEEE 754).
+	var edge := Foe.new(Enemies.ENEMIES["BAT"], 0.0, 0.0)
+	edge.slow_pct = pct
+	edge.slow_timer = FRAME
+	Check.unchanged(edge.slow_mult(), 1.0 - pct, "a timer of exactly one frame is still slowed")
+	edge.chase(100.0, 0.0, FRAME)
+	Check.approx(edge.slow_timer, 0.0, "and one tick of that frame lands it on exactly zero", 0.0)
+	Check.unchanged(edge.slow_mult(), 1.0, "so zero is the boundary: NOT slowed")
+
+	# ...and the same edge driven from the data, through a real fire.
+	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	WeaponFire.fire(def, g.hero, g.foes, [])
+	Check.approx(foe.slow_timer, dur, "the nova arms the timer at its declared slowDuration")
+
+	# ONE STEP SHORT OF THE EDGE: still slowed, and still moving at the slowed rate.
+	for i in steps - 2:
+		foe.chase(g.hero.x, g.hero.y, FRAME)
+	var x_last: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.approx(
+		absf(foe.x - x_last),
+		free_step * (1.0 - pct),
+		"the frame one step short of slowDuration is still SLOWED",
+		1e-9
+	)
+
+	# THE EDGE ITSELF: elapsed == slowDuration, to the frame.
+	var x_edge: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.approx(foe.slow_timer, 0.0, "the timer reaches zero at exactly slowDuration", 1e-9)
+	Check.unchanged(foe.slow_mult(), 1.0, "so AT exactly slowDuration the slow is OVER")
+	Check.approx(
+		absf(foe.x - x_edge), free_step, "and that frame covers the full UNSLOWED distance", 1e-9
+	)
+
+	# ONE STEP PAST IT: still over, and the countdown stops rather than running away.
+	var x_past: float = foe.x
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.unchanged(foe.slow_mult(), 1.0, "one step PAST the boundary it is still over")
+	Check.unchanged(foe.slow_timer, 0.0, "and the timer stopped at zero instead of counting on")
+	Check.approx(absf(foe.x - x_past), free_step, "and that frame is unslowed too", 1e-9)
+
+
+## THE EVOLVED SECOND RING DOES NOT SLOW, and that is the ORIGINAL'S asymmetry rather than
+## an omission here. `_fireNova`'s scheduled callback, from `src/weapons.ts`:
+##
+##     game.effects?.schedule?.(0.4, () => {
+##         ...
+##         for (const e of cands) {
+##             const d = Math.hypot(e.x - player.x, e.y - player.y);
+##             if (d < r) e.takeDamage(d2);
+##         }
+##         game.createParticles(player.x, player.y, '#88ccff', 16);
+##     });
+##
+## `takeDamage` and NOTHING ELSE: no `slowTimer` write appears inside it, unlike the first
+## ring's loop three lines above it in the same function. The evolved Glacial Cascade is
+## more damage, not more ice -- and a port that slowed on both rings would be kinder than
+## the original and wrong.
+func _the_evolved_second_ring_does_not_slow() -> void:
+	var def := _weapon("frost_nova")
+	var level := int(def["evolveLevel"])
+	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	var full: float = foe.hp
+	WeaponFire.fire(def, g.hero, g.foes, [], level, g.fx)
+	Check.fell(full, foe.hp, "at level %d the first ring lands" % level)
+	Check.rose(0.0, foe.slow_timer, "and the first ring slows")
+	# PRECONDITION: the first ring's slow is cleared, so a slow found after the pulse can
+	# only have come from the pulse. Without this the pulse's own silence is unobservable.
+	foe.slow_timer = 0.0
+	foe.slow_pct = 0.0
+	# Nothing may fire during the step either, or a second FIRST ring would be
+	# indistinguishable from the second ring under test.
+	g.hero.weapons.clear()
+	var before: float = foe.hp
+	# 0.5s of real play, past the 0.4s the pulse is scheduled for. `Game.step` is what lands
+	# it, so this drives the same path a run drives.
+	for i in 30:
+		g.step(FRAME, Vector2.ZERO)
+	Check.fell(before, foe.hp, "the evolved second ring lands its damage 0.4s later")
+	Check.unchanged(
+		foe.slow_timer, 0.0, "and it does NOT slow -- the original's callback writes no slowTimer"
+	)
 
 
 func _check(cond: bool, label: String, detail: String) -> void:
