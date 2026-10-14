@@ -137,12 +137,13 @@ func step(delta: float, move_dir: Vector2) -> void:
 		# The WEAPON's level shortens its own cooldown: x0.92^(n-1), the original's curve.
 		# Without it, a level-up that shortened a cooldown did nothing -- the timer was
 		# computed from the base and the passives only.
+		#
+		# The formula MOVED to `WeaponFire.cooldown_for` when the evolved branch was
+		# ported: `Weapon.getCooldown` multiplies by `evolveCooldownMult` as well, and
+		# two call sites of one curve is how the timer a weapon re-arms to and the timer
+		# a test computes drift apart. Twin Arc fires 5% faster than its own curve says.
 		var wl: int = maxi(1, int(w.get("level", 1)))
-		var cd := (
-			float(w["def"]["baseCooldown"])
-			* pow(0.92, float(wl - 1))
-			* hero.cooldown_mult()
-		)
+		var cd := WeaponFire.cooldown_for(w["def"], hero, wl)
 		var left := float(cooldowns.get(id, 0.0)) - delta
 		if left <= 0.0:
 			left = cd
@@ -178,6 +179,11 @@ func step(delta: float, move_dir: Vector2) -> void:
 	# rather than sparks frozen mid-flight. The original does the same through
 	# `effects.update(dt)`, which only the gameplay loop calls.
 	fx.update(delta)
+	# THE EVOLVED FROST NOVA'S SECOND RING -- `WeaponFire` EMITS a pulse, because it has
+	# no foes list, and the Game, which owns the foes, lands it. Tick it here, with the
+	# effects layer, and before `_remove_dead` so a foe the pulse killed is swept in the
+	# same frame it died in.
+	_land_pulses(delta)
 	_remove_dead()
 	# Children and clones join AFTER the passes above, so nothing iterates an array it
 	# is appending to.
@@ -191,6 +197,31 @@ func step(delta: float, move_dir: Vector2) -> void:
 			break
 		foes.append(child)
 	spawned.clear()
+
+## Land every scheduled damage pulse whose delay has elapsed.
+##
+##     game.effects?.schedule?.(0.4, () => {
+##         if (!game.player || game.player.dead) return;
+##         ... if (d < r) e.takeDamage(d2);
+##         game.createParticles(player.x, player.y, '#88ccff', 16);
+##     });
+##
+## -- the ONLY `schedule` in `src/weapons.ts`, in `_fireNova`. Centred on the hero as
+## they are NOW, because that is what the original's closure reads, and STRICT `<`
+## on the radius, because that is the comparison the original writes.
+func _land_pulses(delta: float) -> void:
+	for pulse in fx.due_pulses(delta):
+		if hero.dead:
+			continue
+		for foe in foes:
+			if foe.dead:
+				continue
+			var dx := foe.x - hero.x
+			var dy := foe.y - hero.y
+			if sqrt(dx * dx + dy * dy) < pulse.radius:
+				foe.take_damage(pulse.damage)
+		# The original draws its own burst with the damage.
+		fx.emit_particles(hero.x, hero.y, Color("88ccff"), 16)
 
 ## A Game that never spawns, for a test that drives one foe at a time.
 ##

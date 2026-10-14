@@ -76,6 +76,42 @@ static func label(entry: Dictionary) -> String:
 		return " (Lv.%d)" % (lvl + 1) if entry["type"] == "weapon" else " (x%d)" % (lvl + 1)
 	return " (New!)"
 
+## The `-> Evolve Name` tag `src/ui.ts` puts under an option whose NEXT level IS the
+## weapon's evolution, or `""` when this offer is not that one:
+##
+##     const willEvolve = up.type === 'weapon' && !isMaxed &&
+##                        lvl + 1 === up.data.evolveLevel && up.data.evolveName;
+##
+## Every term of that condition is here, read off the DEF rather than written down:
+## a weapon added to `src/data.ts` with an `evolveName` gets the tag with no edit to
+## this file, and a weapon without one gets nothing. `evolveName` is the fifth
+## evolution field, and this is the only thing in either game that reads it.
+##
+## `""` rather than null, so a caller can concatenate without asking.
+##
+## `->` AND NOT THE ORIGINAL'S `\u2192`, deliberately. The original renders
+## `\u2192 ${evolveName}`; every name and description this picker draws today is
+## ASCII (`node -e` over `godot/data/weapons.gd`: 0 of 22 non-ASCII), so a rightwards
+## arrow would be the first glyph the Godot UI asks its default theme font for, and
+## Godot renders an uncovered codepoint as a tofu box. That is a player-visible
+## defect nothing in this repository can catch: `check:pixels` needs a DISPLAY and
+## does not render the picker's text metrics. The ASCII arrow says the same thing.
+static func evolve_tag(entry: Dictionary) -> String:
+	if entry["type"] != "weapon":
+		return ""
+	var def: Dictionary = entry["def"]
+	var name := str(def.get("evolveName", ""))
+	if name == "":
+		return ""
+	# `!isMaxed`. Redundant while every `evolveLevel` is at or below the cap, and kept
+	# because the original has it: a def that evolved past the cap shows no tag rather
+	# than promising a level the game will not offer.
+	if int(entry["level"]) >= int(Config.WEAPON_MAX_LEVEL):
+		return ""
+	if int(entry["level"]) + 1 != int(def.get("evolveLevel", 0)):
+		return ""
+	return "-> %s" % name
+
 ## Apply a pick to the hero. Returns what happened, so the caller can tell a new
 ## weapon from a levelled one.
 static func apply(hero: Hero, entry: Dictionary) -> String:

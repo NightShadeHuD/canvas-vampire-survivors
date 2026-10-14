@@ -309,15 +309,15 @@ func _input_dir() -> Vector2:
 ## shows the screen again for the next one rather than silently banking it.
 func _show_picks() -> void:
 	for child in picker.get_children():
-		# DETACH FIRST, then free. `queue_free()` alone defers removal to the end of the frame,
-		# so a child added below in the SAME frame lands while the old one is still attached --
-		# and Godot renames the newcomer `@VBoxContainer@N` to avoid the clash. A later lookup by
-		# NAME then resolves the OLD node, still alive and scheduled for deletion.
+		# DETACH FIRST, then free. `queue_free()` defers removal to the end of the frame, so a
+		# child added below in the SAME frame lands while the old one is still attached -- and
+		# Godot renames the newcomer `@VBoxContainer@N`. A later lookup by NAME then resolves the
+		# corpse, and `_focus_first` throws "previously freed".
 		#
-		# **Measured: on every SECOND level-up the box was renamed and the picker had NO focus
-		# owner, so a keyboard player could not answer it.** The focus walk reported "previously
-		# freed" on the node it was handed. Same class as #145 and #151 -- the third time this
-		# panel has been unreachable, each time for a different reason.
+		# **This was fixed in #155 and REVERTED during the evolution assembly**: the port's
+		# `main.gd` came from a worktree based before that PR, and it was copied wholesale.
+		# `verify_scene`'s multi-round assertion caught it -- which is the whole reason that
+		# assertion drives the picker three times instead of once.
 		picker.remove_child(child)
 		child.queue_free()
 
@@ -338,7 +338,17 @@ func _show_picks() -> void:
 		var entry: Dictionary = _offers[i]
 		var b := Button.new()
 		b.name = "Pick%d" % i
-		b.text = "%s%s\n%s" % [entry["def"]["name"], Upgrades.label(entry), entry["def"]["description"]]
+		# A THIRD LINE, which is where the original puts it -- `<div class="evolve-tag">`
+		# under the description, not a suffix on the label. It is the only place a player
+		# is told that the level they are about to take changes the weapon's SHAPE, and
+		# it is empty for every offer that is not an evolution.
+		var offer_text := "%s%s\n%s" % [
+			entry["def"]["name"], Upgrades.label(entry), entry["def"]["description"]
+		]
+		var evolve := Upgrades.evolve_tag(entry)
+		if evolve != "":
+			offer_text += "\n" + evolve
+		b.text = offer_text
 		b.custom_minimum_size = Vector2(420, 64)
 		b.pressed.connect(_on_pick.bind(i))
 		box.add_child(b)
@@ -382,8 +392,7 @@ func _on_pick(index: int) -> void:
 ## crash rather than an ending.
 func _show_game_over() -> void:
 	for child in over.get_children():
-		# Detach first for the same reason as the picker above: the game-over panel is rebuilt on
-		# every death, and a name clash on the second one would strand focus there too.
+		# Same reason as the picker above: the game-over panel is rebuilt on every death.
 		over.remove_child(child)
 		child.queue_free()
 
