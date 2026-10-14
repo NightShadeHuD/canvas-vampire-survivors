@@ -93,7 +93,23 @@ if (!report) {
 // The status context must match the name branch protection requires, or the check stays pending
 // forever and the PR is unmergeable -- the deadlock this whole design exists to avoid.
 const CONTEXT = 'Verify';
-const repo = run('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner']);
+// Resolved BEFORE the gate runs, and its own failure is reported as itself. Reading it after a
+// five-minute run means a typo here reads as a gate failure.
+let repo;
+try {
+    repo = run('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner']);
+} catch (err) {
+    say('FAILED — could not resolve the repository with `gh repo view`.');
+    say(
+        `  gh said: ${
+            String(err.stderr ?? err.message)
+                .trim()
+                .split('\n')[0]
+        }`
+    );
+    say('  Is `gh` installed and authenticated? `gh auth status`');
+    process.exit(1);
+}
 const state = ok ? 'success' : 'failure';
 const description = ok
     ? `local verify:all passed in ${seconds}s on ${short}`
@@ -116,10 +132,24 @@ try {
     ]);
     say(`reported "${CONTEXT}" = ${state} for ${short} to ${repo}`);
 } catch (err) {
-    say(`FAILED to report the status to GitHub: ${err.message}`);
-    say('  The gate itself ' + (ok ? 'PASSED' : 'FAILED') + '; only the reporting failed.');
-    say('  Run `gh auth status` — an unauthenticated gh cannot set a commit status, and the');
-    say('  PR will stay unmergeable until one is set.');
+    // THE REAL DIAGNOSIS, not a guess at it. The first version of this printed
+    // "run `gh auth status`" for every failure -- and when it was actually exercised, `gh`
+    // was authenticated and the same POST succeeded by hand. **It sent the reader to check a
+    // thing that was not wrong**, which is a worse failure than the one it was reporting.
+    //
+    // `execFileSync` puts the useful part in `stderr`, and `err.message` alone shows only the
+    // exit code and the command. So: stderr, verbatim, plus the two facts a reader needs to
+    // reproduce it by hand.
+    const stderr = String(err.stderr ?? '').trim();
+    say(`FAILED to report the status to GitHub.`);
+    if (stderr) say(`  gh said: ${stderr.split('\n').slice(0, 3).join('\n            ')}`);
+    say(`  The gate itself ${ok ? 'PASSED' : 'FAILED'}; only the reporting failed.`);
+    say(`  Reproduce by hand:`);
+    say(
+        `    gh api --method POST repos/${repo}/statuses/${sha} -f state=${state} ` +
+            `-f context=${CONTEXT} -f description='${description}'`
+    );
+    say('  This does NOT block anything: the receipt is written and `pre-push` reads it.');
     process.exit(1);
 }
 
