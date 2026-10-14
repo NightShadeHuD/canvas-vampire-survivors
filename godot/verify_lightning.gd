@@ -43,9 +43,12 @@
 ##   * Every measurement states its activity precondition -- a weapon that fired at nothing
 ##     would score a nearest-share of ZERO, which `Check.rate` would happily accept.
 ##
-## THIS FILE DELIBERATELY DOES NOT TEST EVOLUTION. `evolveLevel` is 5 and the port has no
-## evolution path at all, so level 5's three strikes and `chainCount + 2` hops are a
-## different, unported claim. Levels 1-3 only.
+## THIS FILE TESTS LEVELS 1-3 ONLY, AND THE REASON IS NO LONGER "THERE IS NO EVOLUTION".
+## `evolveLevel` is 5, so the evolved three strikes and the `chainCount + 2` hops are a
+## DIFFERENT claim from the ones below -- asserted against the level 4/5 boundary, driven
+## by the data table, in `verify_weapons.gd`'s evolution section. Everything here stays
+## below the threshold deliberately: a chain test that drifted to level 5 would be
+## measuring the storm burst instead of the chain.
 ##
 ##   godot --headless --path godot --script res://verify_lightning.gd
 extends SceneTree

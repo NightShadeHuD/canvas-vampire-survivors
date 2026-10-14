@@ -11,6 +11,14 @@
 ## a weapon ADDED to `src/data.ts` later fails until it is implemented -- which is the
 ## property that makes this worth having.
 ##
+## THE SAME MOVE APPLIES TO THE EVOLUTION FIELDS, and that is the section at the end of
+## this file. `evolveLevel`, `evolveDamageMult`, `evolveBonusCrit` and `evolveCooldownMult`
+## were declared on ten of the eleven weapons and read by NOTHING here: a weapon at its
+## evolve level was the weapon below it with 20% more damage. `_declaring()` iterates the
+## table, so a weapon added with an `evolveLevel` fails there until it evolves -- and every
+## measurement in that section is taken at ONE level, with the declaration on the def and
+## off it, so ordinary level scaling cannot produce the difference it looks for.
+##
 ##   godot --headless --path godot --script res://verify_weapons.gd
 extends SceneTree
 
@@ -43,6 +51,16 @@ func _init() -> void:
 	_cooldowns_are_per_weapon()
 	_melee_sweeps_a_band()
 	_every_weapon_leaves_something_to_draw()
+
+	# EVOLUTION. `src/data.ts` declares it on ten of the eleven weapons and nothing in
+	# `godot/` read any of it -- see the section at the end of this file for what each of
+	# these measures and for the control that sits beside every measurement.
+	_evolution_is_declared_in_the_data()
+	_every_declaring_weapon_changes_at_its_level()
+	_the_trigger_is_the_declared_level()
+	_the_declared_numbers_are_obeyed()
+	_melee_evolves_into_a_circle()
+	_instant_evolves_into_a_storm()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
@@ -644,7 +662,578 @@ func _weapon(id: String) -> Dictionary:
 	push_error("no weapon def for id '%s'" % id)
 	return Weapons.WEAPONS.values()[0]
 
+# ---------------------------------------------------------------------------
+# EVOLUTION
+#
+# `src/data.ts` declares an evolution on ten of the eleven weapons, and NOTHING in
+# `godot/` read any of it: `evolveLevel`, `evolveName`, and the payload fields
+# `evolveDamageMult`, `evolveBonusCrit` and `evolveCooldownMult`. A weapon at its evolve
+# level was the weapon below it with 20% more damage. `verify_lightning.gd` said so in its
+# own header -- "THIS FILE DELIBERATELY DOES NOT TEST EVOLUTION" -- and the archetype
+# dispatch said so in a comment instead of closing it.
+#
+# THE TRAP, AND HOW EVERY MEASUREMENT BELOW AVOIDS IT
+#
+# A weapon at level 5 ALREADY hits harder than the same weapon at level 4. Damage is
+# `base * (1 + (level - 1) * 0.2)`, the cooldown falls 8% a level and the projectile count
+# rises every other level -- so "it hits harder at 5" is not evidence of evolution, and a
+# check that compares level 5 with level 4 is measuring the level curve.
+#
+# So every measurement here is taken AT ONE LEVEL. The same def is measured twice -- once
+# as the data declares it, once with `evolveLevel` taken off the def -- in the same scene,
+# with the same seed and the same number of frames. Level scaling is a CONSTANT of both
+# runs, so it cannot produce a difference between them. The CONTROL one level below the
+# declaration, where the field is still on the def and must change nothing, is what says
+# the difference above is the THRESHOLD being crossed rather than the field existing.
+#
+# WHAT IS DRIVEN BY THE DATA, AND WHAT IS NOT
+#
+#   * The weapon list: `_declaring()` iterates `Weapons.WEAPONS`, so a weapon added to
+#     `src/data.ts` with an `evolveLevel` fails the sweep below until it evolves.
+#   * The level: `_evolve_level()` reads `evolveLevel`. It is 5 today and this file does not
+#     know that -- `_the_trigger_is_the_declared_level` moves it in BOTH directions.
+#   * The numbers: every payload field is compared against the number the DEF states, so a
+#     hardcoded 1.1, 0.15 or 0.95 cannot satisfy it.
+#   * The shape claims that are not on the data -- three strikes, `chainCount + 2` hops, a
+#     circle instead of a band -- are quoted from `src/weapons.ts` in the section that
+#     measures them, because for those the reference implementation IS the specification.
+#   * `evolveName` is deliberately NOT asserted, and that is a GAP rather than a judgement:
+#     `src/ui.ts` reads it -- the level-up card's "-> Bloody Sweep" tag and its "Evolves
+#     into ..." line -- and nothing in `godot/` does, so the port shows the base name at
+#     every level. Text in a card is not weapon BEHAVIOUR, and the round that produced this
+#     file lost a round to a check that read a button's NAME and missed its description --
+#     so it is reported here rather than asserted.
+# ---------------------------------------------------------------------------
+
+## How long a fireprint watches the world, in frames. Four seconds is several fires of every
+## weapon in the data (the slowest cooldown is 3.2s), so a difference in cadence or in a
+## second blast has room to land -- and it is short enough to measure the whole table.
+const EVOLVE_FRAMES := 240
+## The seed BOTH runs of a comparison share. Lightning picks a random foe, and two runs that
+## drew different numbers would differ for a reason that has nothing to do with evolution.
+const EVOLVE_SEED := 20260426
+## Where the foes stand, as a multiple of the weapon's own `baseRange`. The rings span every
+## archetype's geometry: a melee band reaches the inner ones, a nova reaches everything
+## inside its radius, and an orbiter's shards travel ON a ring at `reach` -- which is 1.4x
+## baseRange at level 5 -- so the outer ring is where its shards actually pass.
+const SCATTER_RADII := [0.45, 0.8, 1.05, 1.35]
+## Foes per ring.
+const SCATTER_PER_RING := 8
+## A hop distance `verify_lightning.gd` PROVES a chain reaches (its probe at 150px is struck;
+## 240px is not). Used to place a cluster, not to assert a radius -- naming 180 here would be
+## a second copy of a number that suite already pins at both ends.
+const HOP_PROVEN_REACH := 150.0
+## Fires per crit measurement. One fire is a coin flip; twelve hundred make the difference
+## between "sometimes doubled" and "never doubled" a rate rather than an anecdote, and make
+## the tolerance below tight enough that a SWAPPED pair of declared crit bonuses fails.
+const CRIT_FIRES := 1200
+## How long a shot is stepped before its damage is read. A blade at 620px/s covers the 60px
+## to the target in six frames; forty is generous and cannot make a hit look like a miss.
+const CRIT_SETTLE := 40
+
+
+## THE DATA'S OWN GUARD: this section is worth nothing if the table stops declaring anything.
+##
+## Stated first and separately, because every claim below is a claim ABOUT these entries --
+## an empty list would make all of them vacuously true.
+func _evolution_is_declared_in_the_data() -> void:
+	print("\n-- the data declares an evolution --")
+	var declaring := _declaring()
+	Check.at_least(
+		float(declaring.size()),
+		2.0,
+		"`evolveLevel` is declared on more than one weapon (%d of %d)" % [
+			declaring.size(), Weapons.WEAPONS.size()
+		]
+	)
+	Check.at_least(float(_declaring_of_type("melee").size()), 1.0, "a melee weapon declares one")
+	Check.at_least(float(_declaring_of_type("instant").size()), 1.0, "an instant weapon declares one")
+
+
+## EVERY weapon that declares an evolution, in table order.
+##
+## `> 1`, because the control beside the sweep measures the level BELOW the declaration and a
+## weapon that evolved at level 1 would have no level below it.
+func _declaring() -> Array:
+	var out: Array = []
+	for def in Weapons.WEAPONS.values():
+		if _evolve_level(def) > 1:
+			out.append(def)
+	return out
+
+
+## The declaring weapons of one ARCHETYPE. Selecting by `type` rather than by id is what makes
+## a second melee weapon -- or a second instant one -- measured by the same code the day it is
+## added to `src/data.ts`, which is the property rule 12 asks a suite to have. Today there is
+## one of each; the loops below do not know that.
+func _declaring_of_type(kind: String) -> Array:
+	var out: Array = []
+	for def in _declaring():
+		if str(def["type"]) == kind:
+			out.append(def)
+	return out
+
+
+## The level the DEF declares, read rather than written down.
+func _evolve_level(def: Dictionary) -> int:
+	return int(def.get("evolveLevel", 0))
+
+
+## THE SAME DEF WITH THE EVOLUTION DECLARATION TAKEN AWAY, and nothing else changed.
+##
+## The reference gate is `!!this.def.evolveLevel && this.level >= this.def.evolveLevel`, so
+## removing the level removes every evolved branch at once -- the damage scalar, the crit
+## bonus, the cooldown and the shapes. That is what makes the two runs of a comparison differ
+## in exactly one thing a player can see.
+func _without_evolution(def: Dictionary) -> Dictionary:
+	var bare: Dictionary = def.duplicate()
+	bare.erase("evolveLevel")
+	return bare
+
+
+## A running Game whose hero HOLDS `weapon` at `level`. The hero's level and the level handed
+## to `fire()` are the same number, so an implementation that reads either one agrees with
+## this file about what is being measured.
+func _game_holding(weapon: Dictionary, level: int) -> Game:
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	g.hero.add_weapon(weapon)
+	for i in level - 1:
+		g.hero.level_weapon(str(weapon["id"]))
+	return g
+
+
+## Foes on rings around the hero, FROZEN where they stand.
+##
+## Frozen for the same reason `Check.sturdy` exists. A chaser walks at the hero, and after
+## four seconds every foe in the scene is standing ON it -- where a band and a circle damage
+## exactly the same ones, and the difference this whole section exists to measure disappears
+## into the enemy AI. The world a weapon fires into is held still; the weapon is what varies.
+func _scatter(g: Game, base_range: float) -> Array:
+	var made: Array = []
+	for r in SCATTER_RADII:
+		for i in SCATTER_PER_RING:
+			var a := TAU * float(i) / float(SCATTER_PER_RING)
+			var f := Check.sturdy(
+				Foe.new(
+					Enemies.ENEMIES["BAT"],
+					g.hero.x + cos(a) * base_range * float(r),
+					g.hero.y + sin(a) * base_range * float(r)
+				)
+			)
+			f.speed = 0.0
+			g.foes.append(f)
+			made.append(f)
+	return made
+
+
+## The TOTAL DAMAGE `weapon` deals in `EVOLVE_FRAMES` of real simulation at `level`.
+##
+## Driven through `Game.step` rather than through `WeaponFire.fire`, so a second blast or a
+## delayed pulse that the GAME has to schedule is measured rather than lost, and so the
+## cooldown the game applies is part of what a player receives.
+func _window_damage(weapon: Dictionary, level: int) -> float:
+	var g := _game_holding(weapon, level)
+	var foes := _scatter(g, float(weapon["baseRange"]))
+	seed(EVOLVE_SEED)
+	for i in EVOLVE_FRAMES:
+		g.step(FRAME, Vector2.ZERO)
+	var lost := 0.0
+	for f in foes:
+		lost += float(f.max_hp) - float(f.hp)
+	return lost
+
+
+## The SECONDS THE GAME SETS BETWEEN TWO SHOTS, read from its own timer immediately after the
+## first one. `evolveCooldownMult` is a claim about this interval and about nothing else, and
+## `g.cooldowns` is the same surface `_cooldowns_are_per_weapon` already reads.
+func _interval(weapon: Dictionary, level: int) -> float:
+	var g := _game_holding(weapon, level)
+	g.step(FRAME, Vector2.ZERO)
+	return float(g.cooldowns.get(str(weapon["id"]), -1.0))
+
+
+## WHAT ONE FIRE THROWS: how many, and in which directions.
+##
+## A count alone cannot see a fan, and the fan is half of what a projectile weapon sells
+## ("wide 5-blade fan", "triple volley"). Directions rather than a constant: two shots that
+## leave at the same angle are the same shot to a player, whatever the code did to get there.
+func _shot_aim(weapon: Dictionary, level: int) -> Array:
+	var g := _game_holding(weapon, level)
+	var foes := _scatter(g, float(weapon["baseRange"]))
+	var shots: Array = []
+	WeaponFire.fire(weapon, g.hero, foes, shots, level)
+	var out: Array = [shots.size()]
+	for s in shots:
+		out.append(snappedf(atan2(s.vy, s.vx), 0.0001))
+	return out
+
+
+## EVERYTHING ONE WEAPON AT ONE LEVEL DOES that a player could see, as one comparable value:
+## how often it fires, how much it hurts, and what it throws. Two runs are "the same weapon"
+## when all three agree, so this is the thing a claim about evolution has to move.
+func _fireprint(weapon: Dictionary, level: int) -> Dictionary:
+	return {
+		"interval": snappedf(_interval(weapon, level), 0.0001),
+		"damage": snappedf(_window_damage(weapon, level), 0.001),
+		"aim": _shot_aim(weapon, level)
+	}
+
+
+## How many DISTINCT foes at `offsets` px from the hero a single fire damages.
+##
+## A POPULATION, not a count of damage events: a bolt that struck the same foe twice reads as
+## one here, which is what makes "three strikes" measurable rather than "three hits".
+func _fire_hits(weapon: Dictionary, level: int, offsets: Array) -> int:
+	var g := _game_holding(weapon, level)
+	var foes: Array = []
+	for off in offsets:
+		var f := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + off.x, g.hero.y + off.y))
+		foes.append(f)
+		g.foes.append(f)
+	WeaponFire.fire(weapon, g.hero, foes, [], level)
+	var hurt := 0
+	for f in foes:
+		if f.hp < f.max_hp:
+			hurt += 1
+	return hurt
+
+
+## A ring of `count` foes at `radius`, as offsets from the hero.
+func _ring_offsets(radius: float, count: int) -> Array:
+	var out: Array = []
+	for i in count:
+		var a := TAU * float(i) / float(count)
+		out.append(Vector2(cos(a) * radius, sin(a) * radius))
+	return out
+
+
+## A LINE of `count` foes `origin` px out on the +x axis, `spacing` apart.
+func _line_offsets(origin: float, spacing: float, count: int) -> Array:
+	var out: Array = []
+	for i in count:
+		out.append(Vector2(origin + spacing * float(i), 0.0))
+	return out
+
+
+## A TIGHT GRID of `count` foes centred `distance` px along +x.
+##
+## Tight on purpose: every pair is inside the hop distance the line section PROVES is
+## reachable, so a chain cannot stop early for want of a neighbour and the count read is the
+## chain's length rather than the cluster's shape.
+func _cluster_offsets(distance: float, count: int) -> Array:
+	var out: Array = []
+	for i in count:
+		out.append(Vector2(distance + float(i % 3) * 30.0, float(i / 3) * 30.0 - 15.0))
+	return out
+
+
+## THE HEADLINE CLAIM, OVER THE WHOLE DATA TABLE.
+##
+## For EVERY weapon that declares `evolveLevel`: at that level it must DO something the same
+## weapon at the same level cannot do without the declaration. Both runs are at ONE level, so
+## this cannot be satisfied by level scaling; and the control one level below -- same field,
+## same def, same scene -- must show NO difference, so a harness that reacted to the field
+## merely being present would fail here rather than pass above.
+##
+## A weapon added to `src/data.ts` with an `evolveLevel` and no implementation lands in
+## `unchanged` and fails, by name, which is the property rule 12 asks for.
+func _every_declaring_weapon_changes_at_its_level() -> void:
+	print("\n-- every weapon that declares an evolution changes at IT --")
+	var unchanged: Array = []
+	var control_broke: Array = []
+	var measured := 0
+	for def in _declaring():
+		var id: String = def["id"]
+		var e := _evolve_level(def)
+		var bare := _without_evolution(def)
+		measured += 1
+		# THE MEASUREMENT, at the level the DATA declares.
+		if _fireprint(def, e) == _fireprint(bare, e):
+			unchanged.append("%s (%s, level %d)" % [id, def["type"], e])
+		# THE CONTROL, one level below it.
+		var at_e := _fireprint(def, e - 1)
+		var bare_e := _fireprint(bare, e - 1)
+		if at_e != bare_e:
+			control_broke.append("%s (level %d: %s vs %s)" % [id, e - 1, at_e, bare_e])
+	Check.at_least(float(measured), 2.0, "the sweep measured %d declaring weapon(s)" % measured)
+	Check.unchanged(unchanged, [], "EVERY weapon declaring evolveLevel behaves differently AT it")
+	Check.unchanged(control_broke, [], "CONTROL: below the declaration the same field changes NOTHING")
+
+
+## THE TRIGGER IS THE NUMBER IN THE DATA, NOT THE NUMBER 5.
+##
+## `isEvolved()` is `level >= def.evolveLevel`, and the two directions below are the two ways
+## to get that wrong. Both were MEASURED against a working transcription, and each catches a
+## different mistake:
+##
+##   * a hardcoded `level >= 5`, which is what a check written from the two weapons in front of
+##     you invites: the declaration no longer decides anything, so REMOVING `evolveLevel` from
+##     the def changes nothing and all ten weapons land in the sweep's list above -- and a
+##     weapon declaring 4 does not evolve at 4, which is the second control here.
+##   * evolving on the mere PRESENCE of the field, at any level: the first control catches it,
+##     because a weapon whose declaration has been raised to one level above must be ordinary
+##     at the level it used to evolve at.
+func _the_trigger_is_the_declared_level() -> void:
+	print("\n-- the trigger is the declared level, not 5 --")
+	var missed_raise: Array = []
+	var missed_lower: Array = []
+	var declaring := _declaring()
+	for def in declaring:
+		var e := _evolve_level(def)
+		var up: Dictionary = def.duplicate()
+		up["evolveLevel"] = e + 1
+		if _fireprint(up, e) != _fireprint(_without_evolution(up), e):
+			missed_raise.append("%s still evolves at %d with evolveLevel %d" % [def["id"], e, e + 1])
+		var down: Dictionary = def.duplicate()
+		down["evolveLevel"] = e - 1
+		if _fireprint(down, e - 1) == _fireprint(_without_evolution(down), e - 1):
+			missed_lower.append("%s does not evolve at %d with evolveLevel %d" % [def["id"], e - 1, e - 1])
+	Check.at_least(float(declaring.size()), 2.0, "measured on all %d declaring weapon(s)" % declaring.size())
+	Check.unchanged(missed_raise, [], "CONTROL: raising evolveLevel by one silences the evolution")
+	Check.unchanged(missed_lower, [], "and lowering it by one takes the evolution down with it")
+
+
+## THE DECLARED NUMBERS, OBEYED.
+##
+## Rule 12: if the data declares it, a check must prove the code READS it. Each comparison
+## below is two runs of the same def, at the same level, in the same scene, differing in ONE
+## payload field -- so the number the data states is the number the game must produce, and a
+## hardcoded 1.1, 0.15 or 0.95 fails.
+func _the_declared_numbers_are_obeyed() -> void:
+	print("\n-- the declared evolution numbers are obeyed --")
+	_damage_scalar_is_read()
+	_cooldown_scalar_is_read()
+	_bonus_crit_is_read()
+
+
+## `getDamage`: `if (this.isEvolved() && this.def.evolveDamageMult) base *= ...`
+##
+## Same def, same level, same scene, one field apart -- so the geometry, the shard count and
+## the number of hits are identical between the two runs and the damage ratio IS the scalar.
+func _damage_scalar_is_read() -> void:
+	var declared := 0
+	for def in _declaring():
+		if not def.has("evolveDamageMult"):
+			continue
+		declared += 1
+		var e := _evolve_level(def)
+		var without: Dictionary = def.duplicate()
+		without.erase("evolveDamageMult")
+		var plain := _window_damage(without, e)
+		Check.rose(0.0, plain, "%s deals damage without the scalar, so the ratio is measurable" % def["id"])
+		if plain > 0.0:
+			Check.approx(
+				_window_damage(def, e) / plain,
+				float(def["evolveDamageMult"]),
+				"%s deals its evolveDamageMult" % def["id"],
+				0.02
+			)
+	Check.at_least(float(declared), 1.0, "a weapon declares evolveDamageMult")
+
+
+## `getCooldown`: `if (this.isEvolved() && this.def.evolveCooldownMult) cd *= ...`
+func _cooldown_scalar_is_read() -> void:
+	var declared := 0
+	for def in _declaring():
+		if not def.has("evolveCooldownMult"):
+			continue
+		declared += 1
+		var e := _evolve_level(def)
+		var without: Dictionary = def.duplicate()
+		without.erase("evolveCooldownMult")
+		var plain := _interval(without, e)
+		Check.rose(0.0, plain, "%s fires at all, so its interval is measurable" % def["id"])
+		if plain > 0.0:
+			Check.approx(
+				_interval(def, e) / plain,
+				float(def["evolveCooldownMult"]),
+				"%s fires on its evolveCooldownMult of that interval" % def["id"],
+				0.005
+			)
+	Check.at_least(float(declared), 1.0, "a weapon declares evolveCooldownMult")
+
+
+## `_rollCrit`: `if (this.isEvolved() && this.def.evolveBonusCrit) chance += ...`
+##
+## A RATE, because a crit is a coin flip: the claim is that the weapon's expected damage rises
+## by the declared chance, and one fire cannot show that. Both runs share a seed, so the two
+## are compared on the same rolls -- and a port that draws its crit from its own generator
+## still lands inside the tolerance, which is what makes this a measurement rather than a
+## reading of the code.
+func _bonus_crit_is_read() -> void:
+	var declared := 0
+	for def in _declaring():
+		if not def.has("evolveBonusCrit"):
+			continue
+		declared += 1
+		var e := _evolve_level(def)
+		var without: Dictionary = def.duplicate()
+		without.erase("evolveBonusCrit")
+		var plain := _lone_damage(without, e)
+		Check.rose(0.0, plain, "%s hits a lone foe, so its crit rate is measurable" % def["id"])
+		if plain > 0.0:
+			Check.approx(
+				_lone_damage(def, e) / plain,
+				1.0 + float(def["evolveBonusCrit"]),
+				"%s deals 1 + its evolveBonusCrit of that damage" % def["id"],
+				0.04
+			)
+	Check.at_least(float(declared), 1.0, "a weapon declares evolveBonusCrit")
+
+
+## The damage `weapon` deals to ONE sturdy foe over `CRIT_FIRES` fires at `level`, with the
+## shots stepped to their landing.
+##
+## A lone foe, so every strike of a multi-strike weapon lands on the same target and what is
+## measured is a rate over rolls rather than a geometry -- and a crit is read as the extra
+## damage it dealt rather than as a flag somewhere.
+func _lone_damage(weapon: Dictionary, level: int) -> float:
+	var g := _game_holding(weapon, level)
+	var foe := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 60.0, g.hero.y))
+	foe.speed = 0.0
+	g.foes.append(foe)
+	seed(EVOLVE_SEED)
+	var before: float = foe.hp
+	for i in CRIT_FIRES:
+		var made: Array = []
+		WeaponFire.fire(weapon, g.hero, g.foes, made, level)
+		for f in CRIT_SETTLE:
+			for s in made:
+				s.update(FRAME, g.hero.x, g.hero.y, g.hero.x, g.hero.y)
+				s.resolve(g.foes, Callable())
+	return before - float(foe.hp)
+
+
+## THE WHIP'S SWEEP BECOMES A FULL CIRCLE.
+##
+## `_fireMelee` in `src/weapons.ts`:
+##
+##     if (evolved) { if (Math.hypot(dx, dy) > range) continue; }
+##     else { if (Math.abs(dx) > range) continue; if (Math.abs(dy) > 40) continue; }
+##
+## A BAND crosses a ring of eight foes at exactly TWO points, and that does not change with
+## the weapon's level: the reach grows 10% a level and the band's half-height never grows at
+## all. So the same ring is measured at EVERY level from 1 to the declaration and the reading
+## must be two at each of them -- that is the scaling control, and it is why "it hits more at
+## 5" cannot be explained away by range.
+##
+## `_melee_sweeps_a_band` above already pins the band at level 1, and both its edges. What it
+## did not have -- and what the port did not do -- is the level at which the shape CHANGES.
+func _melee_evolves_into_a_circle() -> void:
+	print("\n-- a melee sweep becomes a circle --")
+	var melee := _declaring_of_type("melee")
+	Check.at_least(float(melee.size()), 1.0, "a melee weapon declares an evolution")
+	for def in melee:
+		var e := _evolve_level(def)
+		var radius := float(def["baseRange"]) * 0.9
+		var ring := _ring_offsets(radius, 8)
+		var band: Array = []
+		for level in range(1, e):
+			band.append(_fire_hits(def, level, ring))
+		Check.unchanged(
+			band.count(2),
+			band.size(),
+			"the band still crosses the ring at exactly two points at EVERY level below %d" % e
+		)
+		Check.unchanged(_fire_hits(def, e, ring), 8, "and at level %d the WHOLE ring is swept" % e)
+		# BOUNDED. A sweep that hit everything in the scene would pass the ring reading, so a
+		# foe far out along the diagonal -- outside any reach this weapon has at any level --
+		# is probed at the evolve level and must be untouched.
+		Check.unchanged(
+			_fire_hits(def, e, [Vector2(radius * 1.4142, radius * 1.4142)]),
+			0,
+			"and the circle is still BOUNDED: a foe twice the ring radius out is not swept"
+		)
+
+
+## LIGHTNING'S EVOLVED STORM: THREE STRIKES, AND TWO MORE HOPS.
+##
+## `_fireInstant` in `src/weapons.ts`:
+##
+##     const strikes = evolved ? Math.min(3, targets.length) : 1;
+##     const chainCount = evolved ? this.def.chainCount + 2 : this.def.chainCount;
+##
+## TWO SCENES, because those are two claims and one scene cannot see both.
+##
+##   THE LINE. One foe inside the hero's own reach, and seven strung out at 150px -- further
+##   than the bolt itself reaches, nearer than a hop -- so however the RANDOM pick falls the
+##   strike is deterministic and only the chain's LENGTH is measured: `1 + chainCount` below
+##   the level and `1 + chainCount + 2` at it. The line holds one foe MORE than the chain can
+##   reach, so an unbounded chain is visible as a wrong number rather than as the same one.
+##
+##   THE CLUSTER, where `chain: false` isolates the STRIKE count: one foe below the level,
+##   THREE at it -- and they must be three DISTINCT foes, because three hits on one foe is a
+##   different weapon from three strikes.
+func _instant_evolves_into_a_storm() -> void:
+	print("\n-- an instant weapon evolves into a storm --")
+	var instant := _declaring_of_type("instant")
+	Check.at_least(float(instant.size()), 1.0, "an instant weapon declares an evolution")
+	for def in instant:
+		var e := _evolve_level(def)
+		var hops := int(def.get("chainCount", 0))
+		Check.at_least(float(hops), 1.0, "%s declares chainCount, so the chain is the data's" % def["id"])
+		var g := _game_holding(def, e)
+		var reach_below := WeaponFire.reach_for(def, g.hero, e - 1)
+		var reach_at := WeaponFire.reach_for(def, g.hero, e)
+
+		# THE LINE. Its first foe is the last one inside the reach at the level BELOW the
+		# declaration, so it is a target at both levels and the rest never are.
+		var line := _line_offsets(reach_below - 1.0, HOP_PROVEN_REACH, hops + 4)
+		Check.at_least(
+			line[1].x - reach_at,
+			0.001,
+			"PRECONDITION: only the line's first foe is inside the hero's own reach at level %d" % e
+		)
+		Check.unchanged(
+			_fire_hits(def, e - 1, line),
+			1 + hops,
+			"below the level: one foe struck, then chainCount(%d) hops" % hops
+		)
+		Check.unchanged(
+			_fire_hits(def, e, line),
+			1 + hops + 2,
+			"at level %d: one foe struck, then chainCount + 2 (%d) hops" % [e, hops + 2]
+		)
+		# AND THE HOP COUNT IS THE DATA'S. A branch that chained a hardcoded six would satisfy
+		# the line above and fail this: one declared hop is one hop.
+		var single: Dictionary = def.duplicate()
+		single["chainCount"] = 1
+		Check.unchanged(
+			_fire_hits(single, e, line),
+			1 + 1 + 2,
+			"chainCount: 1 -- the evolved chain is 1 + 2 hops, not a constant"
+		)
+
+		# THE CLUSTER, for the strike count.
+		var cluster := _cluster_offsets(reach_below * 0.5, hops + 3)
+		Check.at_least(
+			float(cluster.size()),
+			float(hops + 2),
+			"PRECONDITION: the cluster holds more foes than the chain below the level reaches"
+		)
+		Check.unchanged(
+			_fire_hits(def, e - 1, cluster),
+			1 + hops,
+			"in a cluster, below the level: one strike and its %d hops" % hops
+		)
+		Check.unchanged(
+			_fire_hits(def, e, cluster),
+			cluster.size(),
+			"and at level %d the whole cluster: three strikes, %d hops each" % [e, hops + 2]
+		)
+		var no_chain: Dictionary = def.duplicate()
+		no_chain["chain"] = false
+		Check.unchanged(_fire_hits(no_chain, e - 1, cluster), 1, "chain: false below the level -- one foe")
+		Check.unchanged(
+			_fire_hits(no_chain, e, cluster),
+			3,
+			"and at level %d, THREE DISTINCT foes: `strikes = Math.min(3, targets.length)`" % e
+		)
+
+
 func _check(cond: bool, label: String, detail: String) -> void:
+
 	if cond:
 		print("  ok   %s  (%s)" % [label, detail])
 	else:

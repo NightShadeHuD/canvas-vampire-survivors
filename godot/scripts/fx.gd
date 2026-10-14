@@ -30,6 +30,11 @@
 ## damage covered, and `main.gd` draws it. Each emit site names whether the original draws
 ## that shape or whether it is the port's judgement call.
 ##
+## AND IT SCHEDULES, which is the original's `game.effects` doing the same job. Its one use
+## is the evolved Frost Nova -- `game.effects?.schedule?.(0.4, () => { ... takeDamage ... })`
+## -- and a callback that applies damage is not a particle, so a `Pulse` carries the two
+## numbers the callback captured and `Game.step` lands it. Nothing else schedules anything.
+##
 ## DATA, NOT NODES. `Game` owns this and `main.gd` is still the only file that draws, so a
 ## headless suite can assert what a weapon EMITTED -- which is the half of this the windowed
 ## pixel tier cannot run in CI.
@@ -58,6 +63,10 @@ var sparks: Array = []
 
 ## Every strike shape alive. Iterated by `main.gd` in the same way.
 var strikes: Array = []
+
+## Damage scheduled for later. `WeaponFire` only ever APPENDS to this; `Game.step` is
+## what drains it, because a pulse has to damage the foes and this object has none.
+var pulses: Array = []
 
 
 ## One particle, ported field for field from `Particle` in `src/entities.ts`.
@@ -140,6 +149,30 @@ class Strike:
 		return clampf(life / max_life, 0.0, 1.0)
 
 
+## A DAMAGE PULSE DUE LATER, which is the port of `game.effects.schedule(delay, cb)`.
+##
+## Two numbers, not a closure, and both are the ones `_fireNova` captures before it
+## schedules anything:
+##
+##     const r = range;                     -> radius
+##     const d2 = baseDmg * 0.6;            -> damage
+##     game.effects?.schedule?.(0.4, ...)   -> delay
+##
+## The CENTRE is deliberately absent. The original's callback reads `player.x`/
+## `player.y` when it RUNS, so a hero who walked 200px in those 0.4s takes the second
+## ring where they now stand -- and a captured centre would quietly turn a follow-up
+## into a ground marker.
+class Pulse:
+	var delay: float
+	var radius: float
+	var damage: float
+
+	func _init(after: float, at_radius: float, for_damage: float) -> void:
+		delay = after
+		radius = at_radius
+		damage = for_damage
+
+
 # ---------------------------------------------------------------------------
 # Emitting. Each of these mirrors one `createParticles` call in `src/weapons.ts`.
 # ---------------------------------------------------------------------------
@@ -189,6 +222,26 @@ func emit_blast(x: float, y: float, reach: float, color: Color) -> void:
 	strikes.append(Strike.new(Strike.Kind.BLAST, x, y, reach, color, BLAST_LIFE))
 
 
+## Queue a damage pulse `delay` seconds from now. `_fireNova`'s evolved second ring is
+## the only caller, and `Game.step` is the only thing that lands it.
+func schedule_pulse(delay: float, radius: float, damage: float) -> void:
+	pulses.append(Pulse.new(delay, radius, damage))
+
+## Advance every pending pulse by `delta` and hand back the ones that are DUE, having
+## removed them from the queue. Returned rather than applied: this object has no foes.
+func due_pulses(delta: float) -> Array:
+	var due: Array = []
+	var waiting: Array = []
+	for pulse in pulses:
+		pulse.delay -= delta
+		if pulse.delay <= 0.0:
+			due.append(pulse)
+		else:
+			waiting.append(pulse)
+	pulses = waiting
+	return due
+
+
 # ---------------------------------------------------------------------------
 # Lifetime
 # ---------------------------------------------------------------------------
@@ -216,6 +269,9 @@ func update(delta: float) -> void:
 func clear() -> void:
 	sparks.clear()
 	strikes.clear()
+	# A restart drops scheduled damage with everything else. A pending pulse outliving
+	# the run it belonged to would land on the next one.
+	pulses.clear()
 
 ## True when there is nothing left to draw. A test can assert a still frame is still.
 func is_empty() -> bool:
