@@ -48,7 +48,8 @@
         "check:godot": "node scripts/check-godot.mjs",
         "check:lifecycle": "node scripts/check-lifecycle.mjs",
         "check:reach": "node scripts/check-reach.mjs",
-        "ci": "node scripts/ci-local.mjs"
+        "ci": "node scripts/ci-local.mjs",
+        "ci:report": "node scripts/ci-report.mjs"
     },
     "keywords": [
         "game",
