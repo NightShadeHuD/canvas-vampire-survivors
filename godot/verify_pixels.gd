@@ -455,6 +455,114 @@ func _init() -> void:
 	Check.unchanged(diag.max_hp, diag.hp, "it does NOT hit a foe on the diagonal")
 	Check.unchanged(above.max_hp, above.hp, "it does NOT hit a foe directly above")
 
+	# ---------------------------------------------------------------------------
+	# FROST NOVA'S SLOW IS VISIBLE
+	# ---------------------------------------------------------------------------
+	# `src/entity-render.ts`:
+	#
+	#     if (self.flashTimer > 0) { ctx.fillStyle = '#ffffff'; }
+	#     else if (self.slowTimer > 0) { ctx.fillStyle = '#88ccff'; }
+	#     else { ctx.fillStyle = self.color; }
+	#
+	# -- a foe carrying the nova's slow is drawn COLD BLUE where an untouched one is drawn in
+	# its own colour. The slow has no projectile and no burst at the foe, so this tint is the
+	# only thing that tells a player it happened. "It moves slower" is therefore not the whole
+	# claim, and this is the only tier in the repository that can ask the other half.
+	#
+	# THE PAIR IS ITS OWN CONTROL. Two identical bats -- the same def, the same size, the same
+	# colour, both `Check.sturdy` AND both healed to full so an HP bar cannot account for
+	# anything -- placed a whole number of `GRID_SIZE`s apart on one row, so the arena grid
+	# lands on them identically. The first is inside the nova's reach, the second outside it.
+	# Before the blast their two patches must be pixel-for-pixel IDENTICAL; after it they must
+	# DIFFER. The first is MEASURED rather than assumed, because a pair that is not a
+	# controlled comparison makes the second prove nothing -- the failure mode this tier was
+	# built for.
+	print("\n-- a slowed foe LOOKS slowed --")
+	var slow_run := await _paused_run()
+	var slow_main: Node2D = slow_run["main"]
+	var slow_game: Game = slow_run["game"]
+	var nova_def: Dictionary = _weapon_by_id("frost_nova")
+	slow_game.hero.weapons.clear()
+	slow_game.hero.add_weapon(nova_def)
+	slow_game.hero.hp = slow_game.hero.max_hp
+	slow_game.orbs.clear()
+	slow_game.spawned.clear()
+	# SPAWNS OFF, so the single `step` below cannot drop a foe on top of a patch.
+	slow_game.spawn_timer = INF
+	slow_game._spawn_interval = INF
+
+	# READ from the weapon, not written down: retuning Frost Nova's reach moves both the
+	# placement and the preconditions below with it.
+	var slow_reach: float = WeaponFire.reach_for(nova_def, slow_game.hero, 1)
+	var hit_foe := Check.sturdy(
+		Foe.new(Enemies.ENEMIES["BAT"], slow_game.hero.x + Config.GRID_SIZE * 2.0, slow_game.hero.y)
+	)
+	var cold_foe := Check.sturdy(
+		Foe.new(
+			Enemies.ENEMIES["BAT"],
+			slow_game.hero.x + Config.GRID_SIZE * 2.0 + Config.GRID_SIZE * 4.0,
+			slow_game.hero.y
+		)
+	)
+	hit_foe.speed = 0.0
+	cold_foe.speed = 0.0
+	slow_game.foes.append(hit_foe)
+	slow_game.foes.append(cold_foe)
+	Check.at_most(
+		hit_foe.x - slow_game.hero.x,
+		slow_reach - 1.0,
+		"PRECONDITION: the first foe is inside the nova's reach"
+	)
+	Check.at_least(
+		cold_foe.x - slow_game.hero.x,
+		slow_reach + 1.0,
+		"PRECONDITION: the second is outside it, so the control is not slowed too"
+	)
+	Check.approx(
+		fmod(cold_foe.x - hit_foe.x, float(Config.GRID_SIZE)),
+		0.0,
+		"PRECONDITION: the pair is a whole number of grid cells apart, so they sit on the same grid",
+		0.001
+	)
+
+	var patch_r := int(ceil(hit_foe.size)) + 3
+	var hit_at: Vector2 = slow_main.get_canvas_transform() * Vector2(hit_foe.x, hit_foe.y)
+	var cold_at: Vector2 = slow_main.get_canvas_transform() * Vector2(cold_foe.x, cold_foe.y)
+	var hit_hp0: float = hit_foe.hp
+	var cold_hp0: float = cold_foe.hp
+	# EMPTIED, so the run's opening frames -- which fired Garlic and left sparks -- cannot be
+	# what makes the two patches differ.
+	_fx_hide(slow_game)
+	slow_game.elapsed = 0.0
+	var frame_before := await _capture_of(slow_main)
+	Check.unchanged(
+		_patch_diff(frame_before, hit_at, cold_at, patch_r),
+		0,
+		"CONTROL: BEFORE the blast the two foes are pixel-for-pixel identical (%dpx square each)"
+			% (patch_r * 2 + 1)
+	)
+
+	# THE REAL PATH, as `_weapon_rig` uses it: ready the cooldown and let `Game.step` fire the
+	# weapon on the game's own schedule, so a slow applied anywhere in the real fire is seen.
+	slow_game.cooldowns["frost_nova"] = 0.0
+	slow_game.step(FRAME, Vector2.ZERO)
+	Check.fell(hit_hp0, hit_foe.hp, "the blast REACHED the first foe")
+	Check.unchanged(cold_hp0, cold_foe.hp, "... and did NOT reach the second -- the control was not hit")
+	# HEALED, because a damaged foe draws an HP bar and an untouched one does not, and that is
+	# a difference with nothing to do with being slowed.
+	for foe in slow_game.foes:
+		foe.hp = foe.max_hp
+	# EMPTIED AGAIN: the nova's own ring and sparks are centred on the HERO and land between
+	# the two patches rather than on both -- a difference, but the wrong one.
+	_fx_hide(slow_game)
+	slow_game.elapsed = 0.0
+	var frame_after := await _capture_of(slow_main)
+	Check.at_least(
+		float(_patch_diff(frame_after, hit_at, cold_at, patch_r)),
+		1.0,
+		"AFTER it the slowed foe is DRAWN differently from the one the blast never touched"
+	)
+
 	_finish()
 
 
@@ -642,6 +750,38 @@ func _diff(a: Image, b: Image) -> int:
 	for x in range(0, a.get_width(), step):
 		for y in range(0, a.get_height(), step):
 			if a.get_pixel(x, y) != b.get_pixel(x, y):
+				changed += 1
+	return changed
+
+
+## How many pixels differ between the SAME square neighbourhood of two points, read out of
+## ONE frame.
+##
+## Comparing two patches of a single frame rather than two frames is what makes this
+## independent of the scene: the floor, the grid, the hero, the camera and the palette are
+## shared, so anything that differs between the patches is a difference between the two
+## FOES. Two frames could also differ because something else moved.
+func _patch_diff(img: Image, a: Vector2, b: Vector2, radius: int) -> int:
+	if img.get_width() == 0 or img.get_height() == 0:
+		return -1
+	var changed := 0
+	var ax := int(round(a.x))
+	var ay := int(round(a.y))
+	var bx := int(round(b.x))
+	var by := int(round(b.y))
+	for dx in range(-radius, radius + 1):
+		for dy in range(-radius, radius + 1):
+			var x0 := ax + dx
+			var y0 := ay + dy
+			var x1 := bx + dx
+			var y1 := by + dy
+			if x0 < 0 or y0 < 0 or x1 < 0 or y1 < 0:
+				continue
+			if x0 >= img.get_width() or y0 >= img.get_height():
+				continue
+			if x1 >= img.get_width() or y1 >= img.get_height():
+				continue
+			if img.get_pixel(x0, y0) != img.get_pixel(x1, y1):
 				changed += 1
 	return changed
 

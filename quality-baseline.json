@@ -361,7 +361,7 @@
         "res://verify_scene.gd": 98,
         "res://verify_play.gd": 14,
         "res://verify_xp.gd": 26,
-        "res://verify_weapons.gd": 72,
+        "res://verify_weapons.gd": 96,
         "res://verify_lightning.gd": 21,
         "res://verify_passives.gd": 20,
         "res://verify_invariants.gd": 11,
