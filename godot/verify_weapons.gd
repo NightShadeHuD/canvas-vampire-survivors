@@ -72,6 +72,18 @@ func _init() -> void:
 	_a_slowed_foe_is_drawn_iced_blue()
 	_the_slow_expires_exactly_on_its_duration()
 	_the_evolved_second_ring_does_not_slow()
+	_the_evolved_second_ring_is_never_doubled()
+
+	# PER-TARGET CRIT. `quality-baseline.json` declared `godot-crit-rolled-once-per-fire`:
+	# `_rollCrit` is called from four sites in `src/weapons.ts` and all four are inside a
+	# per-target loop, while this port rolled once before the dispatch. Each measurement below
+	# pins one of those four loops by its DRAW COUNT and by the MIX of damages within one fire,
+	# and Garlic -- rolled once on purpose -- is the control beside them.
+	_melee_rolls_once_per_foe()
+	_nova_rolls_once_per_foe()
+	_lightning_rolls_once_per_strike()
+	_drain_rolls_once_per_tether_and_heals_their_sum()
+	_the_aura_is_the_all_or_nothing_control()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
@@ -741,6 +753,32 @@ const CRIT_FIRES := 1200
 ## How long a shot is stepped before its damage is read. A blade at 620px/s covers the 60px
 ## to the target in six frames; forty is generous and cannot make a hit look like a miss.
 const CRIT_SETTLE := 40
+
+## Foes in the per-target crit geometries. FOUR, because that is the smallest count at which a
+## shared roll and four independent ones are far apart: at a 25% chance a shared roll mixes on
+## NONE of its fires and four independent rolls mix on 68% of theirs.
+const CRIT_TARGETS := 4
+## Fires per mixing measurement. `CRIT_FIRES`' own number, for its own reason: at p = 0.25 and
+## N = 4 the mixed share has a standard deviation of 0.0135 over twelve hundred fires, so the
+## 0.06 tolerance below is 4.4 sigma -- a false-failure probability just under 1e-5 -- while a
+## per-fire roll, which reads exactly 0.0, sits 50 sigma away and fails every time.
+const CRIT_RATE_FIRES := 1200
+const CRIT_RATE_TOL := 0.06
+## The seed the draw-count probes replay and the mixing measurements run under. Any fixed value
+## would do; naming it is what makes a failure reproducible instead of a coincidence.
+const CRIT_DRAW_SEED := 20260701
+## Two damage readings count as DIFFERENT above this. `foe.hp` is a subtraction of two numbers
+## near a million, whose round-trip error is ~1e-9, and the thing being told apart is a factor
+## of two; anywhere between those two works and this is between them.
+const DAMAGE_EPSILON := 1e-4
+## What `_fireDrain`'s heal owes is exact arithmetic on two numbers ~1e-9 apart after the hp
+## round trip, so this is a hundred thousand times the noise -- and a millionth of the error a
+## wrong summation makes, which is one foe's whole damage (14.4 at level 5).
+const HEAL_TOLERANCE := 1e-4
+## Fires the evolved second ring is measured over, one `Game.step`-driven pulse each. At p=0.25
+## the chance that not one of them crits its first ring is 0.75^40, about 1e-5 -- and the
+## precondition assertion says so out loud rather than letting the measurement pass vacuously.
+const NOVA_PULSE_FIRES := 40
 
 
 ## THE DATA'S OWN GUARD: this section is worth nothing if the table stops declaring anything.
@@ -1452,6 +1490,421 @@ func _the_evolved_second_ring_does_not_slow() -> void:
 	Check.fell(before, foe.hp, "the evolved second ring lands its damage 0.4s later")
 	Check.unchanged(
 		foe.slow_timer, 0.0, "and it does NOT slow -- the original's callback writes no slowTimer"
+	)
+
+
+# ---------------------------------------------------------------------------
+# PER-TARGET CRIT
+#
+# THE DECLARED GAP: `godot-crit-rolled-once-per-fire`, in `quality-baseline.json`.
+#
+# `grep -n "_rollCrit" src/weapons.ts` is four lines -- 216, 289, 395 and 454 -- and every one
+# of them is INSIDE a per-target loop:
+#
+#     src/weapons.ts:216   `_fireMelee`    `for (const enemy of candidates)`
+#     src/weapons.ts:289   `_fireInstant`  `for (let i = 0; i < strikes; i++)`
+#     src/weapons.ts:395   `_fireNova`     `for (const enemy of candidates)`
+#     src/weapons.ts:454   `_fireDrain`    `for (const e of targets)`
+#
+# The port rolled ONCE, before the `match kind:` dispatch, and multiplied that single number
+# into every archetype. A Whip sweep that caught four foes doubled all four or none of them:
+# the EXPECTED damage was right and the variance was not, and no assertion here could see it.
+#
+# TWO MEASUREMENTS PER ARCHETYPE, because either one alone has a way of being wrong:
+#
+#   THE DRAW COUNT. `fire` takes a caller-owned `RandomNumberGenerator` and one crit roll is one
+#   `randf()`, so after a fire at N foes the generator's NEXT value must be the (N+1)th of its
+#   own sequence -- replayed from a scratch generator seeded the same way, with no tolerance and
+#   no rate. It is also the assertion that the roll comes from the CALLER's generator at all,
+#   which is what makes a seeded run reproducible rather than merely unpredictable.
+#
+#   THE MIX. Foe damage is read as health actually LOST -- this port draws no damage numbers, so
+#   there is nothing else to read -- and a fire MIXES when its targets did not all take the same
+#   number. One shared roll can NEVER mix. N independent rolls mix at `1 - p^N - (1-p)^N`, which
+#   is computed from the hero's own crit chance and the def's own declared bonus rather than
+#   written down.
+#
+# AND A CONTROL BESIDE THEM. Garlic is an archetype this port rolls ONCE for, and it goes
+# through the identical instrument. If the instrument were what reported "mixed", the control
+# would say so -- a measurement that cannot read all-or-nothing cannot tell it from per-target,
+# and would pass the Whip check while measuring nothing.
+# ---------------------------------------------------------------------------
+
+
+## A hero who has taken Luck passives, holding `weapon` at `level`.
+##
+## At the CAP by default, and the cap is READ from `Config` rather than written down: the chance
+## every expectation below is computed from is `hero.crit_chance()`, so changing the passive's
+## own number or the stack cap moves the expectation with it rather than quietly invalidating
+## the measurement.
+func _crit_hero(weapon: Dictionary, level: int, stacks: int = -1) -> Game:
+	var g := _game_holding(weapon, level)
+	var n: int = Config.PASSIVE_MAX_STACK if stacks < 0 else stacks
+	for i in n:
+		g.hero.add_passive(Passives.PASSIVES["LUCK"])
+	return g
+
+
+## What one fire rolls against: the hero's own stacks, plus the def's own declared bonus when
+## the weapon is at its evolve level. Built from those two READS rather than from
+## `WeaponFire.crit_chance_for`, so a port that computed the chance wrongly cannot have this
+## file agree with it by sharing the mistake.
+func _fire_crit_chance(weapon: Dictionary, hero: Hero, level: int) -> float:
+	var chance := hero.crit_chance()
+	if level >= int(weapon.get("evolveLevel", 0)):
+		chance += float(weapon.get("evolveBonusCrit", 0.0))
+	return chance
+
+
+## What N INDEPENDENT rolls at `p` mix at: every outcome except all-crit and no-crit. One shared
+## roll mixes at exactly 0, which is the whole of the difference this section measures.
+func _mixed_share(p: float, n: int) -> float:
+	return 1.0 - pow(p, float(n)) - pow(1.0 - p, float(n))
+
+
+## `count` sturdy bats on a LINE along +x, spanning `spread` about `offset`, every one frozen.
+##
+## A line rather than the ring `_scatter` builds, because the un-evolved Whip's sweep is a BAND
+## -- `if (Math.abs(dy) > 40) continue` -- and a ring's top and bottom foes are outside it by
+## design, so a ring would make the number of foes swept depend on the geometry under test.
+##
+## REGISTERED IN `g.foes` as well as returned, like `_scatter`. A delayed pulse is landed by
+## `Game._land_pulses`, which walks the GAME's own foe list -- so a foe this helper made but did
+## not register takes the first ring's damage and none of the second's. That is not a guess:
+## `_the_evolved_second_ring_is_never_doubled` read 0.0 for every pulse until this line was
+## added, and its own assertion is what said so.
+func _line_of_bats(g: Game, count: int, spread: float, offset: float) -> Array:
+	var made: Array = []
+	for i in count:
+		var t := 0.0 if count < 2 else float(i) / float(count - 1) * 2.0 - 1.0
+		var f := Check.sturdy(
+			Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + offset + t * spread * 0.5, g.hero.y)
+		)
+		f.speed = 0.0
+		g.foes.append(f)
+		made.append(f)
+	return made
+
+
+## The health each of `foes` LOST to one fire.
+##
+## `foe.hp` is the only record of what a foe was dealt -- there is no damage number in this port
+## to read, and that absence is one of the findings this section reports -- and `Check.sturdy`
+## is what keeps a measurement of DAMAGE from becoming a measurement of death: twelve hundred
+## fires at a bat's own 15 hp would kill it on the first one.
+##
+## No generator is passed, so the fire draws from the global one and the caller seeds it. That
+## is `Game.step`'s own arrangement, so these rates are measured on the path a run takes rather
+## than on a path only a test takes.
+func _fire_losses(weapon: Dictionary, hero: Hero, foes: Array, level: int) -> Array:
+	var before: Array = []
+	for foe in foes:
+		before.append(foe.hp)
+	WeaponFire.fire(weapon, hero, foes, [], level)
+	var lost: Array = []
+	for i in foes.size():
+		lost.append(float(before[i]) - float(foes[i].hp))
+	return lost
+
+
+## How many of `fires` fires MIXED -- their targets did not all take the same damage.
+func _mixed_fires(weapon: Dictionary, hero: Hero, foes: Array, level: int, fires: int) -> int:
+	seed(CRIT_DRAW_SEED)
+	var mixed := 0
+	for i in fires:
+		var lost := _fire_losses(weapon, hero, foes, level)
+		var lo := float(lost[0])
+		var hi := float(lost[0])
+		for v in lost:
+			lo = minf(lo, float(v))
+			hi = maxf(hi, float(v))
+		if hi - lo > DAMAGE_EPSILON:
+			mixed += 1
+	return mixed
+
+
+## How many `randf()` draws ONE fire takes from a caller-supplied generator.
+##
+## Read by REPLAYING the generator's own sequence: a scratch generator is seeded with the same
+## number and its first `draws + 1` values are listed, then a second generator with that seed
+## fires the weapon once and the value it produces NEXT is compared with the (draws+1)th. Two
+## draws from a seeded `RandomNumberGenerator` are the same number, so a generator that was
+## drawn from a different number of times is at a different place and reads a different value.
+## `_lightning_picks` already pins Lightning's choices this way.
+##
+## Returns `[actual, expected]` so a failing `Check.approx` prints both numbers.
+func _crit_draw_probe(
+	weapon: Dictionary, hero: Hero, foes: Array, level: int, draws: int
+) -> Array:
+	var scratch := RandomNumberGenerator.new()
+	scratch.seed = CRIT_DRAW_SEED
+	var expected := 0.0
+	for i in draws + 1:
+		expected = scratch.randf()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = CRIT_DRAW_SEED
+	WeaponFire.fire(weapon, hero, foes, [], level, null, rng)
+	return [rng.randf(), expected]
+
+
+## THE WHIP. `src/weapons.ts:216`, the roll inside `_fireMelee`'s candidate loop.
+func _melee_rolls_once_per_foe() -> void:
+	print("\n-- a Whip sweep rolls for EACH foe it catches --")
+	var def := _weapon("whip")
+	var g := _crit_hero(def, 1)
+	# Inside the level-1 band: `baseRange` is 90, so `|dx| <= 90`, and the line lies along
+	# y = 0 where `|dy| <= 40` holds for every one of them.
+	var foes := _line_of_bats(g, CRIT_TARGETS, 140.0, 0.0)
+	var probe := _crit_draw_probe(def, g.hero, foes, 1, CRIT_TARGETS)
+	Check.approx(
+		float(probe[0]),
+		float(probe[1]),
+		"one fire at %d foes takes %d crit draws, not one" % [CRIT_TARGETS, CRIT_TARGETS],
+		1e-9
+	)
+	var p := _fire_crit_chance(def, g.hero, 1)
+	Check.rose(0.0, p, "the hero's crit chance is measurable, so the rate below is a rate")
+	var mixed := _mixed_fires(def, g.hero, foes, 1, CRIT_RATE_FIRES)
+	Check.rate(
+		mixed,
+		CRIT_RATE_FIRES,
+		_mixed_share(p, CRIT_TARGETS),
+		CRIT_RATE_TOL,
+		"and the sweep MIXES -- some foes doubled and others not (p = %0.2f)" % p
+	)
+
+
+## GARLIC, THE CONTROL. `_fireAura` calls `_rollCrit` NOWHERE in the original, and this port
+## rolls once for the whole fire, so the aura must read one draw and mix on none of its fires.
+##
+## This is the positive control for every measurement above: it is the SAME instrument, on the
+## same number of foes, under the same hero, over the same number of fires, against an
+## archetype that really is all-or-nothing.
+func _the_aura_is_the_all_or_nothing_control() -> void:
+	print("\n-- the aura, which rolls ONCE, is the control --")
+	var def := _weapon("garlic")
+	var g := _crit_hero(def, 1)
+	var p := _fire_crit_chance(def, g.hero, 1)
+	Check.rose(0.0, p, "the control hero has a crit chance too, so it COULD have mixed")
+	# `baseRange` is 110, so a 180-wide line is entirely inside the aura.
+	var foes := _line_of_bats(g, CRIT_TARGETS, 180.0, 0.0)
+	var probe := _crit_draw_probe(def, g.hero, foes, 1, 1)
+	Check.approx(
+		float(probe[0]), float(probe[1]), "the aura takes ONE roll for the whole fire", 1e-9
+	)
+	var mixed := _mixed_fires(def, g.hero, foes, 1, CRIT_RATE_FIRES)
+	Check.unchanged(
+		mixed,
+		0,
+		"and NEVER mixes in %d fires -- the instrument CAN read all-or-nothing" % CRIT_RATE_FIRES
+	)
+
+
+## FROST NOVA. `src/weapons.ts:395`, the roll inside `_fireNova`'s candidate loop.
+func _nova_rolls_once_per_foe() -> void:
+	print("\n-- a Frost Nova burst rolls for EACH foe it catches --")
+	var def := _weapon("frost_nova")
+	var g := _crit_hero(def, 1)
+	# `baseRange` is 200, so a 340-wide line is inside the burst.
+	var foes := _line_of_bats(g, CRIT_TARGETS, 340.0, 0.0)
+	var probe := _crit_draw_probe(def, g.hero, foes, 1, CRIT_TARGETS)
+	Check.approx(
+		float(probe[0]),
+		float(probe[1]),
+		"one burst at %d foes takes %d crit draws, not one" % [CRIT_TARGETS, CRIT_TARGETS],
+		1e-9
+	)
+	var p := _fire_crit_chance(def, g.hero, 1)
+	var mixed := _mixed_fires(def, g.hero, foes, 1, CRIT_RATE_FIRES)
+	Check.rate(
+		mixed,
+		CRIT_RATE_FIRES,
+		_mixed_share(p, CRIT_TARGETS),
+		CRIT_RATE_TOL,
+		"and the burst MIXES -- some foes doubled and others not (p = %0.2f)" % p
+	)
+
+
+## LIGHTNING AT ITS EVOLVE LEVEL. `src/weapons.ts:289`, the roll inside the STRIKE loop: three
+## strikes are three rolls, and a chain hop INHERITS the roll of the strike it started from
+## (`nearest.takeDamage(dmg * 0.7)`) rather than taking one of its own.
+##
+## THE DRAW COUNT IS NOT PINNED HERE, and cannot be: the strike's target comes from rejection
+## sampling --
+##
+##     while (picked.size < targets.length) { const cand = targets[Math.floor(Math.random() * targets.length)]; ... }
+##
+## -- so how many draws a fire takes depends on which foes it happens to pick and on how often
+## it re-picks one it already has. The mixing rate is what is left, and it is the claim.
+func _lightning_rolls_once_per_strike() -> void:
+	print("\n-- an evolved Lightning rolls for EACH strike --")
+	var def := _weapon("lightning")
+	var level := int(def["evolveLevel"])
+	var g := _crit_hero(def, level)
+	# THREE foes, every pair more than the 180px hop radius apart, so no strike chains and every
+	# foe damaged was damaged by a strike's own roll rather than by an inherited one. Reach at
+	# level 5 is 588, so all three are candidates and `strikes` is `min(3, 3)`.
+	var foes := _line_of_bats(g, 3, 480.0, 300.0)
+	var struck := 0
+	for v in _fire_losses(def, g.hero, foes, level):
+		if float(v) > 0.0:
+			struck += 1
+	Check.unchanged(struck, 3, "all three foes are struck by the one bolt, so all three roll")
+	var p := _fire_crit_chance(def, g.hero, level)
+	# STATED, because the rate below is a rate at THIS chance: the def's own `evolveBonusCrit`
+	# is folded into it, so the expectation is not the hero's Luck alone. That the field is READ
+	# is `_bonus_crit_is_read`'s claim, measured as a damage ratio; this only fixes the number
+	# the rate is judged against.
+	Check.rose(
+		g.hero.crit_chance(),
+		p,
+		"the evolved strike rolls at the hero's chance PLUS the def's evolveBonusCrit"
+	)
+	var mixed := _mixed_fires(def, g.hero, foes, level, CRIT_RATE_FIRES)
+	Check.rate(
+		mixed,
+		CRIT_RATE_FIRES,
+		_mixed_share(p, 3),
+		CRIT_RATE_TOL,
+		"and the three strikes MIX -- one can double while another does not (p = %0.2f)" % p
+	)
+
+
+## SOUL DRAIN. `src/weapons.ts:454`, the roll inside `_fireDrain`'s target loop -- and the heal,
+## which is the one place where rolling per target changes ARITHMETIC rather than variance:
+##
+##     let totalDmg = 0;
+##     for (const e of targets) { const dmg = this._rollCrit(...); totalDmg += dmg; }
+##     if (player.heal) player.heal(totalDmg * steal);
+##
+## `dmg * drained.size()` equalled that sum only while both tethers shared a single roll. With
+## two independent rolls, one crit of two tethers heals 3x a plain tether -- not 2x, and not 4x.
+func _drain_rolls_once_per_tether_and_heals_their_sum() -> void:
+	print("\n-- Soul Drain rolls for EACH tether and heals their SUM --")
+	var def := _weapon("soul_drain")
+	var level := int(def["evolveLevel"])
+	var g := _crit_hero(def, level)
+	var hero := g.hero
+	var foes := _line_of_bats(g, 2, 200.0, 0.0)
+	var steal := float(def.get("lifestealPct", 0.0))
+	Check.rose(0.0, steal, "Soul Drain declares a lifesteal, so there is a heal to measure")
+	var probe := _crit_draw_probe(def, hero, foes, level, 2)
+	Check.approx(
+		float(probe[0]), float(probe[1]), "an evolved tether takes ONE roll per foe", 1e-9
+	)
+	seed(CRIT_DRAW_SEED)
+	var mismatches := 0
+	var mixed := 0
+	var unstruck := 0
+	for i in CRIT_RATE_FIRES:
+		# PRECONDITION, restated every fire: the heal is CLAMPED at `max_hp`, so a hero left
+		# near full health would measure the clamp instead of the arithmetic. `Check.wounded`
+		# exists for exactly this and was written after this test failed against working code.
+		Check.wounded(hero, 1.0)
+		var lost := _fire_losses(def, hero, foes, level)
+		if float(lost[0]) <= 0.0 or float(lost[1]) <= 0.0:
+			unstruck += 1
+		var healed: float = hero.hp - 1.0
+		var owed := (float(lost[0]) + float(lost[1])) * steal
+		if absf(healed - owed) > HEAL_TOLERANCE:
+			mismatches += 1
+		if absf(float(lost[0]) - float(lost[1])) > DAMAGE_EPSILON:
+			mixed += 1
+	Check.unchanged(
+		unstruck, 0, "both tethers are struck on every fire, so there are two rolls to sum"
+	)
+	Check.unchanged(
+		mismatches,
+		0,
+		"and the heal is `steal` of what the two ACTUALLY took, on every one of %d fires" % CRIT_RATE_FIRES
+	)
+	var p := _fire_crit_chance(def, hero, level)
+	Check.rate(
+		mixed,
+		CRIT_RATE_FIRES,
+		_mixed_share(p, 2),
+		CRIT_RATE_TOL,
+		"the two tethers roll independently (p = %0.2f)" % p
+	)
+	# THE HEAL IS NOT THE OLD ARITHMETIC. `dmg * drained.size()` is one number counted twice;
+	# this is what that would have healed, and it is a different number whenever the two rolls
+	# differed -- which is the case the assertion above covers and this one names.
+	var one_roll_would_be := 0
+	for i in CRIT_RATE_FIRES:
+		Check.wounded(hero, 1.0)
+		var lost := _fire_losses(def, hero, foes, level)
+		var healed: float = hero.hp - 1.0
+		var counted_twice := float(lost[0]) * 2.0 * steal
+		if absf(healed - counted_twice) > HEAL_TOLERANCE:
+			one_roll_would_be += 1
+	Check.at_least(
+		float(one_roll_would_be),
+		1.0,
+		"and `dmg * size` would have healed a DIFFERENT number on some fires, so the two"
+		+ " summations are not the same arithmetic"
+	)
+
+
+## THE EVOLVED SECOND RING IS NEVER DOUBLED, and this is where rolling per target changed
+## something other than variance. `_fireNova`:
+##
+##     const baseDmg = this.getDamage(player);
+##     const d2 = baseDmg * 0.6;
+##     game.effects?.schedule?.(0.4, () => { ... if (d < r) e.takeDamage(d2); ... });
+##
+## `d2` is taken from the UNCRITTED base, before any `_rollCrit`, and the callback rolls nothing
+## of its own -- so the second ring is 60% of `getDamage()` whether or not the first ring
+## doubled. The port carried its single per-fire `dmg` into the pulse, so a crit on the first
+## ring silently doubled the second one too. Now that the first ring rolls per foe there is no
+## single `dmg` for the pulse to inherit in the first place: the base is what it carries.
+func _the_evolved_second_ring_is_never_doubled() -> void:
+	print("\n-- the evolved second ring is 60% of the UNCRITTED base --")
+	var def := _weapon("frost_nova")
+	var level := int(def["evolveLevel"])
+	# THE BASE, from a hero with NO Luck. `_rollCrit`'s guard is `chance > 0`, so this fire
+	# cannot double anything and its first ring IS the base the pulse is a fraction of.
+	var plain := _crit_hero(def, level, 0)
+	var base_foe := Check.sturdy(
+		Foe.new(Enemies.ENEMIES["BAT"], plain.hero.x + 80.0, plain.hero.y)
+	)
+	base_foe.speed = 0.0
+	var before: float = base_foe.hp
+	WeaponFire.fire(def, plain.hero, [base_foe], [], level)
+	var base_dmg: float = before - base_foe.hp
+	Check.rose(0.0, base_dmg, "a no-Luck hero's first ring is the UNCRITTED base")
+	var g := _crit_hero(def, level)
+	var hero := g.hero
+	var foes := _line_of_bats(g, 1, 0.0, 80.0)
+	var foe: Foe = foes[0]
+	seed(CRIT_DRAW_SEED)
+	var crit_first_rings := 0
+	var pulse_mismatches := 0
+	for i in NOVA_PULSE_FIRES:
+		var hp_before: float = foe.hp
+		WeaponFire.fire(def, hero, foes, [], level, g.fx)
+		var hp_after_ring: float = foe.hp
+		var ring: float = hp_before - hp_after_ring
+		# NOTHING ELSE MAY FIRE during the step, or a second FIRST ring would be
+		# indistinguishable from the second ring under test.
+		hero.weapons.clear()
+		for j in 30:
+			g.step(FRAME, Vector2.ZERO)
+		var pulse: float = hp_after_ring - foe.hp
+		if absf(ring - base_dmg * 2.0) <= DAMAGE_EPSILON:
+			crit_first_rings += 1
+		if absf(pulse - base_dmg * WeaponFire.NOVA_PULSE_DAMAGE) > DAMAGE_EPSILON:
+			pulse_mismatches += 1
+	Check.at_least(
+		float(crit_first_rings),
+		1.0,
+		"at least one of %d fires critted its FIRST ring (measured: %d)" % [
+			NOVA_PULSE_FIRES, crit_first_rings
+		]
+	)
+	Check.unchanged(
+		pulse_mismatches,
+		0,
+		"and every second ring is exactly %0.2f of the base -- never doubled by it" % WeaponFire.NOVA_PULSE_DAMAGE
 	)
 
 
