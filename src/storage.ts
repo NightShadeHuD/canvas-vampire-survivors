@@ -202,6 +202,33 @@ export function _resetStorageForTests() {
 // Leaderboard helpers
 // ---------------------------------------------------------------------------
 /**
+ * The maximum number of stage keys a save may hold.
+ *
+ * This is the read path's cap (`saveShape().stageHighScores.max`), named so the
+ * WRITE path can honour the same number instead of the two being independent
+ * literals that happen to agree. They disagreed: 200 distinct stage keys could
+ * be written and `loadSave` kept 64, so the next save persisted 64 and the
+ * other 136 boards were gone with no message.
+ */
+const STAGE_BOARD_CAP = 64;
+
+/**
+ * A stage id that actually exists, or the canonical fallback.
+ *
+ * The three ids are listed rather than imported, and the duplication is
+ * deliberate: `src/stages.ts` reaches `src/main.ts` (for its `Game` type) and
+ * `src/main.ts` imports this module, so a runtime import from here into
+ * `stages.ts` would close a cycle. `test/hostile-input.test.ts`, in
+ * the test named "F12b DRIFT", pins this list against the real `STAGES` so it
+ * cannot drift silently — which is the property an import would have given for
+ * free and a comment would not.
+ */
+function knownStageId(id: unknown): string {
+    const s = typeof id === 'string' ? id : '';
+    return s === 'forest' || s === 'crypt' || s === 'tundra' ? s : 'forest';
+}
+
+/**
  * Insert a run result into the top-N leaderboard (sorted by timeSurvived
  * descending, then by kills). Returns the 1-based rank of the new entry, or 0
  * if it did not qualify.
@@ -225,15 +252,41 @@ export function recordHighScore(save, entry) {
 
     // v2.6: per-stage leaderboard slot. Default to 'forest' so old runs
     // without a stage field still land in the canonical bucket.
-    const stageId = clean.stage || 'forest';
+    //
+    // The stage id is VALIDATED against the shipped stages rather than trusted,
+    // and the write goes through `defineOwn`. Both were defects:
+    //
+    //   - `stage: "__proto__"` made `save.stageHighScores[stageId] = …` run the
+    //     INHERITED `__proto__` setter. The entry was silently lost and
+    //     `stageHighScores`'s PROTOTYPE became an array. `isUnsafeKey` guards
+    //     `mergeDeep`, `safeClone` and the record read, but not this write, so
+    //     the one path that creates keys was the one path without the guard.
+    //     An unusable stage now falls back to the canonical bucket instead.
+    //   - A key that is not a real stage id has nowhere to be read from:
+    //     nothing in `src/` reads `stageHighScores` at all today, so an
+    //     arbitrary key can only be corruption. REFUSING it is therefore free.
+    const stageId = knownStageId(clean.stage);
     save.stageHighScores ??= {};
-    const sList = Array.isArray(save.stageHighScores[stageId]) ? save.stageHighScores[stageId] : [];
+    const existing = Object.prototype.hasOwnProperty.call(save.stageHighScores, stageId)
+        ? save.stageHighScores[stageId]
+        : null;
+    const sList = Array.isArray(existing) ? existing : [];
     const withNewStage = sList.concat([clean]);
     withNewStage.sort((a, b) => {
         if (b.timeSurvived !== a.timeSurvived) return b.timeSurvived - a.timeSurvived;
         return (b.kills || 0) - (a.kills || 0);
     });
-    save.stageHighScores[stageId] = withNewStage.slice(0, CONFIG.HIGHSCORE_SLOTS);
+    // THE WRITE PATH IS BOUNDED, because the READ path is. `loadSave` keeps at
+    // most `STAGE_BOARD_CAP` keys and the next save persists only those, so an
+    // unbounded write does not grow the save — it silently DISCARDS every board
+    // beyond the cap on the following save. 200 imported stage keys measured
+    // 200 written -> 64 survive -> 64 after a second cycle, i.e. 136 boards
+    // gone for good. Refusing a new key at the cap turns that silent loss into
+    // a no-op on the board the player actually played.
+    const isNewKey = !Object.prototype.hasOwnProperty.call(save.stageHighScores, stageId);
+    if (!isNewKey || Object.getOwnPropertyNames(save.stageHighScores).length < STAGE_BOARD_CAP) {
+        defineOwn(save.stageHighScores, stageId, withNewStage.slice(0, CONFIG.HIGHSCORE_SLOTS));
+    }
 
     // Also update legacy best-of for backwards compat.
     if (clean.timeSurvived > (save.highScore?.timeSurvived || 0)) {
@@ -262,15 +315,45 @@ export function getTouchButtonScale(save) {
     return Math.min(1.4, Math.max(0.8, v));
 }
 
+/**
+ * The ceiling for a cumulative total, in the units each total is counted in.
+ *
+ * Chosen far above any reachable value -- a run is capped at `MAX_RUN_SECONDS`
+ * so `timePlayed` would need 10^12 runs to arrive here -- and far below
+ * `Number.MAX_VALUE`, which is the only property that matters. The point is not
+ * the number; it is that the sum cannot reach a value the READER refuses.
+ *
+ * The bug this closes is the same one already fixed on the read side, one layer
+ * down: an unbounded sum overflows to `Infinity`, `JSON.stringify` writes
+ * `Infinity` as `null`, `coerceShape` refuses a non-finite number, and the stat
+ * comes back as 0 with no error anywhere. Measured before the fix:
+ * `MAX_VALUE` + `MAX_VALUE` -> save -> load -> `0`.
+ */
+const MAX_TOTAL = 1e15;
+
+/** Add without ever leaving the finite range the reader accepts. */
+function addBounded(current: number, delta: number): number {
+    const a = Number.isFinite(current) ? current : 0;
+    const b = Number.isFinite(delta) && delta > 0 ? delta : 0;
+    return Math.min(a + b, MAX_TOTAL);
+}
+
+/**
+ * Add one run's results to the cumulative totals.
+ *
+ * Every field goes through `addBounded`, so a caller cannot drive a total out of
+ * the range `coerceShape` accepts even with a `1e308` in the run. `runs` is
+ * likewise capped, so a save cannot claim more runs than the ceiling.
+ */
 export function accumulateTotals(
     save,
     run: { kills?: number; gameTime?: number; bossKills?: number }
 ) {
     save.totals ??= { kills: 0, timePlayed: 0, runs: 0, bossKills: 0 };
-    save.totals.kills += run.kills || 0;
-    save.totals.timePlayed += run.gameTime || 0;
-    save.totals.runs += 1;
-    save.totals.bossKills += run.bossKills || 0;
+    save.totals.kills = addBounded(save.totals.kills, run.kills || 0);
+    save.totals.timePlayed = addBounded(save.totals.timePlayed, run.gameTime || 0);
+    save.totals.runs = addBounded(save.totals.runs, 1);
+    save.totals.bossKills = addBounded(save.totals.bossKills, run.bossKills || 0);
 }
 
 export function structuredCloneCompat<T>(obj: T): T {
@@ -677,10 +760,18 @@ function saveShape(): Shape {
             totals: {
                 kind: 'object',
                 fields: {
-                    kills: { kind: 'number', min: 0 },
-                    timePlayed: { kind: 'number', min: 0 },
-                    runs: { kind: 'number', min: 0 },
-                    bossKills: { kind: 'number', min: 0 },
+                    // BOUNDED SUMS. With no maximum these could be accumulated past
+                    // Number.MAX_VALUE, and the sequence that follows is silent: the
+                    // sum becomes Infinity, JSON.stringify writes Infinity as `null`,
+                    // and `coerceShape` refuses a non-finite number — so the stat came
+                    // back as 0. Measured: MAX_VALUE + MAX_VALUE -> save -> load -> 0. A
+                    // bound the accumulator also applies means the value can never be
+                    // one the reader refuses, and the ceiling is a number no run can
+                    // legitimately reach.
+                    kills: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
+                    timePlayed: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
+                    runs: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
+                    bossKills: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
                     seenBuilds: { kind: 'array', of: { kind: 'string', maxLength: 64 }, max: 512 },
                     uniqueBuilds: { kind: 'number', min: 0, maxValue: 512 }
                 }

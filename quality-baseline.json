@@ -62,9 +62,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 81.71,
-            "branches": 84.24,
-            "functions": 72.44
+            "lines": 87.01,
+            "branches": 84.82,
+            "functions": 76.19
         },
         "files": {
             "scripts/lib/annotate.mjs": {
@@ -147,6 +147,11 @@
                 "branches": 97.67,
                 "functions": 100
             },
+            "scripts/lib/sw-cache-name.mjs": {
+                "lines": 95.66,
+                "branches": 80.65,
+                "functions": 100
+            },
             "scripts/lib/type-coverage.mjs": {
                 "lines": 100,
                 "branches": 94.74,
@@ -168,9 +173,9 @@
                 "functions": 100
             },
             "src/daily.ts": {
-                "lines": 94.01,
-                "branches": 66.67,
-                "functions": 63.16
+                "lines": 96.63,
+                "branches": 75,
+                "functions": 69.57
             },
             "src/data.ts": {
                 "lines": 100,
@@ -204,7 +209,7 @@
             },
             "src/i18n.ts": {
                 "lines": 100,
-                "branches": 90,
+                "branches": 90.91,
                 "functions": 100
             },
             "src/input.ts": {
@@ -213,8 +218,8 @@
                 "functions": 41.03
             },
             "src/keymap.ts": {
-                "lines": 92.53,
-                "branches": 69.33,
+                "lines": 94.17,
+                "branches": 79.05,
                 "functions": 100
             },
             "src/konami.ts": {
@@ -223,9 +228,9 @@
                 "functions": 71.43
             },
             "src/main.ts": {
-                "lines": 50.55,
-                "branches": 57.89,
-                "functions": 27.1
+                "lines": 52.34,
+                "branches": 58.93,
+                "functions": 27.27
             },
             "src/pool.ts": {
                 "lines": 100,
@@ -233,9 +238,14 @@
                 "functions": 100
             },
             "src/replay.ts": {
-                "lines": 91.97,
-                "branches": 81.33,
-                "functions": 86.96
+                "lines": 96.51,
+                "branches": 86.07,
+                "functions": 92.31
+            },
+            "src/safe-html.ts": {
+                "lines": 99.32,
+                "branches": 90.57,
+                "functions": 90.91
             },
             "src/spatial-hash.ts": {
                 "lines": 100,
@@ -248,8 +258,8 @@
                 "functions": 100
             },
             "src/storage.ts": {
-                "lines": 96.68,
-                "branches": 75.29,
+                "lines": 99.07,
+                "branches": 86.59,
                 "functions": 100
             },
             "src/systems.ts": {
@@ -263,9 +273,9 @@
                 "functions": 100
             },
             "src/ui.ts": {
-                "lines": 54.99,
-                "branches": 65.87,
-                "functions": 65.52
+                "lines": 91.17,
+                "branches": 71.15,
+                "functions": 81.61
             },
             "src/weapons.ts": {
                 "lines": 56.28,
@@ -278,9 +288,10 @@
     "anyCeiling": 131,
     "_anyCeilingNote": "Raised 118 -> 137 to admit test/type-coverage.test.ts, whose FIXTURES are necessarily full of `any` \u2014 it tests the tool that counts them. Every one of the 19 added uses is a string literal fixture, not a type in shipped code. The ceiling may still only fall from here; this is a declared, bounded exception rather than a drift.",
     "portCeilings": {
-        "error": 321,
+        "error": 323,
         "silent": 8
     },
+    "_portCeilingsRaiseNote": "Raised 321 -> 323 for the storage write-path fixes. Two new top-level `const`s, `STAGE_BOARD_CAP` (the write path's bound, which must be the same number as the read shape's `max`) and `MAX_TOTAL` (the ceiling that stops a cumulative total reaching `Infinity`, which `JSON.stringify` writes as `null` and the reader then refuses -- the stat silently reset to 0). GDScript has no variables outside a class, so both are real port work, and both follow the file's own existing step (`MAX_RUN_SECONDS` is declared the same way). The SILENT total is unchanged at 8, and both ceilings may still only fall.",
     "godotWorklist": {
         "total": 22,
         "paths": [
@@ -337,7 +348,7 @@
         "test/game.test.ts": "1bfb097c4409f562",
         "test/gate-input.test.ts": "d49c6a3b330633ef",
         "test/godot-export.test.ts": "74b2ea5acf56f27a",
-        "test/hostile-input.test.ts": "80e278d68fd932fc",
+        "test/hostile-input.test.ts": "9e9b483a871bf1ca",
         "test/isolation-compare.test.ts": "a272339c67be8976",
         "test/iter13.test.ts": "24c281f7694af4c5",
         "test/iter14.test.ts": "7126906c081f574a",
@@ -352,7 +363,7 @@
         "test/pool.test.ts": "dc8212dbef2953af",
         "test/port-hazards.test.ts": "3a82e8e07b42808a",
         "test/rule-docs.test.ts": "e5b52f30f20bbc0c",
-        "test/safe-html.test.ts": "9a65e59240e6e7dc",
+        "test/safe-html.test.ts": "aeb5c5d9105ba99f",
         "test/shortcut-register.test.ts": "7c82e9d666ad050a",
         "test/source-edit.test.ts": "1b78687f3f738e6b",
         "test/spatial-hash.test.ts": "3bdb896937c82ff9",
@@ -362,6 +373,7 @@
         "test/strict-flags.test.ts": "1049c322c34d9f3e",
         "test/suite-report.test.ts": "435975c84e4dfa1e",
         "test/suppression-scanner.test.ts": "d80801d4cfcaa636",
+        "test/sw-cache-name.test.ts": "a9cfc97ac450e98a",
         "test/systems.test.ts": "901f759518a7e899",
         "test/type-coverage.test.ts": "0db021e0a20dd448",
         "test/ui-events.test.ts": "65ca58e1ee9d9a2d",
