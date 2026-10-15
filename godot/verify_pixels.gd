@@ -407,6 +407,81 @@ func _init() -> void:
 	Check.at_least(float(archetypes.size()), 8.0, "every archetype in the data is represented")
 
 
+	# THE MINE'S FUSE IS VISIBLE, AND IT IS THE ONLY WARNING A PLAYER GETS
+	# ---------------------------------------------------------------------------
+	# `renderMine` is the whole of the mine's screen presence: a disc out to
+	# `self.radius`, a 10px body and a white rim, with the body `#ff4444` once
+	# `fuse < maxFuse * 0.5` and `#aa4444` before that. So two things have to be true of
+	# the frame, and neither of them is a statement about state:
+	#
+	#   (a) THE MINE IS DRAWN FOR ITS WHOLE FUSE, not only at the moment it blows. 72
+	#       frames at 1/60 is the warning a player gets; a mine that appears only as a
+	#       blast is a mine nobody can walk away from.
+	#   (b) AN ARMED MINE LOOKS DIFFERENT FROM AN UNARMED ONE. "It is about to go off" is
+	#       the only thing that tells a player to move.
+	#
+	# MEASURED AS PIXELS AND NOT AS STATE, which is the whole reason this tier exists:
+	# `verify_weapons.gd` pins `Mine.armed()` and `verify_scene.gd` pins that `_draw` calls
+	# it, and NEITHER can see a `_draw` that stopped drawing mines at all. The state would
+	# be perfect and the screen empty.
+	print("\n-- the mine's fuse, as pixels --")
+	var mine_run := await _paused_run()
+	var mine_game: Game = mine_run["game"]
+	var mine_main: Node2D = mine_run["main"]
+	# NO FOES: an HP bar is a difference between two captures that has nothing to do with
+	# the mine, which is why `_fx_pixel_diff` heals them back before both of its own.
+	mine_game.foes.clear()
+	var mine_def: Dictionary = _weapon_by_id("mine")
+	var blast: float = float(mine_def["baseRange"])
+	var fuse: float = float(mine_def["fuse"])
+	# OFFSET FROM THE HERO. A mine is dropped where the hero stands, but the hero is drawn
+	# ON TOP of it -- so the body-colour pixel below would be the hero's, and the check that
+	# "armed is brighter" would be measuring the wrong circle entirely.
+	var mine_at := Vector2(mine_game.hero.x + mine_game.hero.size * 8.0, mine_game.hero.y)
+	var mine_px: Vector2 = mine_main.get_canvas_transform() * mine_at
+	# THE CLOCK IS PINNED, so the armed pulse is the same number in both halves of every
+	# pair below and a difference can never be the sine.
+	mine_game.elapsed = 0.0
+	var mine := Mine.new(mine_at.x, mine_at.y, blast, 45.0, fuse)
+
+	var without := await _capture_of(mine_main)
+	mine_game.mines.append(mine)
+	mine.fuse = fuse
+	var unarmed_was: bool = mine.armed()
+	var unarmed := await _capture_of(mine_main)
+	mine.fuse = fuse * 0.4
+	var armed_was: bool = mine.armed()
+	var armed := await _capture_of(mine_main)
+	mine_game.mines.clear()
+	var again := await _capture_of(mine_main)
+
+	# THE PREMISES, ASSERTED BEFORE ANY DIFF IS BELIEVED. Two captures that are the same
+	# state would make "armed looks different" a statement about noise, and a mine removed
+	# and put back must return the frame EXACTLY -- which is the instrument's own control.
+	Check.unchanged(unarmed_was, false, "PREMISE: the first mine capture is UNARMED")
+	Check.unchanged(armed_was, true, "PREMISE: the second is ARMED")
+	Check.unchanged(_diff(without, again), 0, "CONTROL: mine removed and put back is the same frame")
+
+	Check.at_least(float(_diff(without, unarmed)), 1.0, "the mine IS DRAWN before it is armed")
+	Check.at_least(float(_diff(unarmed, armed)), 1.0, "and an ARMED mine is a different frame")
+
+	# AND THE BODY TURNS BRIGHTER, MEASURED AT THE BODY'S OWN PIXEL. The body is drawn
+	# OPAQUE over the disc, so this pixel is `#aa4444` or `#ff4444` and nothing else --
+	# which makes it a measurement of the ARMED STATE rather than of "these two frames
+	# differ somewhere". A `_draw_mine` that ignored `armed()` and painted one colour
+	# would pass the diff above (the disc's alpha pulses either way) and fails here.
+	var unarmed_body: Color = unarmed.get_pixel(int(mine_px.x), int(mine_px.y))
+	var armed_body: Color = armed.get_pixel(int(mine_px.x), int(mine_px.y))
+	Check.differs(float(armed_body.r), float(unarmed_body.r), 0.2, "the armed body is the BRIGHTER red")
+
+	# AND THE DISC IS THE BLAST RADIUS. Outermost differing pixel along the ray from the
+	# MINE out: `renderMine` fills `self.radius`, and `self.radius` is the number
+	# `Mine.update` damages with -- so the circle a player is standing outside is exactly
+	# the circle that will not hurt them.
+	var drawn_blast := _ray_radius(without, unarmed, mine_px)
+	Check.approx(float(drawn_blast), blast, "the drawn disc is at the radius the blast uses", 3.0)
+
+
 	# THE GARLIC RING MUST NOT LIE ABOUT ITS REACH
 	# ---------------------------------------------------------------------------
 	# `_draw_hero` draws the aura ring at `game.weapon["baseRange"]` -- a FLAT 110 --
