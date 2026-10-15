@@ -25,7 +25,7 @@
         },
         {
             "id": "godot-not-installed-in-ci",
-            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent. NOTHING runs on a pull request, so before a commit reaches main the Godot half of this repository -- 13 suites, 453 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced a green gate under a PATH without Godot, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor who runs the gate gets a stronger check than the merge does. NARROWED, not discharged: .github/workflows/deploy-pages.yml now installs Godot 4.7.2 (pinned) and imports the project in a `verify` job that `deploy` needs, so the port IS enforced before anything is published -- but that triggers on push: main, AFTER the merge, so it cannot stop a bad commit reaching main. check:pixels still has no DISPLAY on a runner.",
+            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent. NOTHING runs on a pull request, so before a commit reaches main the Godot half of this repository -- 13 suites, 456 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced a green gate under a PATH without Godot, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor who runs the gate gets a stronger check than the merge does. NARROWED, not discharged: .github/workflows/deploy-pages.yml now installs Godot 4.7.2 (pinned) and imports the project in a `verify` job that `deploy` needs, so the port IS enforced before anything is published -- but that triggers on push: main, AFTER the merge, so it cannot stop a bad commit reaching main. check:pixels still has no DISPLAY on a runner.",
             "removal": "The merge path runs the gate too -- a required status check on pull requests with Godot 4.7.x installed -- so the port is enforced BEFORE the merge and not only before the publish."
         },
         {
@@ -54,15 +54,15 @@
             "removal": "A floating-text system exists and a damage number is asserted to appear at the struck foe, not at the hero."
         },
         {
-            "id": "godot-volley-wide-crit-on-four-archetypes",
-            "why": "projectile, orbit, aura and mine call `_rollCrit` NOWHERE in src/ -- they hand `getDamage(player)` straight to the shot -- so the port's single volley-wide roll is a port artifact, not a reproduction. NOT removed because `evolveBonusCrit: 0.1` is declared on the KNIFE, a projectile: deleting the roll makes that field dead data and fails `_bonus_crit_is_read`, which measures the evolved Knife's damage rise. **Removing it therefore requires weakening a passing check**, which is a decision for whoever owns that check. Reported rather than done.",
-            "removal": "`_bonus_crit_is_read` is rewritten to state that the Knife's declared field is dead in the original, and the four archetypes stop rolling."
+            "id": "godot-verify-achievements-partial-table",
+            "why": "`verify_achievements.gd`'s boundary table is a HAND-WRITTEN list of 10 of the 21 achievement ids, and it omits `early_evolve` -- while `check:godot`'s own label for that suite claims \"EVERY achievement is reachable and fires on its boundary\". **A claim one row wider than the coverage**, which is the class AGENTS.md spends a section on. It is how `godot-early-evolve-unreachable` stayed invisible: the suite that claims to check every achievement never looked at the one that cannot fire. Found by the agent closing the volley-crit gap, measuring the adjacent claim.",
+            "removal": "The table is derived from the achievement registry (the way `verify_weapons` drives the real weapon table, rule 12), so a new achievement without an implemented check fails the suite -- and the gate label matches what the suite does."
         }
     ],
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 87.95,
+            "lines": 87.96,
             "branches": 85.52,
             "functions": 77.11
         },
@@ -83,7 +83,7 @@
                 "functions": 100
             },
             "scripts/lib/claims.mjs": {
-                "lines": 94.97,
+                "lines": 95.14,
                 "branches": 91.67,
                 "functions": 100
             },
@@ -344,6 +344,7 @@
         "test/a11y-lists.test.ts": "0fef9e3ac844345e",
         "test/achievements.test.ts": "bb164cd0d09f66d2",
         "test/annotate.test.ts": "461a10662bd6df80",
+        "test/apply-patch.test.ts": "92d611e41da291cc",
         "test/assertion-diff.test.ts": "d06c1c3ca2284d24",
         "test/audio.test.ts": "31c80a37c2290eaf",
         "test/baseline-file.test.ts": "7c6975387c18c330",
@@ -366,6 +367,7 @@
         "test/iter16.test.ts": "cecf066ade0ac2a0",
         "test/iter19.test.ts": "3f55272e7b1f67d0",
         "test/iter20.test.ts": "ac073014aab8f52e",
+        "test/json-edit.test.ts": "2921385afaa29234",
         "test/leaderboard-import.test.ts": "f6f7db73eb850a2b",
         "test/parser-hardening.test.ts": "a6e771b65e264efe",
         "test/perf-budget.test.ts": "0a12860d51dcbc89",
@@ -399,7 +401,7 @@
         "res://verify_scene.gd": 99,
         "res://verify_play.gd": 14,
         "res://verify_xp.gd": 26,
-        "res://verify_weapons.gd": 118,
+        "res://verify_weapons.gd": 121,
         "res://verify_lightning.gd": 21,
         "res://verify_passives.gd": 20,
         "res://verify_invariants.gd": 11,

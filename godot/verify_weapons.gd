@@ -77,13 +77,14 @@ func _init() -> void:
 	# PER-TARGET CRIT. `quality-baseline.json` declared `godot-crit-rolled-once-per-fire`:
 	# `_rollCrit` is called from four sites in `src/weapons.ts` and all four are inside a
 	# per-target loop, while this port rolled once before the dispatch. Each measurement below
-	# pins one of those four loops by its DRAW COUNT and by the MIX of damages within one fire,
-	# and Garlic -- rolled once on purpose -- is the control beside them.
+	# pins one of those four loops by its DRAW COUNT and by the MIX of damages within one fire.
+	# Garlic -- an archetype `_rollCrit` has no call site in, so it takes NO draw at all -- is
+	# the control beside them, and it carries its own positive side.
 	_melee_rolls_once_per_foe()
 	_nova_rolls_once_per_foe()
 	_lightning_rolls_once_per_strike()
 	_drain_rolls_once_per_tether_and_heals_their_sum()
-	_the_aura_is_the_all_or_nothing_control()
+	_the_aura_rolls_nothing_and_is_the_control()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
@@ -1103,15 +1104,54 @@ func _cooldown_scalar_is_read() -> void:
 	Check.at_least(float(declared), 1.0, "a weapon declares evolveCooldownMult")
 
 
-## `_rollCrit`: `if (this.isEvolved() && this.def.evolveBonusCrit) chance += ...`
+## WHICH ARCHETYPES ROLL AT ALL, by `type`: the original's four `_rollCrit` call sites, and
+## nothing else. `melee` (src/weapons.ts:216), `instant` (289), `nova` (395) and `drain` (454)
+## -- every one of them inside a per-target loop -- while `projectile`, `orbit`, `aura` and
+## `mine` call it NOWHERE. `_bonus_crit_is_read` judges every declared `evolveBonusCrit`
+## against this list, so a weapon added to `src/data.ts` carrying that field is MEASURED
+## rather than assumed -- and the measurement is what says whether the field is read.
+const ROLLING_ARCHETYPES := ["melee", "instant", "nova", "drain"]
+
+
+## THE DECLARED `evolveBonusCrit`, MEASURED FOR WHAT IT ACTUALLY IS: ONE of the two is read,
+## and the other is DEAD IN THE ORIGINAL. Both halves are asserted here, and that is not a
+## nicety -- a check asserting "nothing reads this" is a real check only if the same
+## instrument, on the same run, reads a field that IS read.
 ##
-## A RATE, because a crit is a coin flip: the claim is that the weapon's expected damage rises
-## by the declared chance, and one fire cannot show that. Both runs share a seed, so the two
-## are compared on the same rolls -- and a port that draws its crit from its own generator
-## still lands inside the tolerance, which is what makes this a measurement rather than a
-## reading of the code.
+## `_rollCrit` is the ONLY reader of this field anywhere in `src/`:
+##
+##     src/weapons.ts:107   if (this.isEvolved() && this.def.evolveBonusCrit) {
+##     src/weapons.ts:108       chance += this.def.evolveBonusCrit;
+##
+## -- and `_rollCrit` has four call sites, every one of them inside a per-target loop:
+##
+##     src/weapons.ts:216   `_fireMelee`    (type "melee")
+##     src/weapons.ts:289   `_fireInstant`  (type "instant")
+##     src/weapons.ts:395   `_fireNova`     (type "nova")
+##     src/weapons.ts:454   `_fireDrain`    (type "drain")
+##
+## `evolveBonusCrit: 0.1` is declared on the KNIFE, and a knife is `type: "projectile"`:
+## `_fireProjectile` calls `_rollCrit` NOWHERE, so the declaration is DEAD IN THE ORIGINAL --
+## not dead in this port. Lightning's `0.15` is on `_fireInstant`, which IS one of the four,
+## and it is LIVE. `ROLLING_ARCHETYPES` above is those four and nothing else.
+##
+## HOW DEAD IS MEASURED. A RATE, because a crit is a coin flip: the claim is that the weapon's
+## expected damage rises by the declared chance, and one fire cannot show that. `_lone_damage`
+## fires `CRIT_FIRES` times at ONE sturdy foe with the field on the def and with it ERASED --
+## same scene, same seed, same number of fires, so the level curve, the geometry and the shot
+## count are constants of both runs and the ratio is the field's whole effect.
+##
+## AND IT CAN FAIL IN BOTH DIRECTIONS, which is the property that makes it worth having:
+##
+##   * a port that starts reading the Knife's field again -- the volley-wide roll this port
+##     used to take, or a per-blade one -- reads 1.10 where this demands 1.00, and fails;
+##   * a port that stops reading Lightning's reads 1.00 where this demands 1.15, and fails;
+##   * and `dead`/`live` below fail if either branch stops being exercised at all, so removing
+##     a declaration cannot turn this into a loop that runs zero times and passes.
 func _bonus_crit_is_read() -> void:
 	var declared := 0
+	var live := 0
+	var dead := 0
 	for def in _declaring():
 		if not def.has("evolveBonusCrit"):
 			continue
@@ -1120,15 +1160,31 @@ func _bonus_crit_is_read() -> void:
 		var without: Dictionary = def.duplicate()
 		without.erase("evolveBonusCrit")
 		var plain := _lone_damage(without, e)
-		Check.rose(0.0, plain, "%s hits a lone foe, so its crit rate is measurable" % def["id"])
-		if plain > 0.0:
+		Check.rose(0.0, plain, "%s hits a lone foe, so its damage is measurable" % def["id"])
+		if plain <= 0.0:
+			continue
+		var ratio := _lone_damage(def, e) / plain
+		if ROLLING_ARCHETYPES.has(str(def["type"])):
+			live += 1
 			Check.approx(
-				_lone_damage(def, e) / plain,
+				ratio,
 				1.0 + float(def["evolveBonusCrit"]),
-				"%s deals 1 + its evolveBonusCrit of that damage" % def["id"],
+				"%s's evolveBonusCrit IS READ -- the %s archetype rolls per target, so it deals 1 + the declared %0.2f"
+					% [def["id"], def["type"], float(def["evolveBonusCrit"])],
+				0.04
+			)
+		else:
+			dead += 1
+			Check.approx(
+				ratio,
+				1.0,
+				"%s's evolveBonusCrit is DEAD IN THE ORIGINAL -- the %s archetype calls `_rollCrit` nowhere, so erasing the declared %0.2f changes NOTHING"
+					% [def["id"], def["type"], float(def["evolveBonusCrit"])],
 				0.04
 			)
 	Check.at_least(float(declared), 1.0, "a weapon declares evolveBonusCrit")
+	Check.at_least(float(live), 1.0, "and at least one declaration is READ, so that branch ran")
+	Check.at_least(float(dead), 1.0, "and at least one is DEAD in the original, so THIS branch ran")
 
 
 ## The damage `weapon` deals to ONE sturdy foe over `CRIT_FIRES` fires at `level`, with the
@@ -1524,10 +1580,12 @@ func _the_evolved_second_ring_does_not_slow() -> void:
 #   is computed from the hero's own crit chance and the def's own declared bonus rather than
 #   written down.
 #
-# AND A CONTROL BESIDE THEM. Garlic is an archetype this port rolls ONCE for, and it goes
-# through the identical instrument. If the instrument were what reported "mixed", the control
-# would say so -- a measurement that cannot read all-or-nothing cannot tell it from per-target,
-# and would pass the Whip check while measuring nothing.
+# AND A CONTROL BESIDE THEM. Garlic is an archetype the original rolls NOTHING for, and this
+# port no longer rolls for it either, so it takes no draw at all and goes through the identical
+# instrument. If the instrument were what reported "mixed", the control would say so -- a
+# measurement that cannot read all-or-nothing cannot tell it from per-target, and would pass
+# the Whip check while measuring nothing. Its own positive side, a Whip sweep through the same
+# instrument reading a non-zero mix, sits INSIDE the control so the two cannot drift apart.
 # ---------------------------------------------------------------------------
 
 
@@ -1674,29 +1732,58 @@ func _melee_rolls_once_per_foe() -> void:
 	)
 
 
-## GARLIC, THE CONTROL. `_fireAura` calls `_rollCrit` NOWHERE in the original, and this port
-## rolls once for the whole fire, so the aura must read one draw and mix on none of its fires.
+## GARLIC, THE CONTROL. `_fireAura` calls `_rollCrit` NOWHERE in the original -- it hands
+## `getDamage(player)` to every foe it touches -- and this port no longer rolls there either,
+## so a fire takes NO draw and no fire can mix. The volley-wide roll this port used to take
+## here was the LAST of the four `_rollCrit` call sites the original does not have.
 ##
-## This is the positive control for every measurement above: it is the SAME instrument, on the
-## same number of foes, under the same hero, over the same number of fires, against an
-## archetype that really is all-or-nothing.
-func _the_aura_is_the_all_or_nothing_control() -> void:
-	print("\n-- the aura, which rolls ONCE, is the control --")
+## WHY THE COUNT IS ZERO AND NOT ONE. `fire()` used to roll once before the `match` and hand
+## that number to the aura; that roll was kept because the evolved KNIFE's `evolveBonusCrit`
+## needed a reader, and it never was a faithful reproduction -- `_fireAura` has no roll to
+## reproduce. With the roll gone the draw count is the direct statement of the original:
+## a Garlic fire consumes NOTHING.
+##
+## AND IT IS A CONTROL WITH TWO SIDES, because a control that can only ever read zero cannot
+## tell "nothing rolls here" from "this instrument cannot see a roll at all":
+##
+##   * the hero HAS Luck (asserted, not assumed -- a roll is SKIPPED when the chance is zero,
+##     so a hero with no Luck would read zero draws whether the port rolled or not);
+##   * the seeded generator must be EXACTLY where it was after a fire, so one roll -- per fire
+##     or per foe -- fails it;
+##   * and the SAME instrument, on the same number of foes, is run against the Whip in the same
+##     breath and required to read a NON-ZERO mix.
+func _the_aura_rolls_nothing_and_is_the_control() -> void:
+	print("\n-- the aura, which the original never rolls for, is the control --")
 	var def := _weapon("garlic")
 	var g := _crit_hero(def, 1)
 	var p := _fire_crit_chance(def, g.hero, 1)
-	Check.rose(0.0, p, "the control hero has a crit chance too, so it COULD have mixed")
+	Check.rose(0.0, p, "the control hero has a crit chance, so a roll WOULD consume a draw")
 	# `baseRange` is 110, so a 180-wide line is entirely inside the aura.
 	var foes := _line_of_bats(g, CRIT_TARGETS, 180.0, 0.0)
-	var probe := _crit_draw_probe(def, g.hero, foes, 1, 1)
+	var probe := _crit_draw_probe(def, g.hero, foes, 1, 0)
 	Check.approx(
-		float(probe[0]), float(probe[1]), "the aura takes ONE roll for the whole fire", 1e-9
+		float(probe[0]),
+		float(probe[1]),
+		"the aura takes NO crit draw at all -- neither per fire nor per foe",
+		1e-9
 	)
 	var mixed := _mixed_fires(def, g.hero, foes, 1, CRIT_RATE_FIRES)
 	Check.unchanged(
 		mixed,
 		0,
 		"and NEVER mixes in %d fires -- the instrument CAN read all-or-nothing" % CRIT_RATE_FIRES
+	)
+	# THE OTHER SIDE, in this same run and through this same instrument. If the instrument
+	# were what reported "mixed", the Whip's reading would be zero too.
+	var whip := _weapon("whip")
+	var wg := _crit_hero(whip, 1)
+	var wfoes := _line_of_bats(wg, CRIT_TARGETS, 140.0, 0.0)
+	var wp := _fire_crit_chance(whip, wg.hero, 1)
+	Check.rose(
+		0.0,
+		float(_mixed_fires(whip, wg.hero, wfoes, 1, CRIT_RATE_FIRES)),
+		"CONTROL: the same instrument on a Whip sweep reads a MIX (%.4f expected at p = %0.2f)"
+			% [_mixed_share(wp, CRIT_TARGETS), wp]
 	)
 
 
