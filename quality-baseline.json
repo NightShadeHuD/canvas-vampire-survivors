@@ -25,8 +25,8 @@
         },
         {
             "id": "godot-not-installed-in-ci",
-            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent, and .github/ installs neither Godot nor a display. So on every CI run the whole Godot half of this repository -- 12 suites, 309 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced \"all 23 gates passed\" under CI PATH, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor with Godot gets a stronger gate than the required check does.",
-            "removal": "The CI workflow installs Godot 4.7.x, or check:godot is removed from the chain and the port is declared locally-verified only."
+            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent. NOTHING runs on a pull request, so before a commit reaches main the Godot half of this repository -- 13 suites, 453 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced a green gate under a PATH without Godot, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor who runs the gate gets a stronger check than the merge does. NARROWED, not discharged: .github/workflows/deploy-pages.yml now installs Godot 4.7.2 (pinned) and imports the project in a `verify` job that `deploy` needs, so the port IS enforced before anything is published -- but that triggers on push: main, AFTER the merge, so it cannot stop a bad commit reaching main. check:pixels still has no DISPLAY on a runner.",
+            "removal": "The merge path runs the gate too -- a required status check on pull requests with Godot 4.7.x installed -- so the port is enforced BEFORE the merge and not only before the publish."
         },
         {
             "id": "godot-mine-fuse-unread",

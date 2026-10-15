@@ -380,22 +380,23 @@ for real when Playwright went 1.59 to 1.63.
 
 ## What is enforced, and by what
 
-| Rule                                                    | Mechanism                                              |
-| ------------------------------------------------------- | ------------------------------------------------------ |
-| No new test failures, no stale baseline                 | `scripts/check-baseline.mjs`                           |
-| Suppression ceilings can only shrink                    | `scripts/check-suppressions.mjs`                       |
-| No conflicts, focused tests, debug logs, secrets, bloat | `scripts/check-hygiene.mjs`                            |
-| Every source file is really linted                      | `scripts/check-coverage.mjs`                           |
-| Measured coverage never falls                           | `scripts/check-coverage-floor.mjs`                     |
-| No test depends on today's date                         | `scripts/check-clocks.mjs`                             |
-| The game still boots and plays                          | `scripts/boot-smoke.mjs`                               |
-| Accessibility holds                                     | `scripts/a11y-audit.mjs`                               |
-| No bulk edits to source in committed tooling            | `scripts/check-destructive.mjs`                        |
-| The Godot port runs and has not drifted                 | `scripts/check-godot.mjs`                              |
-| The register's numbers match what was measured          | `scripts/check-claims.mjs`                             |
-| **The rows ABOVE this one**, in order, locally          | `.githooks/pre-push` → requires a receipt for HEAD     |
-| **The rows ABOVE this one**, run here and recorded      | `npm run ci` — `verify:all` + a receipt naming the SHA |
-| The game boots and every dialog is accessible           | `npm run verify:all` — **tier 2, NOT in `verify`**     |
+| Rule                                                         | Mechanism                                                      |
+| ------------------------------------------------------------ | -------------------------------------------------------------- |
+| No new test failures, no stale baseline                      | `scripts/check-baseline.mjs`                                   |
+| Suppression ceilings can only shrink                         | `scripts/check-suppressions.mjs`                               |
+| No conflicts, focused tests, debug logs, secrets, bloat      | `scripts/check-hygiene.mjs`                                    |
+| Every source file is really linted                           | `scripts/check-coverage.mjs`                                   |
+| Measured coverage never falls                                | `scripts/check-coverage-floor.mjs`                             |
+| No test depends on today's date                              | `scripts/check-clocks.mjs`                                     |
+| The game still boots and plays                               | `scripts/boot-smoke.mjs`                                       |
+| Accessibility holds                                          | `scripts/a11y-audit.mjs`                                       |
+| No bulk edits to source in committed tooling                 | `scripts/check-destructive.mjs`                                |
+| The Godot port runs and has not drifted                      | `scripts/check-godot.mjs`                                      |
+| The register's numbers match what was measured               | `scripts/check-claims.mjs`                                     |
+| **The rows ABOVE this one**, in order, locally               | `.githooks/pre-push` → requires a receipt for HEAD             |
+| **The rows ABOVE this one**, run here and recorded           | `npm run ci` — `verify:all` + a receipt naming the SHA         |
+| The game boots and every dialog is accessible                | `npm run verify:all` — **tier 2, NOT in `verify`**             |
+| **Tier 1 only**, on the runner, before anything is published | `.github/workflows/deploy-pages.yml` — `deploy` needs `verify` |
 
 **Two gates are deliberately outside `verify`**: `boot-smoke.mjs` and `a11y-audit.mjs`
 need a browser, so `verify` would fail on a machine without one. **`npm run verify:all` runs
@@ -421,13 +422,18 @@ it has not earned.**
 would have to be a server, and the point of this change was that there is no server. **What it
 cannot be is bypassed by accident.** Skipping it now means typing the flag and meaning it.
 
-## THERE IS NO CI RUNNER. `npm run ci` IS THE GATE.
+## NO CI RUNNER GATES THE MERGE. `npm run ci` IS THE GATE.
 
-GitHub Actions was removed at the maintainer's direction: **all verification happens on the
-machine doing the work.** But `main` is protected with `Verify` as a required status check, so
-deleting the workflow alone would have deadlocked the repository — the check would never
-report and no pull request could ever merge, with `enforce_admins` on so not even the owner
-could override it.
+GitHub Actions was removed as a **merge** gate at the maintainer's direction: **nothing
+verifies a pull request, and the gate that decides whether a commit may be pushed runs on the
+machine doing the work.** One workflow did come back, for the **publish** path only — see
+"GitHub Pages" near the end of this file. It runs tier 1 before it will publish anything, and
+it cannot gate a merge, because it triggers only on `push: main`.
+
+What remains below is about the merge path, and it is unchanged. But `main` is protected with
+`Verify` as a required status check, so deleting the workflow alone would have deadlocked the
+repository — the check would never report and no pull request could ever merge, with
+`enforce_admins` on so not even the owner could override it.
 
 **`npm run ci` does what the workflow did**: runs `npm run verify:all` here, writes
 `.verify-receipt.json` naming the exact revision, and POSTs a `Verify` status to GitHub. It
@@ -546,6 +552,12 @@ gh pr merge --squash --delete-branch    # nothing checks this for you any more
 PR once the gate passes. Setting it to 1 would have locked the owner out of
 their own repository, because GitHub does not allow self-approval.
 
+**The merge is unchecked, but the publish after it is not.** Merging to `main` now triggers
+`.github/workflows/deploy-pages.yml`, whose `verify` job runs tier 1 and whose `deploy` job
+needs it — so a bundle that fails the gate cannot be published, whatever the merge did. The
+gate runs too late to stop a bad commit reaching `main`; what it stops is that commit reaching
+players. See "GitHub Pages" below for exactly what it covers, and what it does not.
+
 **Never add a git remote named `upstream`.** The `gh` CLI prefers a remote with
 that exact name over `origin`, which means every `gh` command run without an
 explicit `-R` would silently target a repository you do not own. This bit us
@@ -577,6 +589,30 @@ gh workflow enable "Deploy to GitHub Pages"
 First deploy verified end to end: the workflow ran `Verify`, built `dist/`, assembled `_site`
 and deployed; every asset returned 200; and a headless browser confirmed the deployed game
 starts a run, advances its clock and reports **0 page errors**.
+
+**That gate was then deleted, and for several commits the deploy published without verifying
+anything.** The workflow's own header said so out loud — `Publishing only. THE GATE IS NOT
+HERE.` — and it was true: the only thing standing between a drifted bundle and production was
+`.githooks/pre-push`, a hook on one laptop, bypassable with `--no-verify` and not run on merge
+at all. The gate is back, as its own `verify` job that `deploy` needs, running `npm run verify`
+— tier 1, the 26 gates `npm run ci` runs, and by `docs/ENGINEERING-STANDARDS.md` §2 the only
+thing that may be described as "green".
+
+**Godot 4.7.2 is installed and PINNED in that job, and the project is imported before it
+runs.** Both are load-bearing, and the measurements are why. With no `godot` on PATH the gate
+still exits 0 while checking none of the Godot half: `npm run verify` on a PATH without Godot
+prints `verify: all 26 gates passed, 2 of which checked nothing`. Without the `--import` the
+suites cannot load and the same gate fails at gate 5 blaming a document —
+`claims "godotAssertions" is 453, but the measurement is 0`. So the job's last step refuses to
+publish if `check:godot` or `check:reach` appears in that "checked nothing" list. **A green
+gate is not a checked gate**, and that difference is now a step rather than a hope.
+
+**What that gate does NOT cover, and this is the honest part:** the browser tier
+(`boot-smoke.mjs`, `a11y-audit.mjs`, `check:sw-delivery.mjs`) and the pixel tier do NOT run on
+the runner. Tier 2 would need `npx playwright install --with-deps chromium` on every deploy,
+and `check:pixels` needs a DISPLAY that a GitHub runner does not have. **So a bundle can reach
+players having passed tier 1 and no browser test** — and the workflow's own header says so,
+where whoever reads a deploy log will see it.
 
 **`__SURV_DEBUG__` is deliberately absent on the deployed site.** It is gated on
 `location.hostname` being `localhost`, `127.0.0.1` or empty, so the debug hooks that

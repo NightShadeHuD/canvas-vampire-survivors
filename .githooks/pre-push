@@ -6,9 +6,15 @@
 #
 # WHY THIS IS NOT "just run the gate here"
 #
-# GitHub Actions was removed, so nothing on the server checks anything. The gate runs on this
-# machine and reports itself, which means the only thing standing between a broken commit and
-# `main` is whether somebody typed `npm run ci`. **This hook is what makes them.**
+# No GitHub Actions job gates a MERGE: nothing on the server checks a pull request. The gate
+# runs on this machine and reports itself, which means the only thing standing between a broken
+# commit and `main` is whether somebody typed `npm run ci`. **This hook is what makes them.**
+#
+# One workflow DOES run the gate on the server, and it is worth being exact about what that
+# buys: `.github/workflows/deploy-pages.yml` runs tier 1 before it will publish to Pages. It
+# triggers on `push: main`, so it runs AFTER the merge — it can stop a bundle reaching players,
+# and it cannot stop a commit reaching `main`. That is this hook's job, so this hook has not
+# become optional because "the server checks it now". For a merge, it does not.
 #
 # The earlier version ran `npm run verify` inline. That was wrong twice over:
 #
@@ -52,7 +58,7 @@ HEAD_SHORT=$(printf '%s' "$HEAD_SHA" | cut -c1-7)
 if [ ! -f "$RECEIPT" ]; then
     echo "pre-push: FAILED — no $RECEIPT, so the gate has not been run for this commit."
     echo ""
-    echo "  There is no CI. Nothing on the server checks anything."
+    echo "  No CI runner gates a merge: nothing on the server checks a pull request."
     echo "  Run the gate, then push:"
     echo ""
     echo "      npm run ci"

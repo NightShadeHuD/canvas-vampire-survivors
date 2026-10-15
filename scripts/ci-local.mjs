@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
  * @file scripts/ci-local.mjs
- * @description The gate, run here, reported to GitHub — because there is no CI runner.
+ * @description The gate, run here, reported to GitHub — because no CI runner gates a merge.
  *
  * WHY THIS EXISTS
  *
- * GitHub Actions was removed at the maintainer's direction: **all verification happens on the
- * machine doing the work.** But `main` is protected with `Verify` as a REQUIRED status check,
- * so simply deleting the workflow would have deadlocked the repository — the check would never
- * report and no pull request could ever merge, with `enforce_admins` on so not even the owner
- * could override it.
+ * GitHub Actions was removed as a MERGE gate at the maintainer's direction: **nothing verifies
+ * a pull request, and the gate that decides whether a commit may be pushed runs on the machine
+ * doing the work.** (`.github/workflows/deploy-pages.yml` does run tier 1 on the server before
+ * it will publish to Pages, but on `push: main` — after the merge, which is later than this
+ * script and does not replace it.) But `main` is protected with `Verify` as a REQUIRED status
+ * check, so simply deleting the workflow would have deadlocked the repository — the check would
+ * never report and no pull request could ever merge, with `enforce_admins` on so not even the
+ * owner could override it.
  *
  * So the check still exists; the RUNNER moved. This script does what the workflow did:
  *
@@ -19,9 +22,12 @@
  *
  * **What this preserves, and what it costs.** The required check stays unbypassable in the
  * sense that matters: `gh pr merge` refuses without it, and only a passing run produces it.
- * What is lost is INDEPENDENCE — a CI runner cannot be talked out of running, and this script
- * can simply not be invoked. That is a real reduction in guarantee and it is the trade the
- * maintainer chose. **Nothing here should ever be described as "CI".**
+ * What is lost is INDEPENDENCE ON THE MERGE PATH — a CI runner cannot be talked out of running,
+ * and this script can simply not be invoked. That is a real reduction in guarantee and it is the
+ * trade the maintainer chose. The PUBLISH path does have an independent runner again:
+ * `.github/workflows/deploy-pages.yml` runs tier 1 on `push: main` and `deploy` needs it, so a
+ * bundle cannot reach players without the gate having run on a machine nobody here controls.
+ * **Nothing here should ever be described as "CI".**
  *
  * WHY IT KEYS ON THE REVISION
  *
