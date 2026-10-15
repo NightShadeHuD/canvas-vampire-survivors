@@ -143,17 +143,48 @@ export function escapeText(value: unknown): string {
 }
 
 /**
+ * Every character `escapeAttr` must encode, as one class.
+ *
+ * The last term is the one that matters and it used to be five characters
+ * (`\u0009\u000a\u000c\u000d\u0020`) rather than the whole of C0. That gap was
+ * not cosmetic: **a browser strips a leading C0 control out of a URL and then
+ * executes what is left**, so `\u0001javascript:…` is a live `javascript:` URL
+ * while the `javascript:` a scheme check would look for is not at the start of
+ * the string. Escaping these as numeric references does not help either — the
+ * parser decodes `&#1;` back to the control BEFORE the URL is read, which was
+ * measured in Chromium, not reasoned about:
+ *
+ *   href="&#1;javascript:…"  ->  property `javascript:…`  ->  EXECUTES
+ *
+ * Hence `safeUrl` below strips them, and this class encodes them so that a
+ * caller who uses `escapeAttr` directly has no way to emit a raw C0 either.
+ * U+007F is included for the same reason and is NOT known to be exploitable:
+ * Chromium leaves it in the URL rather than stripping it, so it is inert. It is
+ * encoded because "refuse every non-printable" is a rule that cannot go stale,
+ * while a list of the specific ones a particular browser strips can.
+ */
+const ATTR_UNSAFE = /[&<>"'`=\u0000-\u0020\u007f]/g;
+
+/**
  * Escape a value for an ATTRIBUTE VALUE, quoted or unquoted.
  *
- * Beyond `escapeText` this covers the three characters that can end an UNQUOTED
- * value: `` ` ``, `=`, and ASCII whitespace, which takes the numeric-reference
- * branch at the bottom of `attrRef`. A numeric reference decodes back to the
- * same character inside a quoted value, so the extra cost is bytes, not
- * fidelity.
+ * Beyond `escapeText` this covers the characters that can end an UNQUOTED value
+ * and everything that can be decoded back into a URL's scheme: `` ` ``, `=`,
+ * ASCII whitespace and every C0 control (see `ATTR_UNSAFE`). A numeric reference
+ * decodes back to the same character inside a quoted value, so the extra cost is
+ * bytes, not fidelity.
  */
 export function escapeAttr(value: unknown): string {
-    return String(value).replace(/[&<>"'`=\u0009\u000a\u000c\u000d\u0020]/g, attrRef);
+    return String(value).replace(ATTR_UNSAFE, attrRef);
 }
+
+/**
+ * Every character `safeUrl` strips before it reads a scheme: the whole of C0,
+ * plus DEL. NOT a global regex, deliberately — this is used with `.test()`, and
+ * a `/g` regex carries `lastIndex` between calls, so the second `.test()` on a
+ * string starting with a control would skip it. One regex, no flag, no state.
+ */
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
 /**
  * A URL that is safe to place in `href`, `src`, `action`, `formaction`,
@@ -164,14 +195,36 @@ export function escapeAttr(value: unknown): string {
  * is checked against an allow-list, and anything else collapses to `#`, which
  * is inert and visibly wrong rather than silently dangerous.
  *
- * Controls are stripped BEFORE the scheme is read, because browsers ignore
- * tab/newline/NUL inside a URL and `java&#9;script:` is a real bypass for a
- * check that reads the raw string.
+ * EVERY C0 control and DEL is stripped BEFORE the scheme is read, and that set
+ * is the whole of U+0000-U+001F rather than the four characters this used to
+ * list. Tabs and newlines were only ever the ones that were noticed: Chromium
+ * strips a leading U+0001 out of a URL exactly as it strips a tab, and what is
+ * left is then executed. Measured in Chromium, one row per control:
+ *
+ *   \u0001javascript:...  ->  href property `javascript:...`  ->  EXECUTES
+ *   \u0002 \u0003 \u0007 \u0008 \u000b \u000c \u000e \u000f \u001b \u001f  ->  EXECUTES
+ *   \u0009 (tab), \u000a (LF)                                ->  EXECUTES (handled)
+ *   \u007f (DEL)                                             ->  inert: NOT stripped
+ *
+ * DEL is stripped anyway. It is inert in Chromium today because the URL parser
+ * leaves it in place rather than stripping it, but stripping a character that
+ * cannot appear in a URL costs nothing and missing the next such character
+ * costs an XSS -- so the rule here is "nothing non-printable survives" rather
+ * than "nothing on this browser's strip list survives".
+ *
+ * Stripping is not enough on its own, because escaping cannot rescue it either:
+ * the markup a caller interpolates this into is parsed BEFORE the URL is read,
+ * so `escapeAttr` turns a control into `&#1;` and the parser then decodes it
+ * straight back. That was measured as well. So the string is RE-CHECKED after
+ * the strip and a surviving control refuses the whole URL rather than being
+ * emitted.
  */
 export function safeUrl(value: unknown): SafeHtml {
-    const cleaned = String(value)
-        .replace(/[\u0000\u0009\u000a\u000d]/g, '')
-        .trim();
+    const cleaned = String(value).replace(CONTROL_CHARS, '').trim();
+    // Belt and braces: the strip above is the fix, and this is the assertion
+    // that it worked. A URL reaching an `href` with a control still in it is
+    // the whole defect, so refuse rather than emit one.
+    if (CONTROL_CHARS.test(cleaned)) return new SafeHtml('#');
     if (!cleaned) return new SafeHtml('');
     const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(cleaned);
     if (scheme) {

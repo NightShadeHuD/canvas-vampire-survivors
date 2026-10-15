@@ -22,7 +22,16 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSave, mergeDeep, saveSave, _resetStorageForTests } from '../src/storage.ts';
+import {
+    accumulateTotals,
+    getStageHighScores,
+    loadSave,
+    mergeDeep,
+    recordHighScore,
+    saveSave,
+    _resetStorageForTests
+} from '../src/storage.ts';
+import { STAGES } from '../src/stages.ts';
 import { loadDailyHistory, _resetDailyForTests } from '../src/daily.ts';
 import { loadKeymap, keyLabel, _resetKeymapForTests } from '../src/keymap.ts';
 import {
@@ -654,4 +663,197 @@ test('F1 CONTROL: the speedrun board still renders its own columns', async () =>
     });
     assert.ok(out.includes('01:05.432'), `the speedrun time column lost its content: ${out}`);
     assert.ok(out.includes('Whip'), out);
+});
+
+// ---------------------------------------------------------------------------
+// The WRITE-side siblings of the audit's findings.
+//
+// The four above are all about what a hostile save can make the READER do. These
+// are about what it can make the WRITER do. Same file, same import box, and the
+// same class of silent loss: the save comes back and the board is not there.
+// ---------------------------------------------------------------------------
+
+test('F12: recordHighScore does not run the inherited __proto__ setter', () => {
+    // `save.stageHighScores[stageId] = …` is an ASSIGNMENT, so for the key
+    // `__proto__` it runs the inherited accessor and replaces the object's
+    // PROTOTYPE instead of storing anything. `isUnsafeKey` guarded `mergeDeep`,
+    // `safeClone` and the record READ, but not this write — so the one path in
+    // the module that CREATES keys was the one path without the guard.
+    withStored(SAVE_KEY, 'null', (_ls, store) => {
+        const save = loadSave();
+        const before = Object.getPrototypeOf(save.stageHighScores);
+        const rank = recordHighScore(save, { timeSurvived: 42, kills: 1, stage: '__proto__' });
+        const after = Object.getPrototypeOf(save.stageHighScores);
+        assert.equal(after, before, 'stageHighScores.prototype was replaced');
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(save.stageHighScores, '__proto__'),
+            false,
+            'an own __proto__ property was created'
+        );
+        // The run is not lost: it falls back to the canonical bucket, which is
+        // the only bucket anything can read.
+        assert.equal(rank, 1);
+        assert.equal(getStageHighScores(save, 'forest').length, 1);
+        // CONTROL: a legitimate stage still lands, or this test would pass on a
+        // `recordHighScore` that stored nothing at all.
+        recordHighScore(save, { timeSurvived: 43, kills: 2, stage: 'crypt' });
+        assert.equal(getStageHighScores(save, 'crypt').length, 1, 'the control stage did not land');
+        saveSave(save);
+        const written = JSON.parse(String(store[SAVE_KEY]));
+        assert.ok(written.stageHighScores.forest, 'forest bucket missing from the save');
+    });
+});
+
+test('F13: the write path is bounded by the same cap the read path applies', () => {
+    // 200 distinct stage keys could be written; `loadSave` kept 64; the next
+    // save persisted 64 — so 136 boards were gone with no message. Reach is
+    // stated honestly: nothing in `src/` READS `stageHighScores` today
+    // (`getStageHighScores` appears only in tests), so no player can see this
+    // yet. It is still real corruption and it is still silent.
+    // The keys are seeded into the STORED save rather than written through
+    // `recordHighScore`, deliberately: an earlier version of this test drove 200
+    // UNKNOWN stage ids through the writer, and the unknown-id rule added
+    // alongside this fix sent all 200 to `forest` — so the test passed without
+    // the cap ever being exercised. A test of a bound has to reach the bound.
+    const seeded: Record<string, unknown> = {};
+    for (let i = 0; i < 64; i++) {
+        seeded[`seed${i}`] = [{ kills: i, timeSurvived: 60, level: 1, date: 1, stage: `seed${i}` }];
+    }
+    withStored(SAVE_KEY, JSON.stringify({ stageHighScores: seeded }), (_ls, store) => {
+        // NOTE: `withStored` installs a FRESH store each call, so the control at
+        // the bottom of this test runs against the seeded save, not an empty
+        // one. It is therefore asserted on a key the seeded save does NOT have
+        // and on the count staying put, which is the real claim either way.
+        const save = loadSave();
+        assert.equal(
+            Object.getOwnPropertyNames(save.stageHighScores).length,
+            64,
+            'the stored save did not arrive with 64 keys, so the cap is not being tested'
+        );
+        // A LEGITIMATE stage id, with the cap already reached.
+        recordHighScore(save, { timeSurvived: 99, kills: 9, stage: 'crypt' });
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(save.stageHighScores, 'crypt'),
+            false,
+            'a new key was created past the cap — the read path would drop it'
+        );
+        // And the existing 64 are all still there, which is the actual claim:
+        // nothing is LOST. Refusing the new key is what makes that true.
+        assert.equal(Object.getOwnPropertyNames(save.stageHighScores).length, 64);
+        saveSave(save);
+        const written = JSON.parse(String(store[SAVE_KEY]));
+        assert.equal(
+            Object.getOwnPropertyNames(written.stageHighScores).length,
+            64,
+            'the write path grew the save past the read cap'
+        );
+    });
+    // CONTROL, in its OWN store: below the cap a legitimate key still lands.
+    // Without this the test would pass on a writer that refused everything.
+    withStored(SAVE_KEY, 'null', () => {
+        const small = loadSave();
+        recordHighScore(small, { timeSurvived: 5, kills: 1, stage: 'tundra' });
+        assert.equal(
+            getStageHighScores(small, 'tundra').length,
+            1,
+            'a legitimate key was blocked below the cap'
+        );
+    });
+});
+
+test('F14: an overflowing total cannot become Infinity, null, and then 0', () => {
+    // The WRITE-side sibling of the `Infinity` defect already fixed on the read
+    // side. `totals.*` had no `maxValue`, so the sum could pass
+    // `Number.MAX_VALUE`; `JSON.stringify` writes `Infinity` as `null`; and
+    // `coerceShape` refuses a non-finite number — so the stat silently reset to
+    // 0. Measured before the fix: MAX_VALUE + MAX_VALUE -> save -> load -> 0.
+    withStored(SAVE_KEY, 'null', (_ls, store) => {
+        const save = loadSave();
+        save.totals.kills = Number.MAX_VALUE;
+        accumulateTotals(save, {
+            kills: Number.MAX_VALUE,
+            gameTime: Number.MAX_VALUE,
+            bossKills: Number.MAX_VALUE
+        });
+        assert.ok(
+            Number.isFinite(save.totals.kills),
+            `the sum left the finite range: ${save.totals.kills}`
+        );
+        saveSave(save);
+        const written = JSON.parse(String(store[SAVE_KEY]));
+        assert.notEqual(written.totals.kills, null, 'Infinity was serialised as null');
+        const reloaded = loadSave();
+        assert.equal(reloaded.totals.kills, save.totals.kills, 'the total was reset on load');
+        assert.ok(reloaded.totals.kills > 0, 'the total came back as 0');
+        // CONTROL: ordinary accumulation is untouched, exactly.
+        const fresh = loadSave();
+        fresh.totals.kills = 0;
+        fresh.totals.timePlayed = 0;
+        fresh.totals.runs = 0;
+        fresh.totals.bossKills = 0;
+        accumulateTotals(fresh, { kills: 5, gameTime: 7, bossKills: 2 });
+        assert.equal(fresh.totals.kills, 5);
+        assert.equal(fresh.totals.timePlayed, 7);
+        assert.equal(fresh.totals.runs, 1);
+        assert.equal(fresh.totals.bossKills, 2);
+    });
+});
+
+test('F12b DRIFT: the stage ids storage validates against are the real ones', () => {
+    // `knownStageId` lists the three stage ids instead of importing `STAGES`,
+    // because `src/stages.ts` reaches `src/main.ts` (for its `Game` type) and
+    // `src/main.ts` imports `src/storage.ts` — a runtime import from storage
+    // into stages would close that cycle. The list is therefore a DUPLICATE,
+    // and a duplicate that is not checked is a duplicate that drifts. This is
+    // the check. It iterates the REAL table, so adding a stage without teaching
+    // storage about it fails here rather than silently bucketing that stage's
+    // runs into `forest`.
+    for (const def of Object.values(STAGES)) {
+        withStored(SAVE_KEY, 'null', () => {
+            const save = loadSave();
+            recordHighScore(save, { timeSurvived: 30, kills: 1, stage: def.id });
+            assert.equal(
+                getStageHighScores(save, def.id).length,
+                1,
+                `stage "${def.id}" exists in STAGES but storage refuses it`
+            );
+        });
+    }
+    // And the other direction: a stage id that is NOT in the table must not
+    // create a bucket, or the loader would carry a key nothing can read.
+    withStored(SAVE_KEY, 'null', () => {
+        const save = loadSave();
+        recordHighScore(save, { timeSurvived: 30, kills: 1, stage: 'not-a-stage' });
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(save.stageHighScores, 'not-a-stage'),
+            false,
+            'an unknown stage id created a bucket'
+        );
+        assert.equal(
+            getStageHighScores(save, 'forest').length,
+            1,
+            'it did not fall back to forest'
+        );
+    });
+});
+
+test('F14b DRIFT: the totals ceiling is below the range JSON can carry', () => {
+    // The bound is only worth having if it is below the value that serialises to
+    // `null`. `Number.MAX_VALUE` stringifies as `Infinity` (JSON writes `null`),
+    // so the ceiling must be strictly less than it with room to spare for one
+    // more addition.
+    const save = loadSave();
+    accumulateTotals(save, { kills: 0, gameTime: 0, bossKills: 0 });
+    for (let i = 0; i < 50; i++) {
+        save.totals.kills = Number.MAX_VALUE / 2;
+        accumulateTotals(save, { kills: Number.MAX_VALUE / 2 });
+    }
+    assert.ok(Number.isFinite(save.totals.kills), 'the ceiling is not finite');
+    assert.ok(save.totals.kills < Number.MAX_VALUE, 'the ceiling is not below Number.MAX_VALUE');
+    saveSave(save);
+    assert.equal(
+        loadSave().totals.kills,
+        save.totals.kills,
+        'a total at the ceiling did not survive the round trip'
+    );
 });
