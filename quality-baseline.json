@@ -62,9 +62,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 87.41,
-            "branches": 85.48,
-            "functions": 76.46
+            "lines": 87.95,
+            "branches": 85.52,
+            "functions": 77.11
         },
         "files": {
             "scripts/lib/annotate.mjs": {
@@ -107,10 +107,20 @@
                 "branches": 96.15,
                 "functions": 100
             },
+            "scripts/lib/json-edit.mjs": {
+                "lines": 100,
+                "branches": 81.03,
+                "functions": 77.78
+            },
             "scripts/lib/measurements.mjs": {
                 "lines": 0,
                 "branches": 0,
                 "functions": 0
+            },
+            "scripts/lib/patch-apply.mjs": {
+                "lines": 98.24,
+                "branches": 87.37,
+                "functions": 95.24
             },
             "scripts/lib/port-hazards.mjs": {
                 "lines": 100,
@@ -128,9 +138,9 @@
                 "functions": 100
             },
             "scripts/lib/source-edit.mjs": {
-                "lines": 87.37,
-                "branches": 75,
-                "functions": 42.86
+                "lines": 90.28,
+                "branches": 81.25,
+                "functions": 60
             },
             "scripts/lib/strict-flags.mjs": {
                 "lines": 100,
@@ -365,7 +375,7 @@
         "test/rule-docs.test.ts": "e5b52f30f20bbc0c",
         "test/safe-html.test.ts": "e85b74b99fbf0f7d",
         "test/shortcut-register.test.ts": "7c82e9d666ad050a",
-        "test/source-edit.test.ts": "1b78687f3f738e6b",
+        "test/source-edit.test.ts": "23977e1429c5d7ca",
         "test/spatial-hash.test.ts": "3bdb896937c82ff9",
         "test/speedrun.test.ts": "5c6ea2610834849d",
         "test/stages_daily.test.ts": "8c49b93b9f100e85",

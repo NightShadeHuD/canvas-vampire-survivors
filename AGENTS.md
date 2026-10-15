@@ -3,19 +3,22 @@
 **Read this before touching anything. It is not advisory.**
 
 The full, versioned standard is [docs/ENGINEERING-STANDARDS.md](docs/ENGINEERING-STANDARDS.md).
+The trap list for throwaway probes is [docs/PROBE-CAVEATS.md](docs/PROBE-CAVEATS.md).
 This file is the short form that must be honoured on every single task.
 Where this file and the standard disagree, the standard wins.
 
 ---
 
-## The eighteen non-negotiables
+## The nineteen non-negotiables
 
-Rules 1-7 are the original mandate. Rules 8-18 were each learned here the hard way --
+Rules 1-7 are the original mandate. Rules 8-19 were each learned here the hard way --
 each made more than twice before being written down, which is the threshold for a rule
 worth having. Rule 15 cost nothing only because the agent that broke it noticed; rules 16
 and 17 are the same finding at two levels -- the author of a thing is the worst person to
 check it -- and rule 18 is what their evidence produced: four bugs a person found by looking,
-none of which any assertion could have seen.
+none of which any assertion could have seen. **Rule 19 is that same finding applied to the
+instrument**: rule 11 covers checks, and three agents in one night reported that their own
+throwaway measurement had been dead.
 
 ### 1. A red baseline stops everything
 
@@ -80,6 +83,26 @@ and the agent not doing theirs.
 
 **The rule for a bulk change is: do it per-position, in a script that checks its
 own work, one file at a time, with the full gate between files.**
+
+**A bulk edit must name how many matches it expects, and refuse any other number. A predicate is
+not an identity.** The single-anchor helper does not cover a loop over a collection, and that is
+where the damage actually happened: a loop on `gate == 'check:reach'` matched **seven** entries of
+`gate-selftests.json` and overwrote all seven breaks with one string. Measured: 7 matched, 6
+distinct break strings collapsed to 1, and 33 entries in, 33 out. Nothing errored, the file still
+parsed, and every gate downstream stayed green -- because each surviving entry still had a break
+that worked. **No check can see that after the fact**, so the count is refused at the edit.
+
+```bash
+node scripts/edit.mjs src/foo.ts --anchor 'x' --replace 'y' --count 7    # text, N occurrences
+node scripts/edit-json.mjs gate-selftests.json --where 'gate=check:reach' \
+    --expect 7 --set 'requires=godot'                                    # a JSON manifest
+```
+
+`--expect` is mandatory: a bulk edit that never says how many matches it expects cannot notice
+its selection changing under it. `scripts/lib/source-edit.mjs` exports
+`selectExactly(items, predicate, expected)` for a script doing its own selection, and
+`scripts/lib/json-edit.mjs` reads the manifest, refuses the wrong count **before anything is
+written**, and reads the file back afterwards.
 
 **Use the helper. It is what makes this rule possible to follow.**
 
@@ -315,6 +338,56 @@ why the state is correct -- it is to go and look at `visible`.
 **`_lower_shade()` is what this rule looks like in code**: one function, called from every path
 that closes the modal, with the reason written above it -- because three call sites are three
 chances to forget, and forgetting is exactly what happened.
+
+### 19. An instrument must be shown to read a KNOWN signal
+
+Rule 11 is about **checks**: break the thing on purpose and confirm the check catches it.
+`gate-selftests.json` holds that for 33 entries, and a ledger can reach them, because a gate is a
+durable artifact with a name, a file and a place in the chain.
+
+**The failures that produced this rule were not checks. They were instruments** -- throwaway
+probes, written to answer one question and **deleted before anyone could inspect them**. No
+ledger can reach a probe, so rule 11 did not cover this and nothing else did either.
+
+**Three agents in one night reported that their own instrument had been dead**, each having
+already produced confident, meaningless results:
+
+    a synthetic element.click()   headless Chromium does not run `javascript:` URLs for it, so
+                                  every payload reported SAFE -- and the verifier only noticed
+                                  because its own control reported "safe" too. The same payloads
+                                  fire under a trusted `page.mouse` click
+    a dynamic `import()`          made a storage round trip inert, so the trip appeared not to
+                                  persist. Found by the fix's own author
+    `_resetStorageForTests`       cleared the very fallback being measured, so the fallback
+                                  measured empty. Same author, same session
+
+**And a fourth was true by construction:**
+
+    const a = cond ? x : y;
+    const changed = a !== y;      in the control branch that is `y !== y`
+
+**Watched: mutating the probe produced failures only once the control was already broken** --
+which is the signature of a control that cannot fail.
+
+**So: show the instrument a KNOWN signal before you believe its reading.** A reading of "nothing
+changed" or "secure" is worth nothing until the same instrument, in the same run, reported a
+change on a case where a change exists. **The control is the only part of a probe whose answer
+you can check without already knowing it**, which is why it is not a formality.
+
+**And the control must ASSERT THE CONDITION IT DEPENDS ON.** A service-worker probe hardcoded a
+cache-name bump to a string that later became the shipped name, so its control could no longer
+reproduce the defect -- and went on passing. **A control that only performs its setup is a second
+measurement, not a control.**
+
+**Your own confidence is not evidence.** One agent tonight reported a rule 6 violation it caught
+and fixed itself: right behaviour, and still a claim until somebody else runs something. Every
+one of the three above believed its instrument worked, and not one was lying -- each was measuring
+the case it had in mind.
+
+**Nothing enforces this, and nothing can** -- which is why it is a rule and not a gate. There is
+no artifact to register, no file for a check to open, and a gate that claimed to cover a deleted
+script would be the exact defect this rule is about. `docs/PROBE-CAVEATS.md` is the trap list,
+written from the measurements above: read it before writing a probe.
 
 ## Before you commit
 

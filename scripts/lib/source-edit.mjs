@@ -182,6 +182,63 @@ export function applyEdit({ path, anchor, replacement, expected, dryRun = false,
     return { ok: true, matched: plan.matched, wrote: true };
 }
 
+/**
+ * A selection that must match a DECLARED number of items, or be refused.
+ *
+ * `planEdit` refuses an anchor that matches more than once. This is the same
+ * refusal one level up, and it exists because the single-edit case is not where
+ * the damage happened here. Measured on `gate-selftests.json`: a loop selecting
+ * entries by `gate == 'check:reach'` matched **seven** of them and overwrote all
+ * seven `break` strings with one.
+ *
+ *     entries matched by gate == "check:reach": 7
+ *     distinct break strings before: 6      after: 1
+ *     total entries: 33 -> 33
+ *
+ * Nothing errored. The file still parsed, the entry count was unchanged, and the
+ * whole gate chain stayed green, because each surviving entry still had a break
+ * that worked. **No downstream check can see the loss**, so the count has to be
+ * declared at the point of the selection — which is what this enforces.
+ *
+ * @template T
+ * @param {T[]} items
+ * @param {(item: T, index: number) => boolean} where
+ * @param {number} expected how many matches are acceptable
+ * @param {string} [what] what is being selected, for the refusal message
+ * @returns {{ ok: boolean, matched: number[], reason?: string }}
+ */
+export function selectExactly(items, where, expected, what = 'items') {
+    if (!Array.isArray(items)) {
+        return { ok: false, matched: [], reason: `${what} is not an array` };
+    }
+    if (!Number.isInteger(expected) || expected < 1) {
+        return {
+            ok: false,
+            matched: [],
+            reason:
+                `the expected count must be a positive integer, got ${JSON.stringify(expected)}. ` +
+                'A bulk edit that never says how many matches it expects cannot notice that ' +
+                'its selection changed.'
+        };
+    }
+    const matched = items
+        .map((item, index) => (where(item, index) ? index : -1))
+        .filter((index) => index >= 0);
+
+    if (matched.length !== expected) {
+        return {
+            ok: false,
+            matched,
+            reason:
+                `the selection matched ${matched.length} of ${items.length} ${what} but ` +
+                `${expected} was expected. Rewriting every match when one was meant is how a ` +
+                'manifest loses six entries at once — narrow the predicate, or declare the ' +
+                'number you actually mean.'
+        };
+    }
+    return { ok: true, matched };
+}
+
 function readFileSyncDefault(p) {
     return readFileSync(p, 'utf8');
 }

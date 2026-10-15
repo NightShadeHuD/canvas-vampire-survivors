@@ -36,7 +36,7 @@
  * `npm run check:sw-cache` refuses a name that does not match its inputs. Do
  * not edit the line below by hand.
  */
-const CACHE = 'survivor-04709937f9f7fcd9';
+const CACHE = 'survivor-0ad40dd509442f28';
 const ASSETS = [
     './',
     './index.html',

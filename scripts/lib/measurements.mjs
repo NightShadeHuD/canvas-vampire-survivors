@@ -68,10 +68,21 @@ export function measurements(repoRoot) {
 
     const suite = () => {
         const out = run(['--test', 'test/*.test.ts']);
-        // The runner prints `ℹ pass 845`, not TAP's `# pass`. A wrong pattern here returns
+        // The runner prints `ℹ tests 845`, not TAP's `# tests`. A wrong pattern here returns
         // NaN, and NaN !== anything -- so every claim would fail with a number nobody could
         // act on. Measured rather than assumed.
-        const m = /pass (\d+)/.exec(out);
+        //
+        // IT READ `pass`, AND THAT WAS ONE NUMBER SHORT THE MOMENT A TEST FAILED. Measured
+        // twice in one session: with `sw-cache-name` red, the runner printed
+        // `tests 1054 ... pass 1053`, and `check:claims` reported
+        //     claims "tests" is 1054, but the measurement is 1053
+        // -- naming the DOCUMENT when the mismatch was a failing test. The registry entry is
+        // called `tests`, the documents claim a test COUNT, and `tests` is the number that
+        // says so. A failing test is `npm test`'s finding to report, loudly, and it does.
+        //
+        // Anchored to the summary line: an unanchored pattern can match a number a test
+        // printed about itself, and the first match wins.
+        const m = /^ℹ\s*tests (\d+)$/m.exec(out);
         // NaN where the report could not be read at all -- reported as unmeasured rather
         // than compared, because NaN !== NaN would fail every claim with no useful number.
         return m ? Number(m[1]) : null;
@@ -131,6 +142,8 @@ export function measurements(repoRoot) {
                 'verify_save'
             ];
             let total = 0;
+            /** Set when any suite reports FAIL; the count is then not a green-tree figure. */
+            let failed = false;
             for (const c of checks) {
                 // A NON-ZERO EXIT IS DATA, not an error. `execFileSync` throws when a suite
                 // fails, and the first version let that take `check:claims` down -- so a
@@ -151,9 +164,33 @@ export function measurements(repoRoot) {
                 } catch (err) {
                     out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
                 }
+                // `ok` IS THE METRIC, and counting `ok + FAIL` was tried and REVERTED —
+                // measured. `check:claims` then read 466 against the documented 453,
+                // because `verify_assertions.gd` PRINTS THIRTEEN DELIBERATE FAILURES:
+                // its whole job is to show that `Check.rose`, `Check.fell`,
+                // `Check.at_most`, `Check.rate` and the rest CAN fail, so it provokes
+                // each one. Those lines are not assertions that went wrong; they are the
+                // negative controls, and their suite reports PASS.
+                //
+                // **The control that caught this was the green tree.** A "fix" to a
+                // measurement is a claim like any other, and the ordinary green run is
+                // what falsified it — the documented figure did not move, and it should
+                // not have.
                 total += (out.match(/^ {2}ok {3}/gm) ?? []).length;
+                // A SUITE THAT FAILED MAKES THIS NUMBER NOT THE ONE THE CLAIM NAMES: the
+                // count is of PASSING assertions, so one failure reads one lower and
+                // `check:claims` reports `claims "godotAssertions" is N, but the
+                // measurement is N-1` — **blaming `docs/GODOT-PORT.md` for a red Godot
+                // suite.** Measured on `verify_save.gd`: green 21 `ok` / 0 `FAIL`; one
+                // assertion broken 20 `ok` / 1 `FAIL`, while 21 assertions ran.
+                //
+                // So it reports NOTHING rather than a wrong number when a suite fails.
+                // The failing suite is `check:godot`'s finding to report, and it does,
+                // loudly. This is the same distinction `tests` needed: a figure about a
+                // green tree is not measurable on a red one.
+                if (/^verify_[a-z_]+: FAIL$/m.test(out)) failed = true;
             }
-            return total;
+            return failed ? null : total;
         },
         /** Godot verification suites in the chain. */
         godotSuites: () =>
@@ -162,6 +199,18 @@ export function measurements(repoRoot) {
                     /\['res:\/\/(verify_[a-z_]+)\.gd'/g
                 )
             ].length,
+        /**
+         * Rules in `AGENTS.md`'s non-negotiables, counted from the file that carries them.
+         *
+         * The heading says "The nineteen non-negotiables" and the paragraph under it names the
+         * range the later rules were learned in. Both are numbers in prose, and a count kept by
+         * hand is what rule 8 is about: it drifts, and prose does not notice. Measured here so
+         * that adding a rule without updating the count FAILS -- the way every other figure in
+         * a marked block does.
+         */
+        agentRules: () =>
+            [...readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8').matchAll(/^### (\d+)\. /gm)]
+                .length,
         /** Suppression ceilings, counted from the baseline rather than from prose. */
         suppressionCeilings: () =>
             Object.keys(
