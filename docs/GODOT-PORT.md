@@ -11,7 +11,7 @@ drift silently.
 | name              | value |
 | ----------------- | ----- |
 | `godotSuites`     | 13    |
-| `godotAssertions` | 456   |
+| `godotAssertions` | 483   |
 | `weapons`         | 11    |
 | `achievements`    | 21    |
 
@@ -463,6 +463,53 @@ reads `1.1083 vs 1.0000 (tol 0.0400)` and the suite goes red.
 Three times in one round the failure was in the test rather than the code, and each
 one was indistinguishable from the bug it was testing for. The instinct every time was
 to go and change working code.
+
+#### The Area Mine's fuse — a weapon field the port read and threw away
+
+`quality-baseline.json` declared `godot-mine-fuse-unread`: `"fuse": 1.2` is in the data, the
+TypeScript has a `Mine` entity with `fuse`/`maxFuse`, an armed state drawn at half-fuse and a
+delayed blast — and the port dealt the blast on the FIRE frame with no mine entity at all. That
+is rule 12's exact shape: the field existed, the port "read" it, and nothing a player could see
+depended on it. The test that should have caught it asserted the case that happened to work.
+
+**What the original does**, from `src/`:
+
+```
+src/data.ts:154      fuse: 1.2,                        on the MINE weapon def
+src/weapons.ts:356   const fuse = this.def.fuse || 1.2;
+src/weapons.ts:358   game.mines.push(new Mine(player.x, player.y, radius, dmg, fuse));
+src/entities.ts:764  this.fuse -= dt;                  with NOTHING above it
+src/entities.ts:765  if (this.fuse <= 0) { ... }       the blast, where the mine lies
+src/entities.ts:769  if (d < this.radius) {            STRICTLY less than
+src/entity-render.ts:112  const armed = self.fuse < self.maxFuse * 0.5;
+```
+
+**The fuse starts on PLACEMENT, not on proximity.** There is no range test anywhere in `Mine`,
+so a mine dropped in an empty field detonates on exactly the frame one dropped into a crowd
+does. The proximity-armed countdown is the **bomber's** — `fuseRange`/`fuseTime` on an ENEMY
+def, read at `src/entities.ts:375-383` — a different entity, a different table, a different
+timer and a different drawing. The two share the English word and nothing else.
+
+**The frame is measured, not chosen.** A throwaway probe drove the ORIGINAL's own `Mine.update`
+at dt = 1/60 (raw output, both branches):
+
+```
+[subject] fuse=1.2  dt=0.016666666666666666
+  detonation frame = 72    hits recorded = 1 (damage 45)
+  hits after 71 frames = 0        hits after 72 frames = 1
+[control] fuse=0.0 -> frame 1   fuse=0.5 -> frame 31   fuse=2.0 -> frame 121
+[control] premise: fuse=0 must hit on frame 1 and exactly once -> HELD
+radius boundary: d=99.999 -> 1 hit    d=100.0 -> 0 hits    d=100.001 -> 0 hits
+```
+
+`godot/scripts/mine.gd` is the port, `Game.mines` owns them, `Game._update_mines` ticks them in
+the original's own slot in the order (`_updateEnemies`, `_updateProjectiles`,
+`_updateEnemyProjectiles`, `_updateMines`, `_updateExpOrbs`) and removes what has blown, and
+`main.gd`'s `_draw_mine` draws the disc at the blast radius with the body turning `#ff4444` past
+half the fuse. `verify_weapons.gd` pins the boundary from BOTH sides — the foe standing on the
+mine is unhurt at frame 71 and hurt at 72, a foe exactly on the blast radius takes nothing while
+the mine that spared it demonstrably detonated — and `verify_pixels.gd` measures that an armed
+mine and an unarmed one are different frames.
 
 ### XP and the level-up pick — it is a survivors game now
 

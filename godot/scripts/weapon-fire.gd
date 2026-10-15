@@ -243,11 +243,17 @@ static func orbit_count(weapon: Dictionary, hero: Hero, level: int) -> int:
 ## contract, and `verify_weapons.gd` is the caller that pins one.
 static func fire(
 	weapon: Dictionary, hero: Hero, foes: Array, shots: Array, level: int = 1, fx: Fx = null,
-	rng: RandomNumberGenerator = null
+	rng: RandomNumberGenerator = null, mines: Variant = null
 ) -> Array:
 	# `fx` is the visual sink: the caller owns it, and a caller with no interest in
 	# drawing (the headless suites) passes nothing. A weapon that applies damage directly
 	# creates no `Shot`, and without this it left nothing on screen at all.
+	#
+	# `mines` is the same idea for the one archetype that creates an ENTITY rather than a
+	# shot or a spark: `_fireMine` pushes a `Mine` into `game.mines` and a static function
+	# has no game to push into. Variant and defaulted to null rather than defaulted to an
+	# empty array, so "this caller wants no mines" is a state the branch can SEE instead of
+	# a throwaway list it silently fills.
 	var created: Array = []
 	var kind: String = str(weapon["type"])
 	# The hero's passives, applied HERE rather than at each archetype. This is the hook
@@ -472,45 +478,57 @@ static func fire(
 					)
 					fx.emit_beam(hero.x, hero.y, foe.x, foe.y, Color("ff88cc"))
 		"mine":
-			# A mine this slice treats as a delayed nova: the fuse is real in the data
-			# and the arming behaviour is not ported, so it strikes immediately rather
-			# than pretending to arm. Named here so it is not mistaken for finished.
-			# NO ROLL: `_fireMine` passes `getDamage(player)` into `new Mine(...)` and
-			# `Mine.update` calls `enemy.takeDamage(this.damage)` with no crit -- so the
-			# charge and its evolved twin both carry the un-rolled base, exactly as the
-			# two `new Mine(...)` calls in the original do.
-			_strike_disc_unrolled(hero.x, hero.y, foes, reach, dmg)
-			if fx != null:
-				# WHAT THE ORIGINAL DRAWS, and what it therefore cannot be reproduced as:
-				# `renderMine` fills the blast radius and paints a 10px body that turns
-				# bright red once `armed = fuse < maxFuse * 0.5`. That armed state needs a
-				# mine that ARMS, and this port has none -- so the DETONATION is what is
-				# reproduced (`Mine.update`: `createParticles(this.x, this.y, '#ff8833', 20)`
-				# plus the blast radius the damage used). No fuse is invented for a mine
-				# that is already gone.
-				fx.emit_particles(hero.x, hero.y, Color("ff8833"), 20)
-				fx.emit_blast(hero.x, hero.y, reach, Color("ff8833"))
-			if evolved:
-				# `_fireMine`'s evolved Cluster Mine, quoted:
-				#
-				#     const a = Math.random() * Math.PI * 2;
-				#     game.mines.push(new Mine(player.x + Math.cos(a) * 60,
-				#                              player.y + Math.sin(a) * 60,
-				#                              radius * 0.8, dmg, fuse));
-				#
-				# A SECOND charge at full damage, 60px away, covering 80% of the radius --
-				# and a second `Mine.update`, which is where the 20 sparks and the blast
-				# disc come from. The angle has no data behind it in the original either,
-				# so it is a global draw: what a player sees is two overlapping blasts,
-				# not which way round they are.
-				var cluster_angle := randf() * TAU
-				var cluster_x := hero.x + cos(cluster_angle) * CLUSTER_OFFSET
-				var cluster_y := hero.y + sin(cluster_angle) * CLUSTER_OFFSET
-				var cluster_reach := reach * CLUSTER_RADIUS_MULT
-				_strike_disc_unrolled(cluster_x, cluster_y, foes, cluster_reach, dmg)
-				if fx != null:
-					fx.emit_particles(cluster_x, cluster_y, Color("ff8833"), 20)
-					fx.emit_blast(cluster_x, cluster_y, cluster_reach, Color("ff8833"))
+			# A MINE ARMS FIRST. `_fireMine` in `src/weapons.ts:353` damages NOTHING:
+			#
+			#     const fuse = this.def.fuse || 1.2;
+			#     game.mines = game.mines || [];
+			#     game.mines.push(new Mine(player.x, player.y, radius, dmg, fuse));
+			#
+			# -- and `Mine.update`, `fuse` seconds later, is what lands the blast, at the
+			# spot the mine was dropped on. This branch used to strike on the fire frame and
+			# throw the fuse away (the declared gap `godot-mine-fuse-unread`), so the data's
+			# number changed nothing a player could see.
+			#
+			# THE `mines` SINK IS TO `game.mines` WHAT `shots` ALREADY IS TO `game.shots`.
+			# The original reaches into the game to push one and a static fire function
+			# cannot, so the array is handed in like every other thing this function writes.
+			# `Mine.update` owns the blast, and it is there rather than in `_strike_disc`
+			# because the original's own radius test is a STRICT `<` and that disc is `<=`.
+			#
+			# NO ROLL, and that is not an omission: `_fireMine` passes `getDamage(player)`
+			# into `new Mine(...)` and `Mine.update` calls `enemy.takeDamage(this.damage)`
+			# with no crit -- so the charge and its evolved twin both carry the un-rolled
+			# base, exactly as the two `new Mine(...)` calls in the original do. The volley
+			# roll this arm used to take is ONE of the four the original has no call site for;
+			# see the note on `_roll_crit`.
+			var mine_fuse: float = float(weapon.get("fuse", Mine.DEFAULT_FUSE))
+			# `const a = Math.random() * Math.PI * 2;` -- drawn whenever the weapon is
+			# evolved, sink or no sink, so whether a caller wanted the mine cannot change
+			# what the next weapon in the volley draws.
+			var cluster_angle := (randf() * TAU) if evolved else 0.0
+			if mines != null:
+				mines.append(Mine.new(hero.x, hero.y, reach, dmg, mine_fuse))
+				if evolved:
+					# `_fireMine`'s evolved Cluster Mine, quoted:
+					#
+					#     game.mines.push(new Mine(player.x + Math.cos(a) * 60,
+					#                              player.y + Math.sin(a) * 60,
+					#                              radius * 0.8, dmg, fuse));
+					#
+					# A SECOND charge at full damage, 60px away, covering 80% of the radius
+					# -- and its own `Mine.update`, which is where its 20 sparks and its
+					# blast disc come from. The angle has no data behind it in the original
+					# either, so it is a global draw: what a player sees is two overlapping
+					# blasts, not which way round they are.
+					mines.append(
+						Mine.new(
+							hero.x + cos(cluster_angle) * CLUSTER_OFFSET,
+							hero.y + sin(cluster_angle) * CLUSTER_OFFSET,
+							reach * CLUSTER_RADIUS_MULT,
+							dmg,
+							mine_fuse
+						)
+					)
 		_:
 			push_warning("weapon archetype '%s' has no implementation" % kind)
 
@@ -620,10 +638,11 @@ static func _strike_sweep(
 		# One foe inside the band is one coin flip, whatever the foe beside it did.
 		foe.take_damage(_roll_crit(dmg, chance, rng))
 
-## Everything within `reach`, PER FOE -- Frost Nova is the only caller left, and it is the
-## only one of the three disc weapons whose damage the original rolls for. Garlic and Area
-## Mine do NOT come through here: `_fireAura` and `_fireMine` call `_rollCrit` nowhere, so
-## they use `_strike_disc_unrolled`, which rolls nothing at all.
+## Everything within `reach`, PER FOE -- Frost Nova is the only caller, and it is the only
+## one of the three disc weapons whose damage the original rolls for. Garlic does NOT come
+## through here: `_fireAura` calls `_rollCrit` nowhere, so its damage is rolled nowhere and it
+## uses `_strike_disc_unrolled`. The Area Mine used to as well; it now lands its own blast in
+## `Mine.update`, at `Mine.radius`, because the original's own predicate is a strict `<`.
 ##
 ## Returns the foes it HIT, because Frost Nova has to do a second thing to exactly those
 ## foes -- and it is handed the same set this predicate damaged rather than a second disc
@@ -634,9 +653,9 @@ static func _strike_all_in_range(
 	return _strike_disc(hero.x, hero.y, foes, reach, dmg, chance, rng)
 
 ## The same disc, around an arbitrary point rather than the hero. `_strike_all_in_range`
-## is this centred on the hero; the aura and the two mine charges reach it through
-## `_strike_disc_unrolled`, whose centre is the hero for one and the SECOND charge's own
-## position for the other.
+## is this centred on the hero, and the aura reaches it through `_strike_disc_unrolled`,
+## whose centre is the hero as well. A caller that needs a centre of its own passes one --
+## the mine does not, because a mine blasts where it lies.
 ##
 ## `<= reach`, and the hits are returned so a caller that applies a SECOND effect -- the
 ## nova's slow -- applies it to the set this predicate actually reached rather than to a
@@ -663,12 +682,15 @@ static func _strike_disc(
 
 ## The same disc, struck with damage that was never rolled at all.
 ##
-## The aura, the mine and the mine's evolved cluster are the three callers. `_fireAura` and
-## `_fireMine` in `src/weapons.ts` call `_rollCrit` NOWHERE -- they hand `getDamage(player)`
-## to every foe they touch -- so there is no roll for the original to have, per foe or per
-## fire, and there is none here. The chance below is a stated ZERO rather than an absent
-## argument: this predicate is `_strike_disc` with nothing left to decide, and naming it is
-## what keeps the difference between these three and the nova a word a reader can follow.
+## The aura is the only caller. `_fireAura` in `src/weapons.ts` calls `_rollCrit` NOWHERE --
+## it hands `getDamage(player)` to every foe it touches -- so there is no roll for the
+## original to have, per foe or per fire, and there is none here. The Area Mine and its
+## evolved cluster were the other two callers until the fuse was ported: a mine's blast now
+## lands in `Mine.update`, at `Mine.radius`, and it is there rather than here because the
+## original's own predicate is a strict `<` while this one is `<=`. The chance below is a
+## stated ZERO rather than an absent argument: this predicate is `_strike_disc` with nothing
+## left to decide, and naming it is what keeps the difference between this and the nova a word
+## a reader can follow.
 ##
 ## AND IT IS MEASURED, not merely asserted by this comment: `verify_weapons.gd`'s
 ## `_the_aura_rolls_nothing_and_is_the_control` fires Garlic through a SEEDED generator at a

@@ -86,6 +86,16 @@ func _init() -> void:
 	_drain_rolls_once_per_tether_and_heals_their_sum()
 	_the_aura_rolls_nothing_and_is_the_control()
 
+	# THE AREA MINE'S FUSE. `src/data.ts:154` declares `fuse: 1.2` on the weapon, and
+	# `quality-baseline.json` declared `godot-mine-fuse-unread`: the port struck on the FIRE
+	# frame with no mine entity at all, so the field was read and thrown away. Every
+	# measurement below drives the DEF's own `fuse` rather than a number written here.
+	_the_mine_fuse_is_the_defs_fuse()
+	_a_mine_arms_on_placement_not_on_proximity()
+	_the_mine_detonates_on_frame_72_and_not_71()
+	_the_mine_blast_is_its_own_radius()
+	_the_armed_state_turns_over_at_half_the_fuse()
+
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
 	# to remove, introduced by the tooling itself.
@@ -124,12 +134,25 @@ func _every_weapon_damages() -> void:
 		var s := _scene(id, at)
 		var before: float = s["foe"].hp
 		var shots: Array = []
-		WeaponFire.fire(def, s["game"].hero, s["game"].foes, shots)
-		# Shots need a frame to travel before they can hit.
+		# THE MINE SINK, so the ONE archetype that creates an entity reaches this loop at
+		# all. Without it the Area Mine fires into nothing and this check reports it silent
+		# -- which is what it did the moment the fuse was ported, and the reason the loop
+		# below had to learn to advance a fuse as well as a shot.
+		WeaponFire.fire(def, s["game"].hero, s["game"].foes, shots, 1, null, null, s["game"].mines)
+		# Shots need a frame to travel before they can hit, and a MINE needs its fuse to run
+		# out: the original lands that blast 1.2s AFTER the drop, so "every weapon damages a
+		# foe in range" is true of a mine only once the fuse has been given its 72 frames.
+		# 120 frames against a 72-frame fuse, so this count is not sitting on the boundary.
 		for i in 120:
 			for shot in shots:
 				shot.update(FRAME, s["game"].hero.x, s["game"].hero.y, s["game"].hero.x, s["game"].hero.y)
 				shot.resolve(s["game"].foes, Callable())
+			for mine in s["game"].mines:
+				# `removed` FIRST. A detonated mine blasts on EVERY call at or below zero --
+				# the original relies on `_updateMines` splicing it out of the array, and a
+				# driver that kept calling would pile the damage on once per frame.
+				if not mine.removed:
+					mine.update(FRAME, s["game"].foes, null)
 		if s["foe"].hp >= before:
 			silent.append("%s (%s)" % [id, def["type"]])
 	_check(silent.is_empty(), "EVERY weapon damages a foe in range", "silent: %s" % (", ".join(silent) if not silent.is_empty() else "none"))
@@ -520,7 +543,12 @@ func _damage_at(def: Dictionary, level: int) -> float:
 	foe.max_hp = 100000.0
 	g.foes.append(foe)
 	var before: float = foe.hp
-	var made: Array = WeaponFire.fire(def, g.hero, g.foes, [], level)
+	# `g.mines` as the sink, so a mine exists to be stepped: with no array handed in, the
+	# Area Mine creates nothing, this measures 0 damage at EVERY level, and the weapon is
+	# reported as not scaling when the measurement could not see it at all -- the same
+	# mistake this function was written to fix for the strike archetypes. 90 frames is past
+	# the def's 72-frame fuse, so the blast lands inside the window.
+	var made: Array = WeaponFire.fire(def, g.hero, g.foes, [], level, null, null, g.mines)
 	for s in made:
 		g.shots.append(s)
 	for i in 90:
@@ -646,7 +674,7 @@ func _sweep_hits(def: Dictionary, offsets: Array) -> Array:
 ## pixels -- every one of them a foe's HP bar -- against 224 for a single Orbiter shard.
 ##
 ## DRIVEN BY THE DATA, so a weapon added to `src/data.ts` later fails here until its fire
-## is visible. The claim is "a shot OR an effect": the pure-projectile archetypes are
+## is visible. The claim is "a shot, an effect OR a mine": the projectile archetypes are
 ## already drawn as shots, and demanding fx from them would be a different, false claim.
 func _every_weapon_leaves_something_to_draw() -> void:
 	var silent: Array = []
@@ -669,9 +697,13 @@ func _every_weapon_leaves_something_to_draw() -> void:
 		var visible := 0
 		for i in fires:
 			var shots: Array = []
+			g.mines.clear()
 			g.fx.clear()
-			WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx)
-			if not shots.is_empty() or not g.fx.is_empty():
+			# `g.mines` IS ONE OF THE LISTS `_draw` WALKS NOW, so a mine counts as something
+			# to draw for the same reason a shot does -- and `verify_scene.gd` asserts that
+			# `_draw` iterates `game.mines`, so the two halves of this claim are checked.
+			WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx, null, g.mines)
+			if not shots.is_empty() or not g.fx.is_empty() or not g.mines.is_empty():
 				visible += 1
 		if visible == 0:
 			silent.append("%s (%s)" % [def["id"], def["type"]])
@@ -1993,6 +2025,255 @@ func _the_evolved_second_ring_is_never_doubled() -> void:
 		0,
 		"and every second ring is exactly %0.2f of the base -- never doubled by it" % WeaponFire.NOVA_PULSE_DAMAGE
 	)
+
+
+# ---------------------------------------------------------------------------
+# THE AREA MINE'S FUSE
+#
+# `quality-baseline.json` declared `godot-mine-fuse-unread`:
+#
+#   "`\"fuse\": 1.2` is in the data and the TypeScript has a `Mine` entity with
+#    `fuse`/`maxFuse`, an armed state drawn at half-fuse, and a delayed blast. The Godot
+#    port strikes immediately on the fire frame with no mine entity, so there is no armed
+#    state to draw."
+#
+# So the data declared a fuse and the port did not read it. The four fields this project has
+# found in that state -- `type`, `effect`, `archetype`, `check` -- were each invisible for
+# the same reason: the test asserted the case that happened to work. Here that case was "the
+# foe took damage on the fire frame", which is exactly what a mine with no fuse does.
+#
+# WHAT THE ORIGINAL DOES, from `src/`, and the numbers below were MEASURED from it rather
+# than reasoned about. A throwaway probe drove the ORIGINAL's own `Mine.update` at dt = 1/60:
+#
+#     data: WEAPONS.MINE.fuse = 1.2     baseRange = 100
+#     [subject] fuse=1.2  dt=0.016666666666666666
+#       detonation frame = 72    hits recorded = 1 (damage 45)
+#       fuse after that frame = -7.28583859910259e-16
+#       hits after 71 frames = 0        hits after 72 frames = 1
+#     [control A] fuse=0.0 -> frame 1        [control B] fuse=0.5 -> frame 31
+#     [control C] fuse=2.0 -> frame 121
+#     [control] premise: fuse=0 must hit on frame 1 and exactly once -> HELD
+#     radius boundary: d=99.999 -> 1 hit    d=100.0 -> 0 hits    d=100.001 -> 0 hits
+#
+# Three things that probe settles, and the checks below pin each one:
+#
+#   1. THE FUSE STARTS ON PLACEMENT. `Mine.update` is `this.fuse -= dt;` with nothing above
+#      it -- no proximity test anywhere in the class. The proximity-armed countdown is the
+#      BOMBER's (`fuseRange`/`fuseTime` on an ENEMY def, `src/entities.ts:375-383`): same
+#      English word, a different entity, a different table and a different timer.
+#   2. THE FRAME IS 72, and 71 is not. The controls on either side (1, 31, 121) are what make
+#      that a reading rather than a number the probe happened to print.
+#   3. THE RADIUS IS EXCLUSIVE -- `if (d < this.radius)`, so a foe exactly on the boundary
+#      takes nothing.
+# ---------------------------------------------------------------------------
+
+## A mine fired through the real weapon path, against a foe that cannot move or fight back.
+##
+## `Check.sturdy` so a check about TIMING cannot become a check about the foe dying, and an
+## inert foe so it cannot become a check about the HERO dying -- a bat standing on the hero
+## deals contact damage every frame and the hero would be long dead by frame 72.
+func _mine_scene(foe_at := 0.0) -> Dictionary:
+	var g := Game.without_spawns()
+	g.hero.weapons.clear()
+	var def: Dictionary = _weapon("mine")
+	g.hero.add_weapon(def)
+	var foe := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + foe_at, g.hero.y))
+	foe.speed = 0.0
+	foe.damage = 0.0
+	g.foes.append(foe)
+	g.fx.clear()
+	var shots: Array = []
+	WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx, null, g.mines)
+	# THE WEAPON COMES OFF THE HERO, or `Game.step` fires a SECOND mine on its very first
+	# frame: `cooldowns` starts empty, so `left = 0.0 - delta` is already `<= 0.0` and the
+	# weapon re-arms and fires immediately. Measured -- the first version of this scene
+	# stepped a game holding two mines, and "the mine detonated on frame 72" would have been
+	# true of whichever one it happened to look at.
+	g.hero.weapons.clear()
+	return {"game": g, "foe": foe, "def": def, "hp_before": foe.hp}
+
+
+## Step the REAL `Game.step`, so what is measured is the loop a run uses rather than a driver
+## written here. `Mine.update` is called directly only where the check is about the entity.
+func _step(game: Game, frames: int) -> void:
+	for i in frames:
+		game.step(FRAME, Vector2.ZERO)
+
+
+## THE FIELD IS READ, AND THE VALUE IT CARRIES IS THE DATA'S.
+##
+##     src/data.ts:154     fuse: 1.2,
+##     src/weapons.ts:356  const fuse = this.def.fuse || 1.2;
+##     src/weapons.ts:358  game.mines.push(new Mine(player.x, player.y, radius, dmg, fuse));
+##
+## Read THROUGH `_weapon("mine")`, which is the def in `Weapons.WEAPONS` -- the generated
+## table, generated in turn from `src/data.ts`. So a `fuse` changed in the TypeScript moves
+## this measurement instead of breaking it, which is rule 12's whole point.
+func _the_mine_fuse_is_the_defs_fuse() -> void:
+	var s := _mine_scene()
+	var g: Game = s["game"]
+	Check.unchanged(g.mines.size(), 1, "firing the Area Mine leaves a mine in game.mines")
+	if g.mines.size() != 1:
+		return
+	var def_fuse := float(s["def"]["fuse"])
+	Check.approx(g.mines[0].fuse, def_fuse, "and its fuse IS the def's `fuse`", 0.0001)
+	Check.approx(g.mines[0].max_fuse, def_fuse, "`max_fuse` records where the fuse started", 0.0001)
+	Check.approx(
+		g.mines[0].damage,
+		float(s["def"]["baseDamage"]) * g.hero.damage_mult(),
+		"and it carries the weapon's own damage, not a number of its own",
+		0.0001
+	)
+	Check.approx(
+		g.mines[0].radius,
+		WeaponFire.reach_for(s["def"], g.hero, 1),
+		"and its blast radius is the weapon's own reach",
+		0.0001
+	)
+
+
+## THE FUSE STARTS WHEN THE MINE IS PLACED, NOT WHEN A FOE ARRIVES.
+##
+## This is the half that is the whole mechanic, and it is the half a "does it eventually
+## explode" test would miss. `Mine.update` (`src/entities.ts:763`) is:
+##
+##     update(dt, game) {
+##         this.fuse -= dt;
+##
+## -- with nothing above it. There is no range test in `Mine` at all, so a mine dropped in an
+## empty field detonates on exactly the frame one dropped into a crowd does. A foe walking
+## over it changes nothing; a foe walking away changes nothing.
+##
+## The measurement that separates the two mechanics is therefore a mine with NOTHING in the
+## world: a proximity-armed mine would sit there forever, and this would read a mine still on
+## the ground at frame 72.
+func _a_mine_arms_on_placement_not_on_proximity() -> void:
+	var s := _mine_scene()
+	var g: Game = s["game"]
+	g.foes.clear()
+	Check.unchanged(g.mines.size(), 1, "a mine dropped in an EMPTY field exists")
+	if g.mines.size() != 1:
+		return
+	var full: float = g.mines[0].fuse
+	_step(g, 71)
+	Check.unchanged(g.mines.size(), 1, "and is still on the ground at frame 71 with no foe anywhere")
+	if g.mines.size() == 1:
+		Check.fell(full, g.mines[0].fuse, "with its fuse burning down and nothing to arm it")
+	_step(g, 1)
+	Check.unchanged(g.mines.size(), 0, "and it detonates on frame 72 anyway")
+
+
+## THE FRAME, PINNED ON THE VALUE AND ONE PAST IT.
+##
+## 1.2 seconds at dt = 1/60 is the first frame whose accumulated dt reaches the fuse. The
+## measurement is in this section's header: the ORIGINAL's own `Mine.update` detonates on
+## frame 72 and has recorded no hit after 71. Both are asserted below, because a frame
+## asserted only from one side is a rate expected to be a certainty -- "it eventually
+## explodes" is satisfied by a mine that explodes on frame 400.
+func _the_mine_detonates_on_frame_72_and_not_71() -> void:
+	var s := _mine_scene()
+	var g: Game = s["game"]
+	# A PRECONDITION, ASSERTED. With no mine in the world every measurement below is
+	# vacuous -- and "0 damage taken equals 0 damage carried" would have reported a port
+	# with no mine entity at all as having the damage right. Measured on a break that
+	# removed the mine: this line is what turns that into a failure.
+	Check.unchanged(g.mines.size(), 1, "the mine exists before its frame is counted")
+	var stored: float = g.mines[0].damage if g.mines.size() == 1 else 0.0
+	var at := -1
+	for i in 400:
+		g.step(FRAME, Vector2.ZERO)
+		if g.mines.is_empty():
+			at = i + 1
+			break
+	Check.unchanged(at, 72, "a 1.2s fuse at 1/60 detonates on frame 72")
+	# DERIVED FROM THE DEF, by the original's own arithmetic (`fuse -= dt`, then
+	# `fuse <= 0.0`), so the frame above is tied to `src/data.ts` and not only to a literal
+	# that was true the day it was written.
+	var derived := 0
+	var left := float(s["def"]["fuse"])
+	while left > 0.0:
+		left -= FRAME
+		derived += 1
+	Check.unchanged(at, derived, "which is the frame the def's own `fuse` computes to")
+	Check.approx(
+		s["hp_before"] - s["foe"].hp,
+		stored,
+		"and the blast deals exactly the damage the mine carried",
+		0.001
+	)
+
+	# ONE PAST IT, measured on a second mine so the first one's frame count cannot leak in.
+	var early := _mine_scene()
+	_step(early["game"], 71)
+	Check.unchanged(early["game"].mines.size(), 1, "and at frame 71 the mine is STILL on the ground")
+	Check.unchanged(early["foe"].hp, early["hp_before"], "so a foe standing ON it is unhurt")
+	_step(early["game"], 1)
+	Check.fell(early["hp_before"], early["foe"].hp, "and is hurt on frame 72")
+
+
+## THE BLAST RADIUS IS EXCLUSIVE.
+##
+##     src/entities.ts:769    if (d < this.radius) {
+##
+## MEASURED against the original's own `Mine.update`, radius 100: a foe at d = 99.999
+## recorded 1 hit, at d = 100.0 recorded 0 and at d = 100.001 recorded 0. This port's shared
+## `_strike_disc`, which the aura and the nova use, is `<= reach` -- so a mine routed through
+## it would be wrong on exactly one boundary case, and `Mine.update` has its own loop for
+## that reason.
+func _the_mine_blast_is_its_own_radius() -> void:
+	# THE RADIUS IS READ FROM THE FIRED MINE, not written down here: it is `reach_for` at
+	# level 1, so a `baseRange` changed in `src/data.ts` moves both sides of this boundary.
+	var probe := _mine_scene()
+	if probe["game"].mines.size() != 1:
+		Check.unchanged(probe["game"].mines.size(), 1, "a mine to measure the blast radius from")
+		return
+	var radius: float = probe["game"].mines[0].radius
+
+	var inside := _mine_scene(radius - 0.1)
+	_step(inside["game"], 72)
+	Check.fell(inside["hp_before"], inside["foe"].hp, "a foe just INSIDE the blast radius is hurt")
+
+	var boundary := _mine_scene(radius)
+	_step(boundary["game"], 72)
+	Check.unchanged(
+		boundary["foe"].hp,
+		boundary["hp_before"],
+		"a foe EXACTLY on the blast radius takes nothing"
+	)
+	# AND THE MINE REALLY DID GO OFF, so "took nothing" cannot be a mine that never fired --
+	# the shape of a probe that reports the most favourable result for the wrong reason.
+	Check.unchanged(boundary["game"].mines.size(), 0, "and that mine DID detonate")
+
+
+## THE ARMED STATE, WHICH IS THE ONLY THING THE FUSE CHANGES ON SCREEN.
+##
+##     const armed = self.fuse < self.maxFuse * 0.5;      -- renderMine, entity-render.ts:112
+##
+## `test/entity-render.test.ts:278` pins the boundary from the TypeScript side -- "exactly
+## half is unarmed" and "one step below the boundary IS armed" -- and `Mine.armed()` is that
+## rule with one home, called by `main.gd`'s `_draw_mine` and by nothing else.
+func _the_armed_state_turns_over_at_half_the_fuse() -> void:
+	var half := Mine.new(0.0, 0.0, 100.0, 45.0, 2.0)
+	half.fuse = 1.0
+	Check.unchanged(half.armed(), false, "exactly half the fuse is NOT armed")
+	half.fuse = 0.999
+	Check.unchanged(half.armed(), true, "one step below half IS armed")
+
+	# AND ON THE DEF'S OWN VALUE, so this is a claim about the Area Mine rather than about a
+	# fixture -- the boundary moved to wherever `src/data.ts` puts it.
+	var s := _mine_scene()
+	var g: Game = s["game"]
+	if g.mines.size() != 1:
+		Check.unchanged(g.mines.size(), 1, "a mine to measure the armed state of")
+		return
+	var def_fuse := float(s["def"]["fuse"])
+	Check.unchanged(g.mines[0].armed(), false, "a mine with its full fuse is unarmed")
+	var exact := Mine.new(0.0, 0.0, 100.0, 45.0, def_fuse)
+	exact.update(def_fuse * 0.5, [], null)
+	Check.approx(exact.fuse, def_fuse * 0.5, "half the def's fuse burned is exactly half", 0.0001)
+	Check.unchanged(exact.armed(), false, "and the def's own half-way point is NOT armed")
+	exact.update(0.01, [], null)
+	Check.unchanged(exact.armed(), true, "one step past it IS armed")
 
 
 func _check(cond: bool, label: String, detail: String) -> void:
