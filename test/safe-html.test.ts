@@ -13,7 +13,18 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    readdirSync,
+    realpathSync,
+    rmSync,
+    statSync,
+    symlinkSync,
+    writeFileSync
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
@@ -235,7 +246,127 @@ test('mount / clearHtml: the only two writers of innerHTML', () => {
 // The structural guard. This is the test that matters in a year's time.
 // ---------------------------------------------------------------------------
 
-/** Every tracked source file, read as text, RECURSIVELY.
+/**
+ * The extensions this scan reads.
+ *
+ * DECLARED, and cross-checked against what the build actually compiles by the
+ * test below — because being out of step with `tsconfig.build.json` was the
+ * defect. `src/zzp/Upper.TS`, `mod.mts`, `mod.cts`, `mod.mjs` and `mod.tsx` were
+ * all MISSED, and today none of them is compiled either: measured, a build with
+ * all five present emitted none of them. **But that is a fact about the tsconfig,
+ * not about this guard.** The moment `include` grows a `.tsx` the files become
+ * served bytes, so the two lists are asserted equal rather than assumed equal.
+ */
+const SCANNED_EXTENSIONS = ['.js', '.ts'];
+
+/**
+ * The extensions `tsconfig.build.json` compiles, read from its own `include`.
+ *
+ * Fail-closed: a pattern this cannot read throws rather than being ignored, so a
+ * new shape in the config is a loud failure and not a silently unscanned
+ * directory.
+ */
+function compiledExtensions(): string[] {
+    const config = JSON.parse(
+        readFileSync(new URL('../tsconfig.build.json', import.meta.url), 'utf8')
+    );
+    const include: unknown = config.include;
+    if (!Array.isArray(include) || include.length === 0) {
+        throw new Error(
+            'safe-html: tsconfig.build.json has no `include`, so what it compiles is unknown'
+        );
+    }
+    const extensions = new Set<string>();
+    for (const pattern of include) {
+        const match = /^src\/(?:\*\*\/)?\*(\.[A-Za-z0-9.]+)$/.exec(String(pattern));
+        if (!match) {
+            throw new Error(
+                `safe-html: tsconfig.build.json includes "${String(pattern)}", which this ` +
+                    'cross-check cannot read. Teach it the shape rather than letting a ' +
+                    'directory go unscanned.'
+            );
+        }
+        extensions.add(match[1]);
+    }
+    return [...extensions].sort();
+}
+
+/** One walk of `src/`, so the scan and the "what did it skip" control cannot disagree. */
+function walkSources(): {
+    files: Array<{ name: string; text: string }>;
+    /** Files whose extension is a compiled one only up to CASE. */
+    caseOnly: string[];
+    /** Directories reachable by more than one path, reported rather than silently scanned twice. */
+    symlinks: string[];
+} {
+    const root = fileURLToPath(new URL('../src/', import.meta.url));
+    const files: Array<{ name: string; text: string }> = [];
+    const caseOnly: string[] = [];
+    const symlinks: string[] = [];
+
+    /**
+     * `ancestors` holds the REAL paths of this branch's parents, so a symlink
+     * cycle is refused while two symlinks to the same directory are both walked —
+     * `tsc` emits both, so both are served bytes.
+     */
+    const walk = (dir: string, prefix: string, ancestors: Set<string>): void => {
+        const real = realpathSync(dir);
+        if (ancestors.has(real)) {
+            throw new Error(
+                `safe-html: ${prefix || 'src/'} resolves to ${real}, already an ancestor of this ` +
+                    'walk — a symlink CYCLE. Refused rather than skipped: a skip here is a ' +
+                    'subtree the guard silently does not read.'
+            );
+        }
+        const next = new Set(ancestors).add(real);
+
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            const full = path.join(dir, entry.name);
+
+            // A SYMLINKED DIRECTORY IS NOT `isDirectory()`, and that is how a
+            // whole subtree went unexamined. `tsc -p tsconfig.build.json` FOLLOWS
+            // it: measured, `src/zz-shared -> /tmp/shared-src` emitted
+            // `dist/zz-shared/inner.js` — a SERVED byte with an `innerHTML` sink
+            // this guard never read. So the link is resolved and walked.
+            let isDirectory = entry.isDirectory();
+            if (entry.isSymbolicLink()) {
+                try {
+                    isDirectory = statSync(full).isDirectory();
+                } catch {
+                    throw new Error(
+                        `safe-html: src/${rel} is a broken symlink, so the tree is not readable`
+                    );
+                }
+                symlinks.push(rel);
+            }
+
+            if (isDirectory) {
+                // Only dot-directories are skipped; `node_modules` cannot
+                // appear under `src/`, and skipping it by name would be a
+                // hiding place.
+                if (!entry.name.startsWith('.')) walk(full, rel, next);
+            } else if (SCANNED_EXTENSIONS.some((ext) => entry.name.endsWith(ext))) {
+                files.push({ name: rel, text: readFileSync(full, 'utf8') });
+            } else if (
+                SCANNED_EXTENSIONS.includes(path.extname(entry.name).toLowerCase()) &&
+                !SCANNED_EXTENSIONS.includes(path.extname(entry.name))
+            ) {
+                // `Upper.TS`. It is not compiled today — measured, and it is not
+                // a file `include`'s case-sensitive glob matches — but it is one
+                // keystroke from being compiled, and a silent skip is how this
+                // class of hole opens. Report it; the fix is to name it in
+                // lowercase.
+                caseOnly.push(rel);
+            }
+        }
+    };
+
+    walk(root, '', new Set<string>());
+    return { files, caseOnly, symlinks };
+}
+
+/** Every source file under `src/`, read as text, RECURSIVELY.
  *
  * This used to be a single `readdirSync` of `src/`, which lists the top level
  * and nothing else — a hole with a loaded gun behind it. Splitting the
@@ -248,23 +379,7 @@ test('mount / clearHtml: the only two writers of innerHTML', () => {
  * because this fix without it could be reverted silently.
  */
 function sourceFiles(): Array<{ name: string; text: string }> {
-    const root = fileURLToPath(new URL('../src/', import.meta.url));
-    const out: Array<{ name: string; text: string }> = [];
-    const walk = (dir: string, prefix: string): void => {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-            if (entry.isDirectory()) {
-                // Only dot-directories are skipped; `node_modules` cannot
-                // appear under `src/`, and skipping it by name would be a
-                // hiding place.
-                if (!entry.name.startsWith('.')) walk(path.join(dir, entry.name), rel);
-            } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.js')) {
-                out.push({ name: rel, text: readFileSync(path.join(dir, entry.name), 'utf8') });
-            }
-        }
-    };
-    walk(root, '');
-    return out;
+    return walkSources().files;
 }
 
 /**
@@ -343,6 +458,31 @@ function lineOf(text: string, index: number): number {
     return text.slice(0, index).split('\n').length;
 }
 
+/**
+ * The sub-states of the HTML5 attribute tokenizer.
+ *
+ * They are separate states because a `"` MEANS A DIFFERENT THING IN EACH, and
+ * the version this replaces had two (`inTag` and `quote`) and got the difference
+ * wrong. `<div data-x=a" ${payload}>` was ACCEPTED: the `"` after `a` was read as
+ * opening a quoted value, so the walk swallowed the rest of the tag and never saw
+ * the `${`. **HTML5 does not do that** — in the attribute-value-(unquoted) state
+ * a `"` is a parse error APPENDED to the value — and Chromium builds THREE
+ * attributes from that template (`data-x`, `x`, `onmouseover`), so a trusted
+ * mouse-move fires the handler.
+ *
+ * The states below are the ones the specification names, and the transition that
+ * matters is the only one that can open a quoted value: `before-value`, which is
+ * reached by `=`.
+ */
+const IN_TEXT = 'text';
+const IN_TAG = 'tag';
+const IN_NAME = 'name';
+const AFTER_NAME = 'after-name';
+const BEFORE_VALUE = 'before-value';
+const IN_VALUE_DQ = 'value-dq';
+const IN_VALUE_SQ = 'value-sq';
+const IN_VALUE_BARE = 'value-bare';
+
 /** Walk one template body, `[from, to)` of the absolute source `text`. */
 function walkTemplate(
     text: string,
@@ -354,39 +494,42 @@ function walkTemplate(
     }
 ): void {
     let i = from;
-    let inTag = false;
-    let quote: string | null = null;
+    let state = IN_TEXT;
     while (i < to) {
         const c = text[i];
-        if (quote) {
-            if (c === quote) quote = null;
+
+        // --- inside a QUOTED VALUE -----------------------------------------
+        if (state === IN_VALUE_DQ || state === IN_VALUE_SQ) {
+            // `${…}` here is the SAFE form and `escapeText` covers it. The
+            // expression is skipped as a unit so a quote INSIDE it cannot be
+            // mistaken for the end of the value.
+            if (c === '$' && text[i + 1] === '{') {
+                i = endOfExpression(text, i + 1);
+                continue;
+            }
+            if (c === (state === IN_VALUE_DQ ? '"' : "'")) state = IN_TAG;
             i++;
             continue;
         }
-        if (inTag) {
-            if (c === '"' || c === "'") {
-                quote = c;
-                i++;
-                continue;
-            }
-            if (c === '>') {
-                inTag = false;
+
+        // --- TEXT ----------------------------------------------------------
+        if (state === IN_TEXT) {
+            if (c === '<' && /[A-Za-z/]/.test(text[i + 1] || '')) {
+                state = IN_TAG;
                 i++;
                 continue;
             }
             if (c === '$' && text[i + 1] === '{') {
+                // TEXT position: safe, but it may CONTAIN a nested `html`…``.
                 const end = endOfExpression(text, i + 1);
-                const expr = text.slice(i + 2, end - 1);
-                let k = i - 1;
-                while (k >= from && /\s/.test(text[k])) k--;
-                const before = k >= from ? text[k] : '';
-                // `=` before it is the UNQUOTED-value form, which
-                // `UNQUOTED_ATTRIBUTE` covers separately.
-                if (before !== '=') {
-                    (tagPositionInterpolationIsLiteral(expr) ? out.accepted : out.refused).push({
-                        line: lineOf(text, i),
-                        expr
-                    });
+                let j = i + 2;
+                while (j < end - 1) {
+                    const at = text.indexOf('html`', j);
+                    if (at === -1 || at >= end - 1) break;
+                    const open = at + 5;
+                    const close = endOfTemplate(text, open - 1);
+                    walkTemplate(text, open, close, out);
+                    j = close + 1;
                 }
                 i = end;
                 continue;
@@ -394,27 +537,67 @@ function walkTemplate(
             i++;
             continue;
         }
-        if (c === '<' && /[A-Za-z/]/.test(text[i + 1] || '')) {
-            inTag = true;
-            quote = null;
-            i++;
-            continue;
-        }
+
+        // --- inside a TAG, in tag position ---------------------------------
         if (c === '$' && text[i + 1] === '{') {
-            // TEXT position: safe, but it may CONTAIN a nested `html`…``.
             const end = endOfExpression(text, i + 1);
-            let j = i + 2;
-            while (j < end - 1) {
-                const at = text.indexOf('html`', j);
-                if (at === -1 || at >= end - 1) break;
-                const open = at + 5;
-                const close = endOfTemplate(text, open - 1);
-                walkTemplate(text, open, close, out);
-                j = close + 1;
+            const expr = text.slice(i + 2, end - 1);
+            if (state === BEFORE_VALUE || state === IN_VALUE_BARE) {
+                // AN UNQUOTED VALUE, whatever the expression is. `escapeText`
+                // does not escape whitespace, so a space in the value ends it and
+                // everything after becomes new attributes. The separate
+                // `unquoted` regex catches the tight `name=${…}` form; this
+                // catches the spaced `name = ${…}` form, which that regex MISSES
+                // and which the walker used to skip for the same reason.
+                out.refused.push({ line: lineOf(text, i), expr });
+            } else {
+                (tagPositionInterpolationIsLiteral(expr) ? out.accepted : out.refused).push({
+                    line: lineOf(text, i),
+                    expr
+                });
             }
             i = end;
             continue;
         }
+        if (c === '>') {
+            state = IN_TEXT;
+            i++;
+            continue;
+        }
+        if (/\s/.test(c)) {
+            // Whitespace ENDS an attribute name or an unquoted value and starts
+            // the next attribute. Missing the second half would leave every later
+            // `${` in the tag classified as an unquoted value — safe, but it would
+            // refuse `<div data-x=1 title="${v}">`, and a guard that fires on
+            // legitimate markup is a guard that gets deleted.
+            if (state === IN_NAME) state = AFTER_NAME;
+            else if (state === IN_VALUE_BARE) state = IN_TAG;
+            i++;
+            continue;
+        }
+        if (c === '=') {
+            if (state === IN_NAME || state === AFTER_NAME) state = BEFORE_VALUE;
+            else if (state === IN_TAG) state = IN_NAME;
+            i++;
+            continue;
+        }
+        if (c === '"' || c === "'") {
+            // THE ONLY TRANSITION THAT OPENS A QUOTED VALUE. Everywhere else a
+            // quote is a parse error that HTML5 appends to the token: part of the
+            // attribute NAME, or part of an UNQUOTED VALUE. Reading it as an
+            // opening quote is the defect above.
+            if (state === BEFORE_VALUE) state = c === '"' ? IN_VALUE_DQ : IN_VALUE_SQ;
+            else if (state === IN_TAG) state = IN_NAME;
+            i++;
+            continue;
+        }
+        if (c === '/') {
+            if (state === IN_NAME || state === AFTER_NAME) state = IN_TAG;
+            i++;
+            continue;
+        }
+        if (state === IN_TAG || state === AFTER_NAME) state = IN_NAME;
+        else if (state === BEFORE_VALUE) state = IN_VALUE_BARE;
         i++;
     }
 }
@@ -594,7 +777,9 @@ test('structural: no interpolation sits in an attribute NAME position or an UNQU
     assert.deepEqual(
         approved,
         ["ui.ts:1298: v === value ? 'selected' : ''", "ui.ts:1306: value ? 'checked' : ''"],
-        'the set of ACCEPTED name-position interpolations changed — see tagPositionInterpolationIsLiteral'
+        'the set of ACCEPTED name-position interpolations changed — see ' +
+            'tagPositionInterpolationIsLiteral. What the walk REFUSED instead: ' +
+            JSON.stringify(found)
     );
     assert.deepEqual(
         found,
@@ -602,6 +787,92 @@ test('structural: no interpolation sits in an attribute NAME position or an UNQU
         'an interpolation where an attribute NAME belongs — that position cannot be escaped; ' +
             "write name=\"${…}\" or a literal ternary such as ${cond ? 'checked' : ''}"
     );
+});
+
+test('structural: the extensions this scan reads are the ones the build compiles', () => {
+    // DRIFT, MADE IMPOSSIBLE. `src/zzp/Upper.TS`, `mod.mts`, `mod.cts`, `mod.mjs`
+    // and `mod.tsx` were MISSED by the walk. Measured: a build with all five
+    // present emitted none of them, so they cannot be served TODAY — but that is
+    // a fact about `tsconfig.build.json`, not about this guard. Add `.tsx` to
+    // `include` and every JSX file under `src/` becomes a served byte; this
+    // assertion fails first, and names the extension to add.
+    assert.deepEqual(
+        compiledExtensions(),
+        [...SCANNED_EXTENSIONS].sort(),
+        'tsconfig.build.json compiles a set of extensions this scan does not read — add them to ' +
+            'SCANNED_EXTENSIONS, or the emitted bytes are never examined'
+    );
+});
+
+test('structural: a source file whose extension differs only by CASE is reported', () => {
+    // `Upper.TS` is skipped by an exact-extension match, and today that is
+    // correct — the glob in `include` is case-sensitive and tsc emits nothing for
+    // it. Silently skipping it is still how this class of hole opens, so it is
+    // named instead. The control is the file next to it, which IS scanned.
+    const dir = fileURLToPath(new URL('../src/', import.meta.url));
+    const sub = path.join(dir, 'zz-case-probe');
+    mkdirSync(sub, { recursive: true });
+    try {
+        writeFileSync(path.join(sub, 'ok.ts'), 'export const ok = 1;\n');
+        writeFileSync(path.join(sub, 'Upper.TS'), 'export const upper = 1;\n');
+        const walked = walkSources();
+        assert.ok(
+            walked.files.some((f) => f.name === 'zz-case-probe/ok.ts'),
+            'the control file was not scanned'
+        );
+        assert.deepEqual(walked.caseOnly, ['zz-case-probe/Upper.TS']);
+    } finally {
+        rmSync(sub, { recursive: true, force: true });
+    }
+});
+
+test('structural: the scan FOLLOWS a symlinked directory, which tsc compiles', () => {
+    // THE MEASURED DEFECT. `Dirent.isDirectory()` is FALSE for a symlink, so the
+    // descent skipped it — while `tsc -p tsconfig.build.json` followed it and
+    // emitted `dist/zz-shared/inner.js`, a served byte the guard never read.
+    // `src/zz-shared -> /tmp/shared-src` produced `dist/zz-shared/inner.js`
+    // BEFORE this fix, with this suite at 20 pass / 0 fail.
+    const dir = fileURLToPath(new URL('../src/', import.meta.url));
+    const outside = mkdtempSync(path.join(tmpdir(), 'safe-html-shared-'));
+    const link = path.join(dir, 'zz-symlink-probe');
+    writeFileSync(
+        path.join(outside, 'inner.ts'),
+        'export function s(el, p) {\n    el.innerHTML = p;\n}\n'
+    );
+    symlinkSync(outside, link, 'dir');
+    try {
+        const names = sourceFiles().map((f) => f.name);
+        assert.ok(
+            names.includes('zz-symlink-probe/inner.ts'),
+            `the scan did not follow the symlink — it saw: ${names.join(', ')}`
+        );
+        const offenders = sourceFiles()
+            .filter((f) => f.name !== 'safe-html.ts')
+            .filter((f) => codeLines(f.text).some((line) => line.includes('innerHTML')))
+            .map((f) => f.name);
+        assert.deepEqual(
+            offenders,
+            ['zz-symlink-probe/inner.ts'],
+            'a sink reached through a symlinked directory was not refused'
+        );
+    } finally {
+        rmSync(link, { force: true });
+        rmSync(outside, { recursive: true, force: true });
+    }
+});
+
+test('structural: a symlink CYCLE is refused, not skipped', () => {
+    // A walk that follows symlinks can loop forever, and a loop guard that
+    // silently skips is a subtree nobody reads. Refusing is the honest answer.
+    const dir = fileURLToPath(new URL('../src/', import.meta.url));
+    const sub = path.join(dir, 'zz-cycle-probe');
+    mkdirSync(sub, { recursive: true });
+    symlinkSync(sub, path.join(sub, 'loop'), 'dir');
+    try {
+        assert.throws(() => sourceFiles(), /symlink CYCLE/);
+    } finally {
+        rmSync(sub, { recursive: true, force: true });
+    }
 });
 
 test('structural: the scan reaches SUBDIRECTORIES, not just src/ top level', () => {
@@ -642,14 +913,31 @@ test('the tag-position walk can fail, and accepts exactly what it documents', ()
     // `src/` changes shape.
     const regionOf = (s: string): string => `const x = html\`${s}\`;`;
 
-    // REFUSED — data in attribute-NAME position.
+    // REFUSED — data in attribute-NAME position, and data in an UNQUOTED value.
     const refused = [
         '<input type="checkbox" ${payload} />',
         '<input type="checkbox" ${\'x onmouseover=window.__pwned=1\'} />',
         '<div ${x}>y</div>',
         '<div${x}>y</div>',
         '<a href="/" ${cond ? name : \'\'}>y</a>', // a VARIABLE branch
-        '<a href="/" ${cond ? 1 : 2}>y</a>' // a NON-STRING branch
+        '<a href="/" ${cond ? 1 : 2}>y</a>', // a NON-STRING branch
+        // THE STRAY-QUOTE BYPASS. `"` here does NOT open a quoted value: HTML5
+        // appends it to the UNQUOTED value, and Chromium builds THREE attributes
+        // from this template (`data-x`, `x`, `onmouseover`). The walk used to
+        // treat the quote as an opening one and swallow the rest of the tag, so
+        // the `${` was never seen. Watched: this fixture alone, before the fix,
+        // produced 20 pass / 0 fail against the whole suite.
+        '<div data-x=a" ${payload}>',
+        "<div data-x=a' ${payload}>",
+        '<div data-x="a"b" ${payload}>',
+        '<img alt=x" ${payload}>',
+        // AN UNQUOTED VALUE WITH SPACES AROUND THE `=`. The `unquoted` regex
+        // requires `name=${` with no space, and the walker used to skip it for
+        // the same reason `before === '='` was true — so this shape was invisible
+        // to both halves of the guard.
+        '<div a = ${payload}>',
+        '<div a\t=\t${payload}>',
+        '<div a=${payload}>'
     ];
     for (const markup of refused) {
         assert.ok(
@@ -667,7 +955,17 @@ test('the tag-position walk can fail, and accepts exactly what it documents', ()
         "<a class=\"c ${s.id === currentId ? 'active' : ''}\">y</a>",
         '<div class="hs-row" title="${payload}">${payload}</div>',
         '<b>${plainText}</b>',
-        "<b ${cond ? 'a' : 'b'}>y</b>" // a literal ternary even at tag start
+        "<b ${cond ? 'a' : 'b'}>y</b>", // a literal ternary even at tag start
+        // HTML5 ACCURACY CONTROLS. A `"` only opens a value after `=`, and these
+        // are the templates that tell a correct tokenizer from a stricter wrong
+        // one: a `>` INSIDE a quoted value does not end the tag, a `${…}` inside a
+        // quoted value is the safe form, and an unquoted LITERAL value does not
+        // poison the attributes after it.
+        '<div title="a>b" data-x="${v}">y</div>',
+        '<div title="${a > b}">y</div>',
+        '<div data-n=1 title="${v}">y</div>',
+        "<div title='${v}' ${cond ? 'data-y=\"1\"' : ''}>y</div>",
+        "<div title=\"a\" ${cond ? 'selected' : ''}>y</div>"
     ];
     for (const markup of accepted) {
         assert.ok(

@@ -23,6 +23,18 @@
  * server is holding**, and the probe refuses to call the releases distinguishable
  * unless the derived names and the worker bytes actually differ.
  *
+ * THE SECOND VERSION OF THAT SAME MISTAKE, found by an adversarial verifier one
+ * commit later: the step that named the worker bytes compared `workerText` with
+ * `releaseA.text` two lines after ASSIGNING `workerText = releaseA.text` in the
+ * control branch. In the control it evaluated `releaseA.text !== releaseA.text` —
+ * false by construction — so it could not fail while the control was honest, and
+ * had content only once the control was already broken. It was a restatement of
+ * the assignment wearing an assertion's name. **The worker bytes are read twice
+ * over the wire now**, before and after the file is rewritten, so the step is a
+ * measurement of what the server returns rather than a comparison of two local
+ * variables. What the BROWSER does about those bytes is still asserted separately
+ * and in the browser, by `controllerchange` / no-takeover below.
+ *
  * THE TWO SCENARIOS, IN FRESH STORAGE PARTITIONS
  *
  *   fixed   release A installed; `dist/main.js` changes AND the worker is
@@ -256,17 +268,6 @@ try {
         // `fixed` regenerates the worker; `control` holds the SAME bytes, which is
         // exactly the hand-maintained behaviour that made 146 releases invisible.
         const workerText = scenario === 'fixed' ? releaseNew.text : releaseA.text;
-        const workerBytesChanged = workerText !== releaseA.text;
-
-        step(
-            scenario === 'fixed'
-                ? 'regenerating moves BOTH the cache name and the worker bytes'
-                : 'the control holds the worker BYTE-IDENTICAL',
-            scenario === 'fixed'
-                ? releaseNew.name !== releaseA.name && workerBytesChanged
-                : !workerBytesChanged,
-            `${releaseA.name} -> ${releaseNew.name}${workerBytesChanged ? '' : ' (worker unchanged)'}`
-        );
 
         // The server really is serving the new bundle. Without this, "the old
         // bundle is still running" would be unfalsifiable — the network might
@@ -276,6 +277,45 @@ try {
             `the server now serves release ${changed} over the wire`,
             onTheWire.includes(`__RELEASE__ = "${changed}"`),
             `${onTheWire.length} bytes`
+        );
+
+        // WHAT DECIDES WHETHER A NEW WORKER INSTALLS is whether the bytes the
+        // server returns for `service-worker.js` changed between two visits — so
+        // that is READ TWICE OVER THE WIRE, from the server, rather than restated
+        // in this probe's own variables.
+        //
+        // The line this replaces was `const workerBytesChanged = workerText !==
+        // releaseA.text;`, two lines after `workerText` was assigned FROM
+        // `releaseA.text` in the control branch — so in the control it compared
+        // `releaseA.text !== releaseA.text`, which is FALSE BY CONSTRUCTION. It
+        // restated the assignment rather than measuring anything, and it had
+        // content only once the control was already broken: mutating the control
+        // to take `releaseNew.text` printed FAIL for that step and three others.
+        // **The claimed control assertion could not fire as shipped.**
+        //
+        // The cache-name half of the same step IS real, and stays: both names are
+        // derived from the bytes the server holds, and `settled` plus
+        // `!finalCaches.includes(releaseA.name)` below fail on a collision, so
+        // "the name moved" is load-bearing rather than decorative. What was wrong
+        // was the reason given for the BYTES half.
+        const servedWorkerBefore = await fetch(`${url}service-worker.js`).then((r) => r.text());
+        writeFileSync(path.join(site, 'service-worker.js'), workerText);
+        const servedWorkerAfter = await fetch(`${url}service-worker.js`).then((r) => r.text());
+        const workerBytesChanged = servedWorkerAfter !== servedWorkerBefore;
+        step(
+            scenario === 'fixed'
+                ? 'the wire serves DIFFERENT worker bytes, and the name moved with them'
+                : 'the wire serves the SAME worker BYTES — the hand-maintained behaviour',
+            scenario === 'fixed'
+                ? workerBytesChanged &&
+                      releaseNew.name !== releaseA.name &&
+                      servedWorkerAfter === releaseNew.text &&
+                      servedWorkerBefore === releaseA.text
+                : !workerBytesChanged &&
+                      servedWorkerBefore === releaseA.text &&
+                      servedWorkerAfter === releaseA.text,
+            `${releaseA.name} -> ${releaseNew.name}, ${servedWorkerBefore.length} -> ` +
+                `${servedWorkerAfter.length} bytes on the wire`
         );
 
         // --- the update check -----------------------------------------------
@@ -292,7 +332,10 @@ try {
         // So the signal is `controllerchange`: `clients.claim()` firing is the exact
         // moment the new worker took the page over. Only then is the cache set
         // expected to have settled.
-        writeFileSync(path.join(site, 'service-worker.js'), workerText);
+        //
+        // The worker file was written ABOVE, before this point, so the two wire
+        // reads that decide `workerBytesChanged` bracket the only moment the
+        // server's copy changes.
         await page.evaluate(() => {
             window.__SW_TAKEOVER__ = false;
             navigator.serviceWorker.addEventListener('controllerchange', () => {

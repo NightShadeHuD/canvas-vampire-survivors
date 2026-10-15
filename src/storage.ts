@@ -262,9 +262,23 @@ export function recordHighScore(save, entry) {
     //     `mergeDeep`, `safeClone` and the record read, but not this write, so
     //     the one path that creates keys was the one path without the guard.
     //     An unusable stage now falls back to the canonical bucket instead.
-    //   - A key that is not a real stage id has nowhere to be read from:
-    //     nothing in `src/` reads `stageHighScores` at all today, so an
-    //     arbitrary key can only be corruption. REFUSING it is therefore free.
+    //   - A key that is not a real stage id has nowhere a PLAYER can be shown
+    //     it from: the only stage-board reader is the exported
+    //     `getStageHighScores`, and it has NO CALLER anywhere in `src/` --
+    //     grep returns the definition and nothing else. So an arbitrary key can
+    //     only be corruption. REFUSING it is therefore free.
+    //
+    //     THIS SENTENCE USED TO READ "nothing in `src/` reads
+    //     `stageHighScores` at all today", AND THAT IS FALSE. `src/` reads it
+    //     in THREE places, all in this file: `recordHighScore` merges into the
+    //     existing bucket, `getStageHighScores` reads one back, and
+    //     `saveShape()` declares how the reader coerces the whole record. The
+    //     claim that matters is about the CALLER, not about the read, and it is
+    //     the one `test/hostile-input.test.ts` pins.
+    //
+    //     NAMED RATHER THAN NUMBERED, deliberately: this file moved by ten lines
+    //     while this very comment was being written, and a line number in prose
+    //     that nothing re-measures is the drift this repository keeps paying for.
     const stageId = knownStageId(clean.stage);
     save.stageHighScores ??= {};
     const existing = Object.prototype.hasOwnProperty.call(save.stageHighScores, stageId)
@@ -424,6 +438,17 @@ export interface Shape {
      * different claims that the game must not conflate.
      */
     required?: string[];
+    /**
+     * Keep the LAST `max` elements of an over-long array rather than the first.
+     *
+     * For a FIFO whose head is its OLDEST entry, keeping the head INVERTS it: the
+     * most recent entries are the ones discarded, and they are discarded on every
+     * single load. `seenBuilds` is exactly that shape. Measured before this
+     * existed, with the read cap at 512 and the write cap at 1000: 600 written →
+     * 512 read, `w0` (OLDEST) kept, `w599` (NEWEST) dropped, then the next save
+     * persisted those 512 — so the newest builds were gone for good, every time.
+     */
+    keepNewest?: boolean;
 }
 
 /** Either a value that passed, or a refusal. */
@@ -569,8 +594,12 @@ function coerceShape(
         if (!Array.isArray(value)) return refuse();
         const cap = Number(shape.max);
         const limit = Number.isFinite(cap) ? Math.min(value.length, cap) : value.length;
+        // `keepNewest` decides WHICH end survives a truncation, and for a FIFO it
+        // is the whole difference between a bounded history and a bounded history
+        // read backwards.
+        const start = shape.keepNewest ? value.length - limit : 0;
         const out: unknown[] = [];
-        for (let i = 0; i < limit; i++) {
+        for (let i = start; i < start + limit; i++) {
             const item = shape.of
                 ? coerceShape(value[i], shape.of, null, budget)
                 : accept(safeClone(value[i], budget, 0));
@@ -772,8 +801,34 @@ function saveShape(): Shape {
                     timePlayed: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
                     runs: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
                     bossKills: { kind: 'number', min: 0, maxValue: MAX_TOTAL },
-                    seenBuilds: { kind: 'array', of: { kind: 'string', maxLength: 64 }, max: 512 },
-                    uniqueBuilds: { kind: 'number', min: 0, maxValue: 512 }
+                    // ONE NUMBER, BOTH PATHS. `CONFIG.SEEN_BUILDS_CAP` bounds the
+                    // WRITE (`main.ts` splices the array down to it) and this is
+                    // the READ. They were two independent literals that did not
+                    // agree -- 1000 written, 512 read -- so the reader silently
+                    // dropped 488 entries on every load. This is the defect
+                    // `STAGE_BOARD_CAP` above was written for, one field over.
+                    //
+                    // `keepNewest` because it is a FIFO: the OLDEST build is at
+                    // the head, so keeping the first 512 of an over-long list is
+                    // keeping the wrong end. Both halves are needed. The read cap
+                    // agreeing with the write cap means the game's own saves are
+                    // never truncated at all; `keepNewest` means the newest
+                    // survive even when an IMPORTED save is longer than the cap.
+                    //
+                    // HONEST REACH: no player can see this today. There is no UI
+                    // reader for `seenBuilds` or `uniqueBuilds` -- the only
+                    // consumer is the `triple_build` achievement's `>= 3`
+                    // threshold, and a list that keeps 512 of 1485 attainable
+                    // build keys is still far past 3. It is real corruption of a
+                    // persisted field, and it is silent, so it is fixed; it is not
+                    // a player-visible bug and this comment does not claim one.
+                    seenBuilds: {
+                        kind: 'array',
+                        of: { kind: 'string', maxLength: 64 },
+                        max: CONFIG.SEEN_BUILDS_CAP,
+                        keepNewest: true
+                    },
+                    uniqueBuilds: { kind: 'number', min: 0, maxValue: CONFIG.SEEN_BUILDS_CAP }
                 }
             },
             achievements: { kind: 'record', of: { kind: 'number', min: 0 }, max: 512 },

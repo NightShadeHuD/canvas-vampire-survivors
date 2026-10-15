@@ -62,9 +62,9 @@
     "coverageFloors": {
         "_comment": "Measured coverage floors \u2014 exact values this repository achieved, not targets. They may only rise. Compared with a 0.05-point tolerance for cross-platform wobble. Refresh with: node scripts/check-coverage-floor.mjs --update",
         "overall": {
-            "lines": 87.01,
-            "branches": 84.82,
-            "functions": 76.19
+            "lines": 87.41,
+            "branches": 85.48,
+            "functions": 76.46
         },
         "files": {
             "scripts/lib/annotate.mjs": {
@@ -148,8 +148,8 @@
                 "functions": 100
             },
             "scripts/lib/sw-cache-name.mjs": {
-                "lines": 95.66,
-                "branches": 80.65,
+                "lines": 99,
+                "branches": 92.95,
                 "functions": 100
             },
             "scripts/lib/type-coverage.mjs": {
@@ -258,8 +258,8 @@
                 "functions": 100
             },
             "src/storage.ts": {
-                "lines": 99.07,
-                "branches": 86.59,
+                "lines": 99.12,
+                "branches": 86.69,
                 "functions": 100
             },
             "src/systems.ts": {
@@ -291,7 +291,7 @@
         "error": 323,
         "silent": 8
     },
-    "_portCeilingsRaiseNote": "Raised 321 -> 323 for the storage write-path fixes. Two new top-level `const`s, `STAGE_BOARD_CAP` (the write path's bound, which must be the same number as the read shape's `max`) and `MAX_TOTAL` (the ceiling that stops a cumulative total reaching `Infinity`, which `JSON.stringify` writes as `null` and the reader then refuses -- the stat silently reset to 0). GDScript has no variables outside a class, so both are real port work, and both follow the file's own existing step (`MAX_RUN_SECONDS` is declared the same way). The SILENT total is unchanged at 8, and both ceilings may still only fall.",
+    "_portCeilingsRaiseNote": "Raised 321 -> 323 for two commits that landed together, and the delta is FOUR top-level `const`s, not two -- this note used to name only the storage pair and read as if it paid for the whole rise. Measured per revision (the `top-level-declaration` hazard, `src/` only): fa4418e = 46, 01f25d0 = 50. The four are `STAGE_BOARD_CAP` and `MAX_TOTAL` in src/storage.ts, and `ATTR_UNSAFE` (hoisted from inside `escapeAttr`) and `CONTROL_CHARS` (new) in src/safe-html.ts. **TWO OF THE FOUR FIT THE PREVIOUS HEADROOM**: the ceiling was 321 and fa4418e measured 319, so two of the four were absorbed without a raise and the other two are what moved it to 323. All four landed in one commit, so WHICH two fitted is not attributable -- what is measured, and what this note now states, is the count at each revision and the size of the headroom. The raise is legitimate and argued on its own terms: `STAGE_BOARD_CAP` is the write path's bound, which must be the same number as the read shape's `max`, and `MAX_TOTAL` stops a cumulative total reaching `Infinity`, which `JSON.stringify` writes as `null` and the reader then refuses -- the stat silently reset to 0. `ATTR_UNSAFE` and `CONTROL_CHARS` are the two regexes the control-character XSS fix needed at module scope so `escapeAttr` and `safeUrl` share one definition each. GDScript has no variables outside a class, so all four are real port work, and all four follow the files' own existing step (`MAX_RUN_SECONDS` in src/storage.ts is declared the same way). The SILENT total is unchanged at 8, and both ceilings may still only fall.",
     "godotWorklist": {
         "total": 22,
         "paths": [
@@ -348,7 +348,7 @@
         "test/game.test.ts": "1bfb097c4409f562",
         "test/gate-input.test.ts": "d49c6a3b330633ef",
         "test/godot-export.test.ts": "74b2ea5acf56f27a",
-        "test/hostile-input.test.ts": "9e9b483a871bf1ca",
+        "test/hostile-input.test.ts": "9883d9072205047f",
         "test/isolation-compare.test.ts": "a272339c67be8976",
         "test/iter13.test.ts": "24c281f7694af4c5",
         "test/iter14.test.ts": "7126906c081f574a",
@@ -363,7 +363,7 @@
         "test/pool.test.ts": "dc8212dbef2953af",
         "test/port-hazards.test.ts": "3a82e8e07b42808a",
         "test/rule-docs.test.ts": "e5b52f30f20bbc0c",
-        "test/safe-html.test.ts": "aeb5c5d9105ba99f",
+        "test/safe-html.test.ts": "e85b74b99fbf0f7d",
         "test/shortcut-register.test.ts": "7c82e9d666ad050a",
         "test/source-edit.test.ts": "1b78687f3f738e6b",
         "test/spatial-hash.test.ts": "3bdb896937c82ff9",
@@ -373,7 +373,7 @@
         "test/strict-flags.test.ts": "1049c322c34d9f3e",
         "test/suite-report.test.ts": "435975c84e4dfa1e",
         "test/suppression-scanner.test.ts": "d80801d4cfcaa636",
-        "test/sw-cache-name.test.ts": "a9cfc97ac450e98a",
+        "test/sw-cache-name.test.ts": "77e9a74749d3c713",
         "test/systems.test.ts": "901f759518a7e899",
         "test/type-coverage.test.ts": "0db021e0a20dd448",
         "test/ui-events.test.ts": "65ca58e1ee9d9a2d",
