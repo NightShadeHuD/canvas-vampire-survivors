@@ -29,11 +29,6 @@
             "removal": "The merge path runs the gate too -- a required status check on pull requests with Godot 4.7.x installed -- so the port is enforced BEFORE the merge and not only before the publish."
         },
         {
-            "id": "godot-mine-fuse-unread",
-            "why": "`\"fuse\": 1.2` is in the data and the TypeScript has a `Mine` entity with `fuse`/`maxFuse`, an armed state drawn at half-fuse, and a delayed blast. The Godot port strikes immediately on the fire frame with no mine entity, so there is no armed state to draw. Reported rather than invented when the visibility fix asked for the mine visual.",
-            "removal": "A Mine entity is ported with its fuse, or the field is declared unread."
-        },
-        {
             "id": "godot-early-evolve-unreachable",
             "why": "run.gd declares `evolved_before_seven_min` and achievements.gd READS it, but nothing in godot/ ever assigns it -- grep returns exactly those two hits. src/main.ts sets it when a weapon crosses its evolve level before 7 minutes, so the `early_evolve` achievement cannot fire even now that evolution is ported. Larger and related: no AchievementTracker.newly_earned call exists anywhere in godot/scripts/, so achievements are not wired into play in this slice at all.",
             "removal": "A Run instance in play assigns it at the crossing, and an achievement assertion proves it fires."
@@ -67,6 +62,11 @@
             "id": "check-claims-timeout-reads-low",
             "why": "FOUND WHILE INTEGRATING. `scripts/lib/measurements.mjs:120` sums `/^ {2}ok {3}/` across 13 suites run with a **120 s timeout**, and sets `failed` ONLY on a `verify_X: FAIL` verdict line. **A TIMEOUT truncates with no verdict, so the total silently reads LOW and `check:claims` blames the DOCUMENT** -- the exact shape of entry 13 in `docs/PROBE-CAVEATS.md`, one level up at the measurement. CONTROL: `timeout 2 godot ... verify_slice.gd` -> 10 ok lines, NO verdict, 0 FAIL, i.e. exactly one low. Measured under load: `verify_slice` took **116.3 s against the 120 s limit**, and it is FIRST in the list, so it eats Godot's cold start. Observed live: `check:claims` read **547** once and **548** four times.",
             "removal": "A truncated suite is reported as unmeasured (or the timeout is per-suite and generous), so a low total can never be mistaken for a document that disagrees."
+        },
+        {
+            "id": "godot-mine-arm-roll-unpinned",
+            "why": "`_roll_crit`'s prose claims the projectile, orbit, aura and mine arms each draw ZERO crits. **Three are now pinned; the MINE arm is not.** Measured: re-adding `_roll_crit` to the mine arm leaves `verify_weapons` PASS. Projectile is pinned by the knife ratio (1.1083 vs 1.0000); aura by its draw count (0.1763 vs 0.1678); **orbit by `Shot.rolls_on_hit()`'s guard -- with the guard removed and that assertion enabled, `a shard touching 4 foes takes NO crit draw at all (0.9455 vs 0.1678)` fails, and with BOTH removed all 13 suites pass with 0 failures**, which is the evidence no pre-existing assertion covers it. This entry was first written as `godot-two-archetype-rolls-unpinned`; the FX integration closed the orbit half and a moved-base copy of the baseline silently reverted the entry, so it is recorded here in its narrowed form. **A prose claim wider than its coverage, one arm wide.**",
+            "removal": "The mine arm is pinned by a draw-count assertion driven from the archetype table, and the prose claim matches the number of arms actually pinned."
         }
     ],
     "coverageFloors": {
