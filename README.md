@@ -80,7 +80,7 @@ silently.
 
 | name           | value |
 | -------------- | ----- |
-| `tests`        | 955   |
+| `tests`        | 981   |
 | `weapons`      | 11    |
 | `passives`     | 13    |
 | `achievements` | 21    |

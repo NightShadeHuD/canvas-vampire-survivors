@@ -118,6 +118,7 @@ It runs, in order, and stops at the first failure:
 | Port hazards       | `npm run check:ports`          | The Godot transform has not grown, and no SILENT hazard was added       |
 | Hygiene            | `npm run check:hygiene`        | No debuggers, no `.only`, no conflict markers, no secrets               |
 | Destructive edits  | `npm run check:destructive`    | Committed tooling does not bulk-edit source                             |
+| Worker cache name  | `npm run check:sw-cache`       | The worker names its cache after what it caches, not after a note       |
 | Build              | `npm run build`                | The shipped browser artifact compiles                                   |
 
 `scripts/check-coverage.mjs` verifies this table in both directions: every step
@@ -133,6 +134,16 @@ the tests and coverage measure; `dist/` is what ships. `npm run build` compiles
 one to the other, and `verify:browser` builds before it drives a browser, so the
 browser gates always exercise the artifact a player actually receives.
 
+What the browser actually RECEIVES on a second visit is decided by the service
+worker, not by the bundle, and only a browser can settle it. `npm run
+check:sw-delivery` (tier 2, in `verify:browser`) installs a worker, changes
+`dist/main.js`, regenerates the worker and requires the new bundle to arrive with
+the old cache purged — and then repeats it holding the worker byte-identical, to
+show the failure the first half is there to prevent. `npm run check:sw-cache`
+is the static half and is in `verify`: the worker's cache name must equal a
+digest of what it caches, because a name that does not move is a release that
+never arrives.
+
 `dist/` is generated, so it is gitignored and excluded from lint — the coverage
 guard reasons about tracked source files only.
 
@@ -147,7 +158,7 @@ run is a partial run.
 
 | name                  | value |
 | --------------------- | ----- |
-| `verifySteps`         | 25    |
+| `verifySteps`         | 26    |
 | `suppressionCeilings` | 9     |
 
 <!-- claims:end -->

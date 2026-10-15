@@ -23,9 +23,10 @@ The full sister-document set lives under `docs/`:
 3. [ ] `README.md` "What's new" lists v2.8 first; older entries left intact.
 4. [ ] `docs/v2.5.0-NOTES.md` (or new `v2.8.0-NOTES.md`) carries the long-form
        narrative, "Known non-issues", "What's next" sections updated.
-5. [ ] `manifest.json` `name` / `short_name` / `theme_color` reviewed; bump
-       PWA cache version in `service-worker.js` so returning users get the
-       new shell on next load.
+5. [ ] `manifest.json` `name` / `short_name` / `theme_color` reviewed. The PWA
+       cache version in `service-worker.js` is DERIVED from the release's own
+       content — do not hand-edit it. `npm run check:sw-cache` refuses a name
+       that does not match; run `npm run gen:sw-cache` and commit the result.
 
 ## B. Code health gates (6)
 
@@ -111,9 +112,11 @@ The full sister-document set lives under `docs/`:
 
 If post-launch the live URL throws, hotfix on a `hotfix/v2.8.x` branch,
 re-run sections **B** + **C**, fast-forward `main`, retag. Pages auto-deploys
-within ~60 s; `service-worker.js` `cache.match()` keeps existing players on
-the old shell until they hard-refresh, so a rollback is never user-visible
-during the deploy window.
+within ~60 s. The service worker's cache name is derived from the release's
+own content, so a hotfix reaches returning players on their next load instead
+of sitting behind the old cache — and a rollback reaches them the same way,
+which is the point. It is not "invisible during the deploy window"; it is
+delivered.
 
 If the bug is data-shaped (corrupt save, runaway leaderboard), bump
 `CONFIG.SAVE_SCHEMA_VERSION` so the loader migrates instead of crashes.

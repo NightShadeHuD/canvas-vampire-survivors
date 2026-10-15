@@ -95,6 +95,10 @@ const STEPS = [
         script: 'check:destructive',
         proves: 'no committed tooling rewrites source with an unanchored substitution'
     },
+    {
+        script: 'check:sw-cache',
+        proves: 'the served worker names its cache after what it caches, not after a note'
+    },
     { script: 'build', proves: 'the shipped browser artifact compiles' }
 ];
 

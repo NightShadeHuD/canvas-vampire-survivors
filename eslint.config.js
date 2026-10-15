@@ -129,7 +129,10 @@ const PLAYWRIGHT_DRIVERS = [
     'scripts/boot-smoke.mjs',
     'scripts/extended-smoke.js',
     'scripts/runtime-smoke.js',
-    'scripts/smoke-live-deploy.js'
+    'scripts/smoke-live-deploy.js',
+    // Drives two releases through the service worker's update path, so every
+    // assertion it makes runs inside page.evaluate() in the browser.
+    'scripts/check-sw-delivery.mjs'
 ];
 
 const PLAYWRIGHT_BROWSER = {
@@ -138,7 +141,11 @@ const PLAYWRIGHT_BROWSER = {
     localStorage: 'readonly',
     // Used inside page.evaluate() to assert an overlay actually became visible.
     // This only surfaced once scripts/ was linted at all.
-    getComputedStyle: 'readonly'
+    getComputedStyle: 'readonly',
+    // The service-worker delivery probe reads the registration and the cache
+    // store from inside page.evaluate(), where these are the browser's.
+    navigator: 'readonly',
+    caches: 'readonly'
 };
 
 /** A service worker runs in the WorkerGlobalScope: not Node, not a module. */
