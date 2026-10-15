@@ -82,7 +82,50 @@ export const DEFAULT_KEYMAP: Readonly<Record<string, readonly string[]>> = Objec
  */
 export function normaliseKey(rawKey: string) {
     if (typeof rawKey !== 'string' || rawKey.length === 0) return '';
-    return rawKey.toLowerCase();
+    const k = rawKey.toLowerCase();
+    // A single printable character is a legitimate binding — `w`, `?`, `<`,
+    // even `"` — and none of them is dangerous once the value is escaped at the
+    // sink. What is NOT legitimate is an arbitrary STRING: F9 stored
+    // `<img src=x onerror=…>` as a "key", `sanitiseKeymap` passed it through
+    // because lowercasing is not validation, and `showRemap` interpolated it
+    // into `innerHTML`. Multi-character names are therefore an allow-list, and
+    // anything else normalises to the empty string, which every caller already
+    // treats as "no key".
+    if (k.length === 1) return k.charCodeAt(0) >= 0x20 ? k : '';
+    return isNamedKey(k) ? k : '';
+}
+
+/**
+ * Is this a `KeyboardEvent.key` name we accept? The list is the set of
+ * non-printing keys the remap dialog can offer plus the function keys, which
+ * is every name `keyLabel` knows how to render.
+ */
+function isNamedKey(k: string): boolean {
+    switch (k) {
+        case 'arrowup':
+        case 'arrowdown':
+        case 'arrowleft':
+        case 'arrowright':
+        case 'escape':
+        case 'enter':
+        case 'tab':
+        case 'backspace':
+        case 'delete':
+        case 'insert':
+        case 'home':
+        case 'end':
+        case 'pageup':
+        case 'pagedown':
+        case 'shift':
+        case 'control':
+        case 'alt':
+        case 'meta':
+        case 'capslock':
+        case 'contextmenu':
+            return true;
+        default:
+            return /^f([1-9]|1[0-2])$/.test(k);
+    }
 }
 
 /**
@@ -96,7 +139,16 @@ export function cloneKeymap(
     const out: Record<string, string[]> = {};
     for (const action of KEYMAP_ACTIONS) {
         const list = Array.isArray(map?.[action]) ? map[action] : [];
-        out[action] = list.slice();
+        // Normalised HERE and not only in `sanitiseKeymap`, because the remap
+        // dialog builds its DOM from this clone. A binding that reached memory
+        // by some path other than `loadKeymap` — a test, a future settings
+        // import — would otherwise render whatever it held.
+        const clean: string[] = [];
+        for (const raw of list) {
+            const key = normaliseKey(raw);
+            if (key && !clean.includes(key)) clean.push(key);
+        }
+        out[action] = clean;
     }
     return out;
 }

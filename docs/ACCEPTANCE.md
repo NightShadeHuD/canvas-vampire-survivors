@@ -8,7 +8,7 @@ The evidence column below quotes values. These are the ones checked automaticall
 
 | name                  | value |
 | --------------------- | ----- |
-| `tests`               | 846   |
+| `tests`               | 955   |
 | `testFloor`           | 816   |
 | `suppressionCeilings` | 9     |
 | `verifySteps`         | 25    |
