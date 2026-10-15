@@ -25,11 +25,6 @@ var cooldowns: Dictionary = {}
 ## sides -- one list with a flag would need every resolve to know which way round it is.
 var shots: Array[Shot] = []
 var enemy_shots: Array[Shot] = []
-## Mines on the ground, each counting down its own fuse. `WeaponFire.fire` appends to this
-## the way it already appends to `shots` -- the original reaches in and pushes
-## (`game.mines.push(new Mine(...))`, `src/weapons.ts:358`) -- and `_update_mines` below is
-## what lands each blast.
-var mines: Array[Mine] = []
 ## Transient weapon visuals: sparks, and the SHAPE a strike covered.
 ##
 ## Owned here rather than by the view because `WeaponFire` runs headless and the view is
@@ -152,13 +147,7 @@ func step(delta: float, move_dir: Vector2) -> void:
 		var left := float(cooldowns.get(id, 0.0)) - delta
 		if left <= 0.0:
 			left = cd
-			# `mines` travels with the call for the same reason `shots` does: the Area Mine
-			# creates an ENTITY rather than a shot or a spark, and this is the array that
-			# entity belongs in. The original reaches into the game itself
-			# (`game.mines.push(new Mine(...))`, `src/weapons.ts:358`); a static fire
-			# function cannot, so the array is handed in -- and a failure to hand it in is
-			# now visible as a mine that never appears rather than as a blast with no mine.
-			WeaponFire.fire(w["def"], hero, foes, shots, wl, fx, null, mines)
+			WeaponFire.fire(w["def"], hero, foes, shots, wl, fx)
 		cooldowns[id] = left
 
 	for foe in foes:
@@ -185,12 +174,6 @@ func step(delta: float, move_dir: Vector2) -> void:
 
 	_update_shots(delta)
 	_update_enemy_shots(delta)
-	# THE MINES TICK HERE BECAUSE THE ORIGINAL'S DO. `src/main.ts:1267-1271` is
-	# `_updateEnemies`, `_updateProjectiles`, `_updateEnemyProjectiles`, `_updateMines`,
-	# `_updateExpOrbs` -- so a fuse that expires on a frame does its damage AFTER the foes
-	# have moved and BEFORE the orbs are collected, and a mine cannot kill a foe that had
-	# already walked out of the blast.
-	_update_mines(delta)
 	_update_orbs(delta)
 	# The visuals age with the SIMULATION, so a paused game has a still, legible frame
 	# rather than sparks frozen mid-flight. The original does the same through
@@ -274,7 +257,11 @@ func _update_shots(delta: float) -> void:
 		# Orbit shards are placed relative to the hero, so they need it every frame.
 		shot.update(delta, hero.x, hero.y, hero.x, hero.y)
 		if not shot.dead:
-			shot.resolve(foes, Callable())
+			# THE HERO AND THE SINK GO IN, because the original's projectile loop rolls a
+			# crit per touched foe on the HERO's own chance and draws the number through
+			# `game`. Both are required parameters, so this call cannot quietly stop
+			# passing one -- see the note on `Shot.resolve`.
+			shot.resolve(foes, Callable(), hero, fx)
 		if not shot.dead:
 			kept.append(shot)
 	shots = kept
@@ -295,32 +282,6 @@ func _update_enemy_shots(delta: float) -> void:
 		if not shot.dead:
 			kept.append(shot)
 	enemy_shots = kept
-
-## Every mine on the ground: one more frame of fuse, and the blast for the ones whose fuse
-## ran out.
-##
-##     _updateMines(dt) {
-##         for (let i = this.mines.length - 1; i >= 0; i--) {
-##             const m = this.mines[i];
-##             m.update(dt, this);
-##             if (m.shouldRemove) this.mines.splice(i, 1);
-##         }
-##     }
-##
-## -- `src/main.ts:1513`. THE `shouldRemove` HALF IS NOT OPTIONAL: `Mine.update` detonates on
-## EVERY call whose fuse is at or below zero, so a caller that kept a spent mine would blast
-## again on the next frame and on every frame after it. The original splices; so does this.
-##
-## The 20 sparks and the blast disc come from `Mine.update`, through the same `fx` every other
-## weapon visual goes through -- the original calls `createParticles(this.x, this.y,
-## '#ff8833', 20)` from inside the entity, and this port keeps its visuals in one sink.
-func _update_mines(delta: float) -> void:
-	var live: Array[Mine] = []
-	for mine in mines:
-		mine.update(delta, foes, fx)
-		if not mine.removed:
-			live.append(mine)
-	mines = live
 
 ## Superseded by `WeaponFire`, which dispatches on the weapon's archetype. Kept only
 ## as the aura case it always was -- see `WeaponFire._strike_all_in_range`.

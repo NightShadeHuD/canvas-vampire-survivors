@@ -426,52 +426,41 @@ func _init() -> void:
 	# `Shot` at all, so a Whip or a Soul Drain reached `_draw` through nothing. A list that
 	# is emitted and never iterated is the failure mode this loop catches -- and it can
 	# only catch it for the lists it has been told about.
-	# A TRAILING COLON ON EVERY NEEDLE, and it was measured rather than assumed. This check
-	# was written as `contains(draw_src, "for mine in game.mines")`, and breaking `_draw` to
-	# `for mine in game.mines.duplicate():` -- which draws nothing, because the copy is
-	# discarded -- left it PASSING. The needle was satisfied by a longer expression that does
-	# not iterate the collection. The colon is what makes the match the whole loop header.
 	for simulated in [
 		"game.shots",
 		"game.enemy_shots",
 		"game.foes",
 		"game.orbs",
-		"game.mines",
 		"game.fx.strikes",
 		"game.fx.sparks",
+		"game.fx.texts",
 	]:
 		Check.unchanged(
-			contains(draw_src, "for shot in %s:" % simulated)
-				or contains(draw_src, "for foe in %s:" % simulated)
-				or contains(draw_src, "for orb in %s:" % simulated)
-				or contains(draw_src, "for mine in %s:" % simulated)
-				or contains(draw_src, "for strike in %s:" % simulated)
-				or contains(draw_src, "for spark in %s:" % simulated),
+			contains(draw_src, "for shot in %s" % simulated)
+				or contains(draw_src, "for foe in %s" % simulated)
+				or contains(draw_src, "for orb in %s" % simulated)
+				or contains(draw_src, "for strike in %s" % simulated)
+				or contains(draw_src, "for spark in %s" % simulated)
+				or contains(draw_src, "for text in %s" % simulated),
 			true,
 			"%s is ITERATED by _draw, not merely simulated" % simulated
 		)
 
-	# AND THE MINE'S ARMED STATE IS THE ONE ITS FUSE DECIDES. `renderMine` draws the body
-	# `armed ? '#ff4444' : '#aa4444'`, and `Mine.armed()` owns that comparison -- this is the
-	# cheap STATIC half of "the fuse is visible", the same shape as the `body_color()` check
-	# below it. `verify_weapons.gd` pins the boundary at exactly half and one step past it;
-	# `verify_pixels.gd` measures that an armed mine and an unarmed one are different frames.
+	# AND A HIT, A SLOW OR A BURNING FUSE IS DRAWN AS ONE. `Foe.body_color` owns ALL FOUR
+	# branches of `renderEnemy`'s chain -- `flashTimer` -> `slowTimer` -> the armed bomber's
+	# blink -> the data colour -- and it is passed the game's clock, which the blink's phase
+	# needs. This is the cheap STATIC half of "the player can see it": `verify_weapons.gd`
+	# pins the values and `verify_pixels.gd` measures the pixels, and neither of them can
+	# notice a `_draw` that stopped calling the function -- which is the "state correct,
+	# representation wrong" defect this repository has shipped four times.
+	#
+	# The ARGUMENT is part of the check, not decoration: `body_color()` with no clock was a
+	# foe whose blink could never change phase, and the call that passes it is the one thing
+	# between the four branches and a `_draw` that draws a stale colour forever.
 	Check.unchanged(
-		contains(draw_src, "mine.armed()"),
+		contains(draw_src, "foe.body_color(game.elapsed)"),
 		true,
-		"the mine's body is drawn in the colour its fuse decides"
-	)
-
-	# AND A SLOWED FOE IS DRAWN SLOWED. `Foe.body_color` owns `renderEnemy`'s slow branch
-	# -- `else if (self.slowTimer > 0) ctx.fillStyle = '#88ccff'`. This is the cheap STATIC
-	# half of "the player can see it": `verify_weapons.gd` pins the value and
-	# `verify_pixels.gd` measures the pixel, and neither of them can notice a `_draw` that
-	# stopped calling the function -- which is the "state correct, representation wrong"
-	# defect this repository has shipped four times.
-	Check.unchanged(
-		contains(draw_src, "foe.body_color()"),
-		true,
-		"the foe's body is drawn in the colour its slow changes"
+		"the foe's body is drawn in the colour its flash, its slow and its fuse change"
 	)
 
 	# THE GARLIC RING MUST NOT LIE ABOUT ITS REACH.

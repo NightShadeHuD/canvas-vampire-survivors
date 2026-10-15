@@ -11,7 +11,7 @@ drift silently.
 | name              | value |
 | ----------------- | ----- |
 | `godotSuites`     | 13    |
-| `godotAssertions` | 483   |
+| `godotAssertions` | 548   |
 | `weapons`         | 11    |
 | `achievements`    | 21    |
 
@@ -446,9 +446,54 @@ field on the def and erased -- so it fails if a port starts reading the Knife's 
 (1.10) _and_ if a port stops reading Lightning's (1.00). Measured: re-adding the projectile roll
 reads `1.1083 vs 1.0000 (tol 0.0400)` and the suite goes red.
 
-**And no damage number is drawn at all.** The original's `_rollCrit` also calls
-`createFloatingText` at `(x, y - 20)` of the foe it is about to damage -- a per-target POSITION
--- and `fx.gd` has no floating-text system, which is a gap no assertion here can stand in for.
+**And the damage number IS drawn now, per FOE and per HIT.** The original's `_rollCrit`
+also calls `createFloatingText` at `(x, y - 20)` of the foe it is about to damage -- a
+per-target POSITION -- and `fx.gd`'s `FloatingText` is that system, ported field for field
+from `src/entities.ts`. `verify_weapons.gd` pins the label, the colour and the position per
+foe -- two foes in one Whip band get two numbers, eighty pixels apart -- and `verify_pixels.gd`
+empties the sink and requires the frame to change AT THE FOE rather than at the hero, which is
+the claim a state assertion cannot make.
+
+**There is a FIFTH roll site, and it is not one of the four.** `Game._updateProjectiles` rolls
+its own crit on IMPACT, once per touched foe:
+
+    src/main.ts:1468-1483
+    let dmg = p.damage;
+    const chance = this.player.getCritChance();
+    const crit = chance > 0 && Math.random() < chance;
+    if (crit) dmg *= 2;
+    enemy.takeDamage(dmg);
+    if (enemy.hp > 0) this.createFloatingText(Math.round(dmg), enemy.x, enemy.y - 20,
+                                              crit ? '#ffee44' : '#fff', { crit });
+
+That is the HERO's chance with NO `evolveBonusCrit`, doubling a LOCAL copy of `p.damage`, and
+guarded on `enemy.hp > 0` -- so a killing blow draws NO number. `Shot.resolve` is that block,
+and all three of those are measured rather than asserted: the evolved Knife's declared +0.10
+does not reach it (`0.6825` mixed at the hero's 0.25, `0.0600` away from the weapon's 0.8065 at
+0.35), a piercing shot's second victim takes the DOUBLED BASE rather than a doubled-doubled
+number because `p.damage` is never written back, and a killing blow beside a surviving foe
+draws exactly one number -- the survivor's.
+
+**And it stops at `game.projectiles`, which is ONE archetype wide and not two.**
+`game.projectiles` has exactly one writer in the whole of `src/` -- `src/weapons.ts:239`,
+inside `_fireProjectile`. `OrbitShard` is **not** one of its entries: it lives on the weapon,
+is stepped by `weapon.update`, and does its damage in `OrbitShard.update` with no roll at all.
+So porting `main.ts:1465-1483` into this port's `Shot.resolve` WITHOUT a guard hands the ORBIT
+archetype an invented per-hit crit roll -- the same class of defect this change removed -- and
+**no assertion that existed would have caught it**: `_bonus_crit_is_read` iterates only the
+weapons declaring `evolveBonusCrit`, and the Orbiter declares `evolveDamageMult` instead.
+`Shot.rolls_on_hit()` is that boundary, and `verify_weapons.gd`'s
+`_orbit_draws_no_number_and_rolls_nothing` pins it with the SAME instrument reading a non-zero
+draw count on a projectile at the same foes beside it.
+
+**And three `createFloatingText` call sites the original has are STILL DRAWING NOWHERE.**
+Named rather than left implicit, because each is a number the original puts on screen and this
+port does not: `OrbitShard.update`'s `'#ffffcc'` at `e.y - 18` (no crit, and no `hp > 0`
+guard), `Mine.update`'s `'#ff9944'` at `enemy.y - 20`, and the four `_rollCrit` colours at the
+sites whose archetype is silent. The last of those is FIDELITY rather than a gap --
+`_fireAura` has no `createFloatingText` at all, and neither does the chain hop, and both are
+asserted silent. The shard and the mine are asserted silent **as gaps**, so a later change that
+starts drawing them through the wrong path fails here rather than passing quietly.
 
 #### Two of my tests were wrong and looked like bugs
 
@@ -463,53 +508,6 @@ reads `1.1083 vs 1.0000 (tol 0.0400)` and the suite goes red.
 Three times in one round the failure was in the test rather than the code, and each
 one was indistinguishable from the bug it was testing for. The instinct every time was
 to go and change working code.
-
-#### The Area Mine's fuse — a weapon field the port read and threw away
-
-`quality-baseline.json` declared `godot-mine-fuse-unread`: `"fuse": 1.2` is in the data, the
-TypeScript has a `Mine` entity with `fuse`/`maxFuse`, an armed state drawn at half-fuse and a
-delayed blast — and the port dealt the blast on the FIRE frame with no mine entity at all. That
-is rule 12's exact shape: the field existed, the port "read" it, and nothing a player could see
-depended on it. The test that should have caught it asserted the case that happened to work.
-
-**What the original does**, from `src/`:
-
-```
-src/data.ts:154      fuse: 1.2,                        on the MINE weapon def
-src/weapons.ts:356   const fuse = this.def.fuse || 1.2;
-src/weapons.ts:358   game.mines.push(new Mine(player.x, player.y, radius, dmg, fuse));
-src/entities.ts:764  this.fuse -= dt;                  with NOTHING above it
-src/entities.ts:765  if (this.fuse <= 0) { ... }       the blast, where the mine lies
-src/entities.ts:769  if (d < this.radius) {            STRICTLY less than
-src/entity-render.ts:112  const armed = self.fuse < self.maxFuse * 0.5;
-```
-
-**The fuse starts on PLACEMENT, not on proximity.** There is no range test anywhere in `Mine`,
-so a mine dropped in an empty field detonates on exactly the frame one dropped into a crowd
-does. The proximity-armed countdown is the **bomber's** — `fuseRange`/`fuseTime` on an ENEMY
-def, read at `src/entities.ts:375-383` — a different entity, a different table, a different
-timer and a different drawing. The two share the English word and nothing else.
-
-**The frame is measured, not chosen.** A throwaway probe drove the ORIGINAL's own `Mine.update`
-at dt = 1/60 (raw output, both branches):
-
-```
-[subject] fuse=1.2  dt=0.016666666666666666
-  detonation frame = 72    hits recorded = 1 (damage 45)
-  hits after 71 frames = 0        hits after 72 frames = 1
-[control] fuse=0.0 -> frame 1   fuse=0.5 -> frame 31   fuse=2.0 -> frame 121
-[control] premise: fuse=0 must hit on frame 1 and exactly once -> HELD
-radius boundary: d=99.999 -> 1 hit    d=100.0 -> 0 hits    d=100.001 -> 0 hits
-```
-
-`godot/scripts/mine.gd` is the port, `Game.mines` owns them, `Game._update_mines` ticks them in
-the original's own slot in the order (`_updateEnemies`, `_updateProjectiles`,
-`_updateEnemyProjectiles`, `_updateMines`, `_updateExpOrbs`) and removes what has blown, and
-`main.gd`'s `_draw_mine` draws the disc at the blast radius with the body turning `#ff4444` past
-half the fuse. `verify_weapons.gd` pins the boundary from BOTH sides — the foe standing on the
-mine is unhurt at frame 71 and hurt at 72, a foe exactly on the blast radius takes nothing while
-the mine that spared it demonstrably detonated — and `verify_pixels.gd` measures that an armed
-mine and an unarmed one are different frames.
 
 ### XP and the level-up pick — it is a survivors game now
 
@@ -718,6 +716,31 @@ them. Still to do:
 
 - **Core logic** — `entities.ts` (924), `weapons.ts` (462), `main.ts` (1,919)
 - **Presentation** — `ui.ts` (1,242), `game-render.ts`, `entity-render.ts`
+- **The rest of the damage numbers.** `grep -rn createFloatingText src/` is **11 call sites in
+  9 groups** (the two lines in `_rollCrit` are one function reached from four archetypes). TWO
+  groups are wired by this work: `_rollCrit`'s pair, for the `melee`/`instant`/`nova`/`drain`
+  archetypes, and the projectile's own impact roll at `main.ts:1476`. **The other 8 groups still
+  draw nothing**, each named with its own source line rather than folded into one "numbers are
+  not ported":
+
+    | site              | what                                            | colour    | dy    |
+    | ----------------- | ----------------------------------------------- | --------- | ----- |
+    | `main.ts:1366`    | the cold tick on the hero                       | `#88ccff` | `-36` |
+    | `main.ts:1384`    | contact damage                                  | `#ff3333` | `-30` |
+    | `entities.ts:214` | `'Miss!'` on a dodge                            | `#88ffcc` | `-30` |
+    | `entities.ts:390` | the bomber's blast on the hero                  | `#ff4433` | `-28` |
+    | `entities.ts:547` | an enemy bolt on the hero                       | `#ff6644` | `-30` |
+    | `entities.ts:737` | **`OrbitShard`** -- `Shot.resolve`'s OTHER kind | `#ffffcc` | `-18` |
+    | `entities.ts:777` | **`Mine.update`**                               | `#ff9944` | `-20` |
+    | `entities.ts:830` | an XP pickup                                    | `#66bbff` | `-40` |
+
+    The last two rows are the ones a reader of the original's `_updateProjectiles` would NOT find,
+    because neither is in `game.projectiles`: they are named in the section above with the boundary
+    that keeps them out of this port's impact roll. **And none of the eight can be switched off
+    the way the original switches them off**: `createFloatingText` returns early on
+    `save.settings.reducedMotion` and `damageNumbers === false`, `damageNumbers` does not exist in
+    this port's save at all, and `reducedMotion` is declared and read by nothing.
+
 - **Platform** — `input.ts` (435), `storage.ts` (361), `audio.ts`
 - ~~**The 21 achievement conditions**~~ — **DONE.** All 21 are implemented in
   `godot/scripts/achievements.gd` and `verify_achievements.gd` asserts every one is present

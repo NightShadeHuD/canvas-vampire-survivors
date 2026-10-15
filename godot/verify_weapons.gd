@@ -71,6 +71,24 @@ func _init() -> void:
 	_a_slowed_foe_moves_slower()
 	_a_slowed_foe_is_drawn_iced_blue()
 	_the_slow_expires_exactly_on_its_duration()
+
+	# THE OTHER TWO BRANCHES OF THAT SAME CHAIN, AND THE NUMBER OVER THE FOE.
+	# `src/entity-render.ts:217-227` draws flash -> slow -> armed-bomber blink -> own colour,
+	# and the port had the slow and nothing else; `_rollCrit`'s two `createFloatingText` calls
+	# had no system behind them at all. The flash and the damage number are measured HERE
+	# because both are what a weapon's hit does to a foe; the armed bomber's blink is
+	# `verify_archetypes.gd`'s, where the fuse that gates it is already driven.
+	_a_hit_flashes_the_foe_white()
+	_a_damage_number_is_drawn_at_the_foe()
+
+	# THE FIFTH ROLL SITE, and the archetype an unguarded port of it would break. The
+	# PROJECTILE's crit is on IMPACT and not on fire -- `_fireProjectile` rolls nothing -- so
+	# it is a different function from the four above and it is measured on its own entry
+	# point. The ORBIT shard shares `Shot.resolve` in this port and must NOT share the roll:
+	# `OrbitShard` is not a `game.projectiles` entry in the original at all.
+	_a_projectile_rolls_per_HIT_and_draws_its_own_number()
+	_orbit_draws_no_number_and_rolls_nothing()
+
 	_the_evolved_second_ring_does_not_slow()
 	_the_evolved_second_ring_is_never_doubled()
 
@@ -85,16 +103,6 @@ func _init() -> void:
 	_lightning_rolls_once_per_strike()
 	_drain_rolls_once_per_tether_and_heals_their_sum()
 	_the_aura_rolls_nothing_and_is_the_control()
-
-	# THE AREA MINE'S FUSE. `src/data.ts:154` declares `fuse: 1.2` on the weapon, and
-	# `quality-baseline.json` declared `godot-mine-fuse-unread`: the port struck on the FIRE
-	# frame with no mine entity at all, so the field was read and thrown away. Every
-	# measurement below drives the DEF's own `fuse` rather than a number written here.
-	_the_mine_fuse_is_the_defs_fuse()
-	_a_mine_arms_on_placement_not_on_proximity()
-	_the_mine_detonates_on_frame_72_and_not_71()
-	_the_mine_blast_is_its_own_radius()
-	_the_armed_state_turns_over_at_half_the_fuse()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
 	# while reporting PASS is a false green -- the failure mode this tooling exists
@@ -134,25 +142,12 @@ func _every_weapon_damages() -> void:
 		var s := _scene(id, at)
 		var before: float = s["foe"].hp
 		var shots: Array = []
-		# THE MINE SINK, so the ONE archetype that creates an entity reaches this loop at
-		# all. Without it the Area Mine fires into nothing and this check reports it silent
-		# -- which is what it did the moment the fuse was ported, and the reason the loop
-		# below had to learn to advance a fuse as well as a shot.
-		WeaponFire.fire(def, s["game"].hero, s["game"].foes, shots, 1, null, null, s["game"].mines)
-		# Shots need a frame to travel before they can hit, and a MINE needs its fuse to run
-		# out: the original lands that blast 1.2s AFTER the drop, so "every weapon damages a
-		# foe in range" is true of a mine only once the fuse has been given its 72 frames.
-		# 120 frames against a 72-frame fuse, so this count is not sitting on the boundary.
+		WeaponFire.fire(def, s["game"].hero, s["game"].foes, shots)
+		# Shots need a frame to travel before they can hit.
 		for i in 120:
 			for shot in shots:
 				shot.update(FRAME, s["game"].hero.x, s["game"].hero.y, s["game"].hero.x, s["game"].hero.y)
-				shot.resolve(s["game"].foes, Callable())
-			for mine in s["game"].mines:
-				# `removed` FIRST. A detonated mine blasts on EVERY call at or below zero --
-				# the original relies on `_updateMines` splicing it out of the array, and a
-				# driver that kept calling would pile the damage on once per frame.
-				if not mine.removed:
-					mine.update(FRAME, s["game"].foes, null)
+				shot.resolve(s["game"].foes, Callable(), s["game"].hero, s["game"].fx)
 		if s["foe"].hp >= before:
 			silent.append("%s (%s)" % [id, def["type"]])
 	_check(silent.is_empty(), "EVERY weapon damages a foe in range", "silent: %s" % (", ".join(silent) if not silent.is_empty() else "none"))
@@ -166,7 +161,7 @@ func _range_is_respected() -> void:
 	for i in 600:
 		for shot in shots:
 			shot.update(FRAME, s["game"].hero.x, s["game"].hero.y, s["game"].hero.x, s["game"].hero.y)
-			shot.resolve(s["game"].foes, Callable())
+			shot.resolve(s["game"].foes, Callable(), s["game"].hero, s["game"].fx)
 	_check(s["foe"].hp == before, "a foe out of range is untouched", "hp unchanged")
 
 func _pierce_hits_several_then_stops() -> void:
@@ -188,7 +183,7 @@ func _pierce_hits_several_then_stops() -> void:
 	for i in 60:
 		for shot in shots:
 			shot.update(FRAME, g.hero.x, g.hero.y, g.hero.x, g.hero.y)
-			shot.resolve(g.foes, Callable())
+			shot.resolve(g.foes, Callable(), g.hero, g.fx)
 	var hurt := 0
 	for f in foes:
 		if f.hp < 1000.0:
@@ -543,12 +538,7 @@ func _damage_at(def: Dictionary, level: int) -> float:
 	foe.max_hp = 100000.0
 	g.foes.append(foe)
 	var before: float = foe.hp
-	# `g.mines` as the sink, so a mine exists to be stepped: with no array handed in, the
-	# Area Mine creates nothing, this measures 0 damage at EVERY level, and the weapon is
-	# reported as not scaling when the measurement could not see it at all -- the same
-	# mistake this function was written to fix for the strike archetypes. 90 frames is past
-	# the def's 72-frame fuse, so the blast lands inside the window.
-	var made: Array = WeaponFire.fire(def, g.hero, g.foes, [], level, null, null, g.mines)
+	var made: Array = WeaponFire.fire(def, g.hero, g.foes, [], level)
 	for s in made:
 		g.shots.append(s)
 	for i in 90:
@@ -674,7 +664,7 @@ func _sweep_hits(def: Dictionary, offsets: Array) -> Array:
 ## pixels -- every one of them a foe's HP bar -- against 224 for a single Orbiter shard.
 ##
 ## DRIVEN BY THE DATA, so a weapon added to `src/data.ts` later fails here until its fire
-## is visible. The claim is "a shot, an effect OR a mine": the projectile archetypes are
+## is visible. The claim is "a shot OR an effect": the pure-projectile archetypes are
 ## already drawn as shots, and demanding fx from them would be a different, false claim.
 func _every_weapon_leaves_something_to_draw() -> void:
 	var silent: Array = []
@@ -697,13 +687,9 @@ func _every_weapon_leaves_something_to_draw() -> void:
 		var visible := 0
 		for i in fires:
 			var shots: Array = []
-			g.mines.clear()
 			g.fx.clear()
-			# `g.mines` IS ONE OF THE LISTS `_draw` WALKS NOW, so a mine counts as something
-			# to draw for the same reason a shot does -- and `verify_scene.gd` asserts that
-			# `_draw` iterates `game.mines`, so the two halves of this claim are checked.
-			WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx, null, g.mines)
-			if not shots.is_empty() or not g.fx.is_empty() or not g.mines.is_empty():
+			WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx)
+			if not shots.is_empty() or not g.fx.is_empty():
 				visible += 1
 		if visible == 0:
 			silent.append("%s (%s)" % [def["id"], def["type"]])
@@ -1238,7 +1224,7 @@ func _lone_damage(weapon: Dictionary, level: int) -> float:
 		for f in CRIT_SETTLE:
 			for s in made:
 				s.update(FRAME, g.hero.x, g.hero.y, g.hero.x, g.hero.y)
-				s.resolve(g.foes, Callable())
+				s.resolve(g.foes, Callable(), g.hero, g.fx)
 	return before - float(foe.hp)
 
 
@@ -1462,15 +1448,26 @@ func _a_slowed_foe_is_drawn_iced_blue() -> void:
 	var s := _scene("frost_nova", float(def["baseRange"]) * 0.4)
 	var g: Game = s["game"]
 	var foe: Foe = s["foe"]
-	Check.unchanged(foe.body_color(), Color(foe.color), "an unslowed foe wears its own data colour")
+	Check.unchanged(foe.body_color(0.0), Color(foe.color), "an unslowed foe wears its own data colour")
 	WeaponFire.fire(def, g.hero, g.foes, [])
 	Check.rose(0.0, foe.slow_timer, "the foe under test is slowed, or the colour below means nothing")
-	Check.unchanged(foe.body_color(), Color("88ccff"), "a slowed foe is drawn in the original's #88ccff")
+	# THE NOVA'S OWN HIT FLASHES THE FOE WHITE FIRST, because `renderEnemy`'s flash branch is
+	# drawn ABOVE its slow branch. This check read `#ffffff` here before the flash was ported
+	# and read the slow tint -- and the tint it read was RIGHT about the game, so the check was
+	# measuring the absence of a feature rather than the presence of the slow. Ticked off
+	# through `chase`, the only thing that ages it in play; the ORDERING itself is
+	# `_a_hit_flashes_the_foe_white`'s claim, and this is the second place it is visible.
+	Check.unchanged(
+		foe.body_color(0.0), Color("ffffff"), "the nova's own hit flashes the foe white first"
+	)
+	for _tick in int(ceil(0.08 / FRAME)):
+		foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.unchanged(foe.body_color(0.0), Color("88ccff"), "a slowed foe is drawn in the original's #88ccff")
 	# ...AND THE TINT REVERSES. The half of a state change that gets forgotten is the way
 	# back: an expired slow has to give the foe its own colour again.
 	foe.slow_timer = 0.0
 	Check.unchanged(
-		foe.body_color(), Color(foe.color), "and it gets its own colour back once the slow is over"
+		foe.body_color(0.0), Color(foe.color), "and it gets its own colour back once the slow is over"
 	)
 
 
@@ -1535,6 +1532,654 @@ func _the_slow_expires_exactly_on_its_duration() -> void:
 	Check.unchanged(foe.slow_mult(), 1.0, "one step PAST the boundary it is still over")
 	Check.unchanged(foe.slow_timer, 0.0, "and the timer stopped at zero instead of counting on")
 	Check.approx(absf(foe.x - x_past), free_step, "and that frame is unslowed too", 1e-9)
+
+
+## THE HIT FLASH, AND ITS REVERSAL.
+##
+## `renderEnemy`'s FIRST branch, `src/entity-render.ts:218`:
+##
+##     if (self.flashTimer > 0) ctx.fillStyle = '#ffffff';
+##
+## -- set by `Enemy.takeDamage` (`this.flashTimer = 0.08`, `src/entities.ts:507`) on EVERY
+## hit, and aged by `Enemy.update`. **A FLASH THAT NEVER DECAYS IS A FOE THAT IS WHITE
+## FOREVER**, which is the "screen greys out and stays grey" defect this repository already
+## shipped once (rule 18, fourth row) -- so the REVERSAL is asserted here beside the change,
+## and the frame it reverses on is DERIVED from the original's own 0.08 rather than written
+## down as a frame number.
+##
+## The derivation, worked out rather than guessed: the timer starts at 0.08 and the tick is
+## 1/60 per frame, so it needs 0.08 / (1/60) = 4.8 ticks to reach zero. FLOOR of that is 4
+## ticks that leave it positive, and the fifth takes it negative -- so this pins the boundary
+## one frame either side, which is the rule's "the value exactly on the boundary and one
+## past it".
+func _a_hit_flashes_the_foe_white() -> void:
+	# `src/entities.ts:507`, written here as the SPEC rather than read from `Foe.FLASH_TIME`:
+	# a check that reads the constant it is checking would follow the code to any value.
+	const FLASH_TIME := 0.08
+	var s := _scene("whip", 60.0)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	Check.unchanged(
+		foe.body_color(g.elapsed), Color(foe.color), "an UNHIT foe wears its own data colour"
+	)
+	var before: float = foe.flash_timer
+	foe.take_damage(1.0)
+	Check.rose(before, foe.flash_timer, "a hit starts the flash timer")
+	Check.unchanged(
+		foe.body_color(g.elapsed),
+		Color("ffffff"),
+		"and the hit foe is drawn WHITE -- the original's '#ffffff'"
+	)
+
+	# THE CHAIN, asserted as an ORDERING rather than as two separate colours: a foe that is
+	# BOTH hit and slowed must read white, not iced blue. An implementation that moved the
+	# flash below the slow would pass every single-state check in this file.
+	foe.apply_slow(0.5, 60.0)
+	Check.rose(0.0, foe.slow_timer, "the foe is ALSO slowed, or the ordering below proves nothing")
+	Check.unchanged(
+		foe.body_color(g.elapsed),
+		Color("ffffff"),
+		"so the FLASH is drawn ABOVE the slow tint, in the original's chain position"
+	)
+
+	# THE DECAY, driven through the foe's own `chase` -- the only thing that ages it in play.
+	var white_ticks := int(floor(FLASH_TIME / FRAME))
+	for i in white_ticks:
+		foe.chase(g.hero.x, g.hero.y, FRAME)
+		Check.unchanged(
+			foe.body_color(g.elapsed),
+			Color("ffffff"),
+			"the flash still reads at tick %d of %d" % [i + 1, white_ticks]
+		)
+	foe.chase(g.hero.x, g.hero.y, FRAME)
+	Check.unchanged(
+		foe.body_color(g.elapsed),
+		Color("88ccff"),
+		"and the tick PAST it reveals the slow that was underneath all along"
+	)
+	# ...AND THE SLOW LIFTS TOO, so the last claim is not "everything is iced blue now".
+	foe.slow_timer = 0.0
+	Check.unchanged(
+		foe.body_color(g.elapsed),
+		Color(foe.color),
+		"and once the slow is over the foe REVERSES to its own colour -- a flash that never"
+		+ " reverses is a foe that is white forever"
+	)
+
+
+## A DAMAGE NUMBER AT THE FOE, AND IT GOES AWAY.
+##
+##     game.createFloatingText(Math.round(dmg), x, y, '#ffee44', { crit: true });
+##     game.createFloatingText(Math.round(baseDamage), x, y, color);
+##
+## -- `_rollCrit`, `src/weapons.ts:112-115`, on EVERY hit, where `x`/`y` are the CALL SITE's
+## and every call site passes the FOE it is about (`enemy.x, enemy.y - 20`). That position is
+## the claim this file can see: the number belongs to the foe it was dealt to, not to the hero
+## who dealt it. **The half it cannot see -- that the number reaches the SCREEN -- is
+## `verify_pixels.gd`'s, and no assertion here can stand in for it.**
+##
+## What is asserted here, and what each one is for:
+##
+##   the number EXISTS, with the right label, x, y and colour for that weapon
+##   TWO foes get TWO numbers, each over its own foe -- the per-target half
+##   a crit prints DOUBLE and uses `#ffee44` and `crit`, which is what `{crit:true}` changes
+##   it EXPIRES, driven by `fx.update`, the same call `Game.step` makes every frame
+##   GARLIC GETS NONE, because `_fireAura` contains no `createFloatingText` at all
+##   THE MINE GETS `#ff9944`, because `Mine.update` contains one
+func _a_damage_number_is_drawn_at_the_foe() -> void:
+	# --- ONE FOE, the Whip's own colour and offset ------------------------------------
+	var s := _scene("whip", 60.0)
+	var g: Game = s["game"]
+	var foe: Foe = s["foe"]
+	# OFF THE HERO'S OWN ROW, and that is what makes the y assertion below able to tell the
+	# two apart: `_scene` puts its foe at the hero's y, where "20px above the foe" and "20px
+	# above the hero" are the same number and a number drawn at the hero passes. Still inside
+	# the Whip's band (`abs(dy) <= 40`).
+	foe.y = g.hero.y + 25.0
+	Check.unchanged(g.fx.texts.size(), 0, "nothing is drawn before the weapon fires")
+	WeaponFire.fire(s["def"], g.hero, g.foes, [], 1, g.fx)
+	Check.rose(0.0, float(g.fx.texts.size()), "firing the Whip draws a damage number")
+	if g.fx.texts.is_empty():
+		# A FAILURE ABOVE MEANS EVERY ASSERTION BELOW IS ABOUT A NUMBER THAT IS NOT THERE, and
+		# an out-of-bounds read here ABORTS the rest of this function with a script error rather
+		# than a finding -- `Check` records the failure above either way, so the honest move is
+		# to stop at the assertion that failed. Watched: without this guard the first break of
+		# the emit produced one FAIL and one "Out of bounds get index '0'" and nothing else.
+		return
+	var number: Fx.FloatingText = g.fx.texts[0]
+	Check.unchanged(
+		number.text,
+		str(roundi(foe.max_hp - foe.hp)),
+		"and it prints the damage the foe ACTUALLY took, rounded as `Math.round` rounds it"
+	)
+	Check.unchanged(number.x, foe.x, "at the FOE's own x -- `_rollCrit`'s first argument")
+	Check.unchanged(number.y, foe.y - 20.0, "and 20px above it, `enemy.y - 20`")
+	Check.unchanged(number.color, Color("ffaa00"), "in the Whip's own number colour, '#ffaa00'")
+	Check.unchanged(number.crit, false, "and it is not a crit, because a base hero has no Luck")
+
+	# --- TWO FOES IN ONE BAND: one number each, at each -------------------------------
+	g.fx.clear()
+	# The other side of the hero's row, so the two numbers differ in x AND in y and neither
+	# axis can be satisfied by a number drawn at the hero.
+	var second := Foe.new(Enemies.ENEMIES["BAT"], g.hero.x, g.hero.y - 30.0)
+	Check.sturdy(second)
+	g.foes.append(second)
+	WeaponFire.fire(s["def"], g.hero, g.foes, [], 1, g.fx)
+	Check.unchanged(g.fx.texts.size(), 2, "TWO foes inside one Whip band draw TWO numbers")
+	var first_x: float = g.fx.texts[0].x
+	Check.differs(
+		first_x,
+		g.fx.texts[1].x,
+		1.0,
+		"and they are at DIFFERENT x -- one per FOE, which one number per FIRE cannot produce"
+	)
+	for i in g.foes.size():
+		Check.unchanged(
+			g.fx.texts[i].x, g.foes[i].x, "number %d sits at foe %d's own x" % [i, i]
+		)
+		Check.unchanged(
+			g.fx.texts[i].y, g.foes[i].y - 20.0, "and above foe %d, not above the hero" % i
+		)
+
+	# --- A CRIT: double the number, `#ffee44`, and `crit` -----------------------------
+	# A chance of 1.0 is the DETERMINISTIC way into the crit branch: the roll is
+	# `randf() < chance`, and `randf()` is in [0, 1). No seed, no rate, no flake.
+	var crit_fx := Fx.new()
+	WeaponFire._roll_crit(10.0, 1.0, null, crit_fx, 100.0, 200.0, Color("ff66aa"))
+	Check.unchanged(crit_fx.texts.size(), 1, "a crit draws one number")
+	var crit: Fx.FloatingText = crit_fx.texts[0]
+	Check.unchanged(crit.text, "20", "a crit PRINTS the doubled damage, `baseDamage * 2`")
+	Check.unchanged(
+		crit.color,
+		Color("ffee44"),
+		"in '#ffee44' whatever colour the weapon passed -- the crit branch's own"
+	)
+	Check.unchanged(crit.crit, true, "with `{crit:true}`, which is the size and the outline")
+	Check.rose(
+		number.font_size(),
+		crit.font_size(),
+		"and a crit number is drawn LARGER than a plain one at the same `size`"
+	)
+
+	# --- THE LIFETIME, through the call `Game.step` makes ------------------------------
+	# `life` starts at 1 and is spent at 1.2/s, so 1 / 1.2 = 0.833s. Ticks are derived, and
+	# the boundary is pinned one tick either side of it.
+	var ticks := int(round((1.0 / 1.2) / FRAME))
+	Check.at_least(float(ticks), 2.0, "the lifetime is more than one tick, or there is nothing to pin")
+	# HELD BY REFERENCE, not re-indexed: `Fx.update` rebuilds the array, so a `texts[0]` read
+	# one tick past the end is an index error rather than a failed assertion -- and a suite
+	# that crashes reports nothing.
+	var alive: Fx.FloatingText = g.fx.texts[0]
+	for i in ticks - 1:
+		g.fx.update(FRAME)
+	Check.rose(0.0, alive.life, "the number is still alive one tick short of its life")
+	g.fx.update(FRAME)
+	Check.unchanged(
+		g.fx.texts.size(), 0, "and GONE at it -- a number that never expires is a screen of them"
+	)
+
+	# --- THE TWO ARCHETYPES THE ORIGINAL GIVES NO NUMBER TO ----------------------------
+	# GARLIC is the CONTROL for every assertion above: if `fire()` emitted a number
+	# unconditionally, this is the check that would catch it. `_fireAura` calls
+	# `createFloatingText` NOWHERE.
+	var aura := _scene("garlic", 40.0)
+	WeaponFire.fire(aura["def"], aura["game"].hero, aura["game"].foes, [], 1, aura["game"].fx)
+	Check.unchanged(
+		aura["game"].fx.texts.size(),
+		0,
+		"CONTROL: Garlic draws NO number -- `_fireAura` has no `createFloatingText` at all"
+	)
+	# THE AREA MINE DRAWS NOTHING HERE EITHER, AND THAT IS A REPORTED GAP RATHER THAN A
+	# CLAIM ABOUT THE ORIGINAL. `Mine.update` DOES call `createFloatingText`:
+	#
+	#     src/entities.ts:777-782
+	#     game.createFloatingText(Math.round(this.damage), enemy.x, enemy.y - 20, '#ff9944');
+	#
+	# -- `'#ff9944'`, an eighth call site and none of `_rollCrit`'s four, at the same 20px
+	# and with NO crit and NO `hp > 0` guard. It is not drawn here because the number belongs
+	# to the `Mine` OBJECT in the original and this port has no `Mine` object yet: the mine
+	# arm strikes where it stands. Giving it a number through `fire()` would be inventing a
+	# fire-time draw the original does not make, at the exact lines a separate change is
+	# rewriting. So the honest assertion is the OTHER direction, and it is a real one: a port
+	# that starts drawing a number for the mine through this path FAILS here.
+	#
+	# The PREMISE is asserted first: the mine must actually DAMAGE the foe, or "it draws no
+	# number" would be satisfied by a mine that does nothing at all.
+	var mine := _scene("mine", 40.0)
+	var mine_before: float = mine["foe"].hp
+	WeaponFire.fire(mine["def"], mine["game"].hero, mine["game"].foes, [], 1, mine["game"].fx)
+	Check.fell(
+		mine_before, mine["foe"].hp, "the Area Mine DOES damage the foe it lands on"
+	)
+	Check.unchanged(
+		mine["game"].fx.texts.size(),
+		0,
+		"and draws NO number -- `Mine.update`'s '#ff9944' is not wired, and this is the gap"
+	)
+	# THE ORBITER, the OTHER archetype in this position, and the one an unguarded port of
+	# `main.ts:1465-1483` would silently give an invented per-hit crit roll. Its shards are
+	# `Shot`s in this port and NOT `game.projectiles` in the original -- see
+	# `_orbit_draws_no_number_and_rolls_nothing` for the measurement.
+
+
+# ---------------------------------------------------------------------------
+# THE PROJECTILE'S OWN PER-HIT CRIT AND ITS OWN DAMAGE NUMBER -- the FIFTH roll site.
+#
+# `_fireProjectile` rolls nothing: `src/weapons.ts:239` just pushes a `Projectile`. The roll
+# is in the LATER function, on IMPACT, and the four `_rollCrit` lines do not contain it:
+#
+#     src/main.ts:1465-1483   Game._updateProjectiles
+#     let dmg = p.damage;
+#     const chance = this.player.getCritChance();
+#     const crit = chance > 0 && Math.random() < chance;
+#     if (crit) dmg *= 2;
+#     enemy.takeDamage(dmg);
+#     p.hitEnemies.add(enemy);
+#     if (enemy.hp > 0) {
+#         this.createFloatingText(Math.round(dmg), enemy.x, enemy.y - 20,
+#                                 crit ? '#ffee44' : '#fff', { crit });
+#     }
+#
+# `Shot.resolve` is that block. FOUR claims, and each has a way of being wrong the others
+# cannot see:
+#
+#   THE DRAW COUNT. One roll per TOUCHED FOE. A per-fire roll reads 1 where this demands N; a
+#   port that stopped rolling reads 0. Exact, tolerance 0, replayed from the generator's own
+#   sequence -- `_crit_draw_probe`'s instrument, on a different entry point.
+#
+#   THE MIX. Four foes under ONE piercing shot: N independent rolls mix at `1 - p^N - (1-p)^N`
+#   (`_mixed_share`), and ONE roll taken before the loop can NEVER mix. THE CONTROL IS A
+#   ONE-FOE SHOT THROUGH THE SAME INSTRUMENT: it ROLLS -- asserted, exactly one draw -- and it
+#   CANNOT mix, asserted at exactly zero over `CRIT_RATE_FIRES` fires. A reading of zero
+#   therefore means "this geometry cannot mix" rather than "this instrument is dead".
+#
+#   IT IS `getCritChance()` AND NOT `_rollCrit`. The hero's own sum, with NO
+#   `evolveBonusCrit` -- so the evolved Knife's declared +0.10 does NOT reach this roll. That
+#   is a RATE against two expectations rather than a difference of 0.04 in a damage ratio:
+#   at the Luck cap the hero's 0.25 mixes at 0.68 and the weapon's 0.35 would mix at 0.81.
+#
+#   THE DOUBLING IS A LOCAL COPY. `let dmg = p.damage` is never written back, so a PIERCING
+#   shot rolls the BASE against every victim. A port that doubled `p.damage` in place would
+#   quadruple the second victim's damage, and nothing above would notice.
+# ---------------------------------------------------------------------------
+
+
+## `count` sturdy bats STACKED ON ONE POINT, every one frozen.
+##
+## A point rather than a line or a ring, because these claims are about the NUMBER OF ROLLS
+## and not about geometry: `Shot.resolve` touches a foe within `radius + foe.size` -- 18px for
+## a bat and this port's 6px shot radius -- so foes spread along x would make "how many were
+## touched" a second variable. All of them at one point makes it true by construction.
+func _stacked_bats(g: Game, count: int) -> Array:
+	var made: Array = []
+	for i in count:
+		var f := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + 60.0, g.hero.y))
+		f.speed = 0.0
+		g.foes.append(f)
+		made.append(f)
+	return made
+
+
+## A PIERCING shot already ON the first of `foes`, so ONE `resolve` call touches them all.
+##
+## Built rather than fired, because these claims are about the LOOP BODY: `Shot.resolve` is
+## the port of `_updateProjectiles`'s inner block, and firing a real volley would put the
+## weapon's spread, fan width and travel time between the claim and the measurement.
+func _shot_on_top_of(foes: Array, dmg: float) -> Shot:
+	return Shot.new(foes[0].x, foes[0].y, Vector2.RIGHT, dmg, 420.0, 620.0, true)
+
+
+## How many `randf()` draws ONE `resolve` call takes from a caller-supplied generator, replayed
+## out of that generator's own sequence -- `_crit_draw_probe`'s method, and for its reason: two
+## draws from a seeded `RandomNumberGenerator` are the same number, so a generator drawn from a
+## different number of times is at a different place and reads a different value.
+##
+## Returns `[actual, expected]`, so a failing `Check.approx` prints both.
+func _resolve_draw_probe(shot: Shot, g: Game, foes: Array, draws: int) -> Array:
+	var scratch := RandomNumberGenerator.new()
+	scratch.seed = CRIT_DRAW_SEED
+	var expected := 0.0
+	for i in draws + 1:
+		expected = scratch.randf()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = CRIT_DRAW_SEED
+	shot.resolve(foes, Callable(), g.hero, g.fx, rng)
+	return [rng.randf(), expected]
+
+
+## How many of `fires` shots MIXED -- their victims did not all take the same damage.
+##
+## A FRESH `Shot` each fire, because `hit` is per-shot: the same one re-resolved would skip
+## every foe it had already touched and read zero damage, which is a perfect-looking way to
+## measure nothing. No generator is passed, so the roll comes from the GLOBAL one and the
+## caller seeds it -- `Game._update_shots`'s own arrangement, so this rate is measured on the
+## path a run takes rather than on a path only a test takes.
+func _shot_mixed_fires(g: Game, foes: Array, dmg: float, fires: int) -> int:
+	seed(CRIT_DRAW_SEED)
+	var mixed := 0
+	for i in fires:
+		var before: Array = []
+		for foe in foes:
+			before.append(float(foe.hp))
+		var shot := _shot_on_top_of(foes, dmg)
+		shot.resolve(foes, Callable(), g.hero, g.fx)
+		var lo := INF
+		var hi := -INF
+		for j in foes.size():
+			var lost: float = float(before[j]) - float(foes[j].hp)
+			lo = minf(lo, lost)
+			hi = maxf(hi, lost)
+		if hi - lo > DAMAGE_EPSILON:
+			mixed += 1
+	return mixed
+
+
+## The first seed at or after `from_seed` whose next `need` draws are ALL below `chance`.
+##
+## NEEDED BECAUSE THE CRIT BRANCH IS NOT OTHERWISE REACHABLE DETERMINISTICALLY HERE. The roll
+## is `_randf(rng) < chance` and a hero's chance caps at `Config.PASSIVE_MAX_STACK` stacks of
+## `luck` -- 0.25, so `chance` cannot be 1.0 the way `_roll_crit`'s own checks reach its crit
+## branch. A seed whose FIRST value is below the chance IS that branch, deterministically: no
+## rate, no flake, and the search is bounded and reproducible because the seeds are.
+##
+## Returns -1 if no such seed was found in `tries`, which the caller ASSERTS rather than
+## letting a null generator silently take no draw at all.
+func _critting_seed(chance: float, need: int, from_seed: int, tries: int) -> int:
+	var s := from_seed
+	for attempt in tries:
+		var probe := RandomNumberGenerator.new()
+		probe.seed = s
+		var ok := true
+		for i in need:
+			if probe.randf() >= chance:
+				ok = false
+				break
+		if ok:
+			return s
+		s += 1
+	return -1
+
+
+## THE FIFTH ROLL SITE: the projectile's own per-hit crit, its number, and its guard.
+func _a_projectile_rolls_per_HIT_and_draws_its_own_number() -> void:
+	var def := _weapon("knife")
+	var base := float(def["baseDamage"])
+	var g := _crit_hero(def, 1)
+	var p: float = g.hero.crit_chance()
+	Check.rose(0.0, p, "the hero has a crit chance, so a roll WOULD consume a draw")
+
+	# --- ONE ROLL PER TOUCHED FOE, exact, tolerance 0 ----------------------------------
+	var foes := _stacked_bats(g, CRIT_TARGETS)
+	var probe := _resolve_draw_probe(_shot_on_top_of(foes, base), g, foes, CRIT_TARGETS)
+	Check.approx(
+		float(probe[0]),
+		float(probe[1]),
+		"one projectile touching %d foes takes %d crit draws, not one" % [CRIT_TARGETS, CRIT_TARGETS],
+		1e-9
+	)
+	# THE OTHER SIDE OF THE SHORT CIRCUIT, same instrument: `chance > 0 && ...` means a hero
+	# with NO Luck takes NO draw, which is what makes a seeded sequence replay at all.
+	var cold := _game_holding(def, 1)
+	var cold_foes := _stacked_bats(cold, CRIT_TARGETS)
+	Check.unchanged(cold.hero.crit_chance(), 0.0, "the control hero has NO crit chance")
+	var cold_probe := _resolve_draw_probe(_shot_on_top_of(cold_foes, base), cold, cold_foes, 0)
+	Check.approx(
+		float(cold_probe[0]),
+		float(cold_probe[1]),
+		"and a no-Luck hero's projectile takes NO draw at all -- the guard is a SHORT CIRCUIT",
+		1e-9
+	)
+
+	# --- THE MIX, and a control that CANNOT mix while still ROLLING ---------------------
+	var fresh := _crit_hero(def, 1)
+	var four := _stacked_bats(fresh, CRIT_TARGETS)
+	var mixed := _shot_mixed_fires(fresh, four, base, CRIT_RATE_FIRES)
+	Check.rate(
+		mixed,
+		CRIT_RATE_FIRES,
+		_mixed_share(p, CRIT_TARGETS),
+		CRIT_RATE_TOL,
+		"and the shot MIXES -- some victims doubled and others not (p = %0.2f)" % p
+	)
+	# THE CONTROL: ONE foe. `_mixed_share(p, 1)` is`1 - p - (1-p)`, which is EXACTLY ZERO, so
+	# this cannot mix however the roll comes out -- and the premise below asserts that the roll
+	# HAPPENS, which is what stops the zero from being a dead instrument.
+	var one_game := _crit_hero(def, 1)
+	var one := _stacked_bats(one_game, 1)
+	var one_probe := _resolve_draw_probe(_shot_on_top_of(one, base), one_game, one, 1)
+	Check.approx(
+		float(one_probe[0]),
+		float(one_probe[1]),
+		"the control's one-foe shot DOES roll -- exactly one draw, so the reading below is live",
+		1e-9
+	)
+	var one_mixed := _shot_mixed_fires(one_game, one, base, CRIT_RATE_FIRES)
+	Check.unchanged(
+		one_mixed,
+		0,
+		"and NEVER mixes in %d fires -- the instrument CAN read all-or-nothing" % CRIT_RATE_FIRES
+	)
+
+	# --- THE HERO'S CHANCE, WITH NO `evolveBonusCrit` ----------------------------------
+	# The evolved Knife declares `evolveBonusCrit: 0.1`, and `_rollCrit` adds it. THIS roll
+	# must not: the original reads `this.player.getCritChance()` and nothing else. So the mix
+	# has to land on the HERO's rate and be measurably away from the weapon's.
+	var evolved_level := _evolve_level(def)
+	var weapon_p := _fire_crit_chance(def, g.hero, evolved_level)
+	Check.rose(p, weapon_p, "the evolved Knife's own chance is HIGHER than the hero's alone")
+	var evo := _crit_hero(def, evolved_level)
+	var evo_foes := _stacked_bats(evo, CRIT_TARGETS)
+	Check.approx(
+		evo.hero.crit_chance(),
+		p,
+		"the evolved hero's own crit chance is the same number, so only the ROLL differs",
+		1e-9
+	)
+	var evo_mixed := _shot_mixed_fires(evo, evo_foes, base, CRIT_RATE_FIRES)
+	Check.rate(
+		evo_mixed,
+		CRIT_RATE_FIRES,
+		_mixed_share(p, CRIT_TARGETS),
+		CRIT_RATE_TOL,
+		"the projectile's roll is the HERO's chance -- NO evolveBonusCrit (p = %0.2f)" % p
+	)
+	Check.differs(
+		float(evo_mixed) / float(CRIT_RATE_FIRES),
+		_mixed_share(weapon_p, CRIT_TARGETS),
+		CRIT_RATE_TOL,
+		"and it is measurably NOT the weapon's 1 + evolveBonusCrit rate (p = %0.2f)" % weapon_p
+	)
+
+	# --- THE DOUBLING IS A LOCAL COPY of `p.damage` ------------------------------------
+	var seed_found := _critting_seed(p, CRIT_TARGETS, CRIT_DRAW_SEED, 100000)
+	Check.at_least(
+		float(seed_found),
+		0.0,
+		"a seed whose next %d draws ALL crit was found, so the branch below is reachable"
+			% CRIT_TARGETS
+	)
+	if seed_found < 0:
+		return
+	var lc := _crit_hero(def, 1)
+	var lc_foes := _stacked_bats(lc, 2)
+	var lc_before: Array = []
+	for foe in lc_foes:
+		lc_before.append(float(foe.hp))
+	var lc_rng := RandomNumberGenerator.new()
+	lc_rng.seed = seed_found
+	var lc_shot := _shot_on_top_of(lc_foes, base)
+	Check.unchanged(lc_shot.damage, base, "the shot's own `damage` field starts at the base")
+	lc_shot.resolve(lc_foes, Callable(), lc.hero, lc.fx, lc_rng)
+	for i in lc_foes.size():
+		Check.approx(
+			float(lc_before[i]) - float(lc_foes[i].hp),
+			base * 2.0,
+			"victim %d of a PIERCING shot took exactly the DOUBLED base -- `let dmg = p.damage` never writes back"
+				% i,
+			1e-4
+		)
+	Check.unchanged(
+		lc_shot.damage, base, "and the shot's own field is UNCHANGED after both hits"
+	)
+
+	# --- THE NUMBER: colour, position, the flag, and THE GUARD -------------------------
+	# A DETERMINISTIC NON-CRIT: a bare hero has `crit_chance()` of exactly 0, so the short
+	# circuit takes no draw and the crit branch is unreachable. No seed, no rate, no flake.
+	var plain := Game.new(999.0)
+	plain.hero.weapons.clear()
+	var plain_foe := Check.sturdy(
+		Foe.new(Enemies.ENEMIES["BAT"], plain.hero.x + 60.0, plain.hero.y + 30.0)
+	)
+	plain_foe.speed = 0.0
+	plain.foes.append(plain_foe)
+	Check.unchanged(plain.hero.crit_chance(), 0.0, "a bare hero cannot crit, so this is a plain hit")
+	Check.unchanged(plain.fx.texts.size(), 0, "nothing is drawn before the shot is resolved")
+	_shot_on_top_of(plain.foes, base).resolve(plain.foes, Callable(), plain.hero, plain.fx)
+	Check.rose(0.0, float(plain.fx.texts.size()), "a projectile hit draws a damage number")
+	if plain.fx.texts.is_empty():
+		# A FAILURE ABOVE MEANS EVERY LINE BELOW IS ABOUT A NUMBER THAT IS NOT THERE, and an
+		# out-of-bounds read here ABORTS the rest of this function with a script error rather
+		# than a finding. `Check` has already recorded the failure above.
+		return
+	var number: Fx.FloatingText = plain.fx.texts[0]
+	Check.unchanged(
+		number.text, str(roundi(base)), "printing the damage the foe took, `Math.round`ed"
+	)
+	Check.unchanged(number.x, plain_foe.x, "at the FOE's own x -- not at the hero who fired")
+	Check.unchanged(number.y, plain_foe.y - 20.0, "and 20px above it, `enemy.y - 20`")
+	Check.unchanged(
+		number.color, Color("ffffff"), "in the original's '#fff' when it does NOT crit"
+	)
+	Check.unchanged(number.crit, false, "with `{crit}` false")
+
+	# --- A CRIT: `#ffee44`, `{crit:true}`, and the DOUBLED damage ----------------------
+	var crit_game := _crit_hero(def, 1)
+	var crit_foe := Check.sturdy(
+		Foe.new(Enemies.ENEMIES["BAT"], crit_game.hero.x + 60.0, crit_game.hero.y + 30.0)
+	)
+	crit_foe.speed = 0.0
+	crit_game.foes.append(crit_foe)
+	var crit_before: float = crit_foe.hp
+	var crit_rng := RandomNumberGenerator.new()
+	crit_rng.seed = seed_found
+	_shot_on_top_of(crit_game.foes, base).resolve(
+		crit_game.foes, Callable(), crit_game.hero, crit_game.fx, crit_rng
+	)
+	Check.unchanged(crit_game.fx.texts.size(), 1, "a crit draws ONE number")
+	var crit_number: Fx.FloatingText = crit_game.fx.texts[0]
+	Check.unchanged(
+		crit_number.text, str(roundi(base * 2.0)), "a crit PRINTS the doubled damage, `dmg *= 2`"
+	)
+	Check.unchanged(
+		crit_number.color, Color("ffee44"), "in '#ffee44' -- the projectile's own crit colour"
+	)
+	Check.unchanged(
+		crit_number.crit, true, "with `{crit:true}`, which is the size and the outline"
+	)
+	Check.approx(
+		crit_before - crit_foe.hp, base * 2.0, "and the foe ACTUALLY lost the doubled damage", 1e-4
+	)
+
+	# --- THE GUARD: `if (enemy.hp > 0)` -- A KILLING BLOW DRAWS NOTHING ----------------
+	var kgame := Game.new(999.0)
+	kgame.hero.weapons.clear()
+	var killable := Foe.new(Enemies.ENEMIES["BAT"], kgame.hero.x + 60.0, kgame.hero.y + 30.0)
+	killable.speed = 0.0
+	kgame.foes.append(killable)
+	var survivor := Check.sturdy(
+		Foe.new(Enemies.ENEMIES["BAT"], kgame.hero.x + 60.0, kgame.hero.y + 30.0)
+	)
+	survivor.speed = 0.0
+	kgame.foes.append(survivor)
+	Check.rose(0.0, killable.hp, "the doomed foe is ALIVE before the shot lands")
+	_shot_on_top_of(kgame.foes, killable.hp + 1.0).resolve(
+		kgame.foes, Callable(), kgame.hero, kgame.fx
+	)
+	Check.unchanged(killable.hp, 0.0, "the shot KILLS it")
+	Check.unchanged(killable.dead, true, "and it is dead")
+	Check.unchanged(
+		kgame.fx.texts.size(),
+		1,
+		"so it draws NO number while the foe BESIDE it, which survived, draws exactly one -- `if (enemy.hp > 0)` is the feature, not an optimisation"
+	)
+	if kgame.fx.texts.size() == 1:
+		Check.unchanged(
+			kgame.fx.texts[0].x,
+			survivor.x,
+			"and the one number that WAS drawn belongs to the foe that is still alive"
+		)
+
+
+## THE ORBIT ARCHETYPE DRAWS NO NUMBER AND ROLLS NOTHING, and this is the assertion that keeps
+## `main.ts:1465-1483` from being ported ONE ARCHETYPE TOO WIDE.
+##
+## `game.projectiles` has exactly ONE writer in the whole of `src/`:
+##
+##     src/weapons.ts:239   game.projectiles.push(new Projectile(...))   inside `_fireProjectile`
+##
+## `OrbitShard` is NOT one of its entries. A shard lives on the WEAPON (`weapon._shards`), is
+## stepped by `weapon.update`, is drawn by `renderExtras`, and does its damage in
+## `OrbitShard.update`, which rolls NOTHING and draws its own number at its own colour:
+##
+##     src/entities.ts:735-737
+##     e.takeDamage(this.damage);
+##     this.hitTimers.set(e, 0.5);
+##     game.createFloatingText(Math.round(this.damage), e.x, e.y - 18, '#ffffcc');
+##
+## -- `'#ffffcc'`, at `e.y - 18`, with NO crit and NO `hp > 0` guard. A different call site in
+## every one of those four particulars.
+##
+## SO A `Shot` THAT IS AN ORBIT SHARD MUST BE EXCLUDED FROM THE IMPACT ROLL. This port puts
+## both in ONE class -- `Shot.Kind.ORBIT` is `OrbitShard` and the other two kinds are
+## `Projectile` -- and `Game._update_shots` calls `resolve` for both, so an unguarded port of
+## the impact block hands the ORBIT archetype an invented per-hit crit roll. THAT IS THE SAME
+## DEFECT `da96c02` REMOVED from the four archetypes, and NO EXISTING ASSERTION CATCHES IT:
+## `_bonus_crit_is_read` iterates weapons declaring `evolveBonusCrit`, and the Orbiter declares
+## none -- it declares `evolveDamageMult` instead. `ROLLING_ARCHETYPES` names the four that
+## roll and this file never drives the four that do not.
+##
+## THIS IS ALSO WHY THE NUMBER IS NOT WIRED FOR THE SHARD. `'#ffffcc'` at `-18` is a real
+## eighth call site in the original and it is DRAWING NOWHERE in this port; wiring it here
+## would be inventing it in `resolve`, which is not where `OrbitShard.update` lives. Reported
+## in `docs/GODOT-PORT.md`.
+func _orbit_draws_no_number_and_rolls_nothing() -> void:
+	var def := _weapon("orbit")
+	var g := _crit_hero(def, 1)
+	Check.rose(0.0, g.hero.crit_chance(), "the hero HAS a crit chance, so a roll WOULD consume a draw")
+	var foes := _stacked_bats(g, CRIT_TARGETS)
+	var shard := Shot.orbiting(g.hero.x, g.hero.y, 0.0, 0.0, 12.0, 0.0)
+	Check.unchanged(shard.kind, Shot.Kind.ORBIT, "the shard is the ORBIT kind")
+	Check.unchanged(
+		shard.rolls_on_hit(),
+		false,
+		"and an orbit shard is NOT a `game.projectiles` entry, so it rolls NOTHING"
+	)
+	# The shard is placed ON the stack rather than on its ring, so `how many it touched` is
+	# true by construction and the count below is about the ROLL rather than the geometry.
+	shard.x = foes[0].x
+	shard.y = foes[0].y
+	var shard_probe := _resolve_draw_probe(shard, g, foes, 0)
+	Check.approx(
+		float(shard_probe[0]),
+		float(shard_probe[1]),
+		"a shard touching %d foes takes NO crit draw at all" % CRIT_TARGETS,
+		1e-9
+	)
+	Check.unchanged(g.fx.texts.size(), 0, "and draws NO number")
+	Check.unchanged(
+		foes[0].hp < foes[0].max_hp, true, "PREMISE: the shard DID damage, so this is not a dead path"
+	)
+	# THE POSITIVE SIDE, in this same run and through this same instrument: the SAME hero, the
+	# SAME foes and the same `resolve` call as a PROJECTILE. If the instrument could not see a
+	# draw, this would read zero too and the control above would prove nothing.
+	var positive := _resolve_draw_probe(_shot_on_top_of(foes, 12.0), g, foes, CRIT_TARGETS)
+	Check.approx(
+		float(positive[0]),
+		float(positive[1]),
+		"CONTROL: the same instrument on a PROJECTILE at the same %d foes reads %d draws"
+			% [CRIT_TARGETS, CRIT_TARGETS],
+		1e-9
+	)
 
 
 ## THE EVOLVED SECOND RING DOES NOT SLOW, and that is the ORIGINAL'S asymmetry rather than
@@ -2025,255 +2670,6 @@ func _the_evolved_second_ring_is_never_doubled() -> void:
 		0,
 		"and every second ring is exactly %0.2f of the base -- never doubled by it" % WeaponFire.NOVA_PULSE_DAMAGE
 	)
-
-
-# ---------------------------------------------------------------------------
-# THE AREA MINE'S FUSE
-#
-# `quality-baseline.json` declared `godot-mine-fuse-unread`:
-#
-#   "`\"fuse\": 1.2` is in the data and the TypeScript has a `Mine` entity with
-#    `fuse`/`maxFuse`, an armed state drawn at half-fuse, and a delayed blast. The Godot
-#    port strikes immediately on the fire frame with no mine entity, so there is no armed
-#    state to draw."
-#
-# So the data declared a fuse and the port did not read it. The four fields this project has
-# found in that state -- `type`, `effect`, `archetype`, `check` -- were each invisible for
-# the same reason: the test asserted the case that happened to work. Here that case was "the
-# foe took damage on the fire frame", which is exactly what a mine with no fuse does.
-#
-# WHAT THE ORIGINAL DOES, from `src/`, and the numbers below were MEASURED from it rather
-# than reasoned about. A throwaway probe drove the ORIGINAL's own `Mine.update` at dt = 1/60:
-#
-#     data: WEAPONS.MINE.fuse = 1.2     baseRange = 100
-#     [subject] fuse=1.2  dt=0.016666666666666666
-#       detonation frame = 72    hits recorded = 1 (damage 45)
-#       fuse after that frame = -7.28583859910259e-16
-#       hits after 71 frames = 0        hits after 72 frames = 1
-#     [control A] fuse=0.0 -> frame 1        [control B] fuse=0.5 -> frame 31
-#     [control C] fuse=2.0 -> frame 121
-#     [control] premise: fuse=0 must hit on frame 1 and exactly once -> HELD
-#     radius boundary: d=99.999 -> 1 hit    d=100.0 -> 0 hits    d=100.001 -> 0 hits
-#
-# Three things that probe settles, and the checks below pin each one:
-#
-#   1. THE FUSE STARTS ON PLACEMENT. `Mine.update` is `this.fuse -= dt;` with nothing above
-#      it -- no proximity test anywhere in the class. The proximity-armed countdown is the
-#      BOMBER's (`fuseRange`/`fuseTime` on an ENEMY def, `src/entities.ts:375-383`): same
-#      English word, a different entity, a different table and a different timer.
-#   2. THE FRAME IS 72, and 71 is not. The controls on either side (1, 31, 121) are what make
-#      that a reading rather than a number the probe happened to print.
-#   3. THE RADIUS IS EXCLUSIVE -- `if (d < this.radius)`, so a foe exactly on the boundary
-#      takes nothing.
-# ---------------------------------------------------------------------------
-
-## A mine fired through the real weapon path, against a foe that cannot move or fight back.
-##
-## `Check.sturdy` so a check about TIMING cannot become a check about the foe dying, and an
-## inert foe so it cannot become a check about the HERO dying -- a bat standing on the hero
-## deals contact damage every frame and the hero would be long dead by frame 72.
-func _mine_scene(foe_at := 0.0) -> Dictionary:
-	var g := Game.without_spawns()
-	g.hero.weapons.clear()
-	var def: Dictionary = _weapon("mine")
-	g.hero.add_weapon(def)
-	var foe := Check.sturdy(Foe.new(Enemies.ENEMIES["BAT"], g.hero.x + foe_at, g.hero.y))
-	foe.speed = 0.0
-	foe.damage = 0.0
-	g.foes.append(foe)
-	g.fx.clear()
-	var shots: Array = []
-	WeaponFire.fire(def, g.hero, g.foes, shots, 1, g.fx, null, g.mines)
-	# THE WEAPON COMES OFF THE HERO, or `Game.step` fires a SECOND mine on its very first
-	# frame: `cooldowns` starts empty, so `left = 0.0 - delta` is already `<= 0.0` and the
-	# weapon re-arms and fires immediately. Measured -- the first version of this scene
-	# stepped a game holding two mines, and "the mine detonated on frame 72" would have been
-	# true of whichever one it happened to look at.
-	g.hero.weapons.clear()
-	return {"game": g, "foe": foe, "def": def, "hp_before": foe.hp}
-
-
-## Step the REAL `Game.step`, so what is measured is the loop a run uses rather than a driver
-## written here. `Mine.update` is called directly only where the check is about the entity.
-func _step(game: Game, frames: int) -> void:
-	for i in frames:
-		game.step(FRAME, Vector2.ZERO)
-
-
-## THE FIELD IS READ, AND THE VALUE IT CARRIES IS THE DATA'S.
-##
-##     src/data.ts:154     fuse: 1.2,
-##     src/weapons.ts:356  const fuse = this.def.fuse || 1.2;
-##     src/weapons.ts:358  game.mines.push(new Mine(player.x, player.y, radius, dmg, fuse));
-##
-## Read THROUGH `_weapon("mine")`, which is the def in `Weapons.WEAPONS` -- the generated
-## table, generated in turn from `src/data.ts`. So a `fuse` changed in the TypeScript moves
-## this measurement instead of breaking it, which is rule 12's whole point.
-func _the_mine_fuse_is_the_defs_fuse() -> void:
-	var s := _mine_scene()
-	var g: Game = s["game"]
-	Check.unchanged(g.mines.size(), 1, "firing the Area Mine leaves a mine in game.mines")
-	if g.mines.size() != 1:
-		return
-	var def_fuse := float(s["def"]["fuse"])
-	Check.approx(g.mines[0].fuse, def_fuse, "and its fuse IS the def's `fuse`", 0.0001)
-	Check.approx(g.mines[0].max_fuse, def_fuse, "`max_fuse` records where the fuse started", 0.0001)
-	Check.approx(
-		g.mines[0].damage,
-		float(s["def"]["baseDamage"]) * g.hero.damage_mult(),
-		"and it carries the weapon's own damage, not a number of its own",
-		0.0001
-	)
-	Check.approx(
-		g.mines[0].radius,
-		WeaponFire.reach_for(s["def"], g.hero, 1),
-		"and its blast radius is the weapon's own reach",
-		0.0001
-	)
-
-
-## THE FUSE STARTS WHEN THE MINE IS PLACED, NOT WHEN A FOE ARRIVES.
-##
-## This is the half that is the whole mechanic, and it is the half a "does it eventually
-## explode" test would miss. `Mine.update` (`src/entities.ts:763`) is:
-##
-##     update(dt, game) {
-##         this.fuse -= dt;
-##
-## -- with nothing above it. There is no range test in `Mine` at all, so a mine dropped in an
-## empty field detonates on exactly the frame one dropped into a crowd does. A foe walking
-## over it changes nothing; a foe walking away changes nothing.
-##
-## The measurement that separates the two mechanics is therefore a mine with NOTHING in the
-## world: a proximity-armed mine would sit there forever, and this would read a mine still on
-## the ground at frame 72.
-func _a_mine_arms_on_placement_not_on_proximity() -> void:
-	var s := _mine_scene()
-	var g: Game = s["game"]
-	g.foes.clear()
-	Check.unchanged(g.mines.size(), 1, "a mine dropped in an EMPTY field exists")
-	if g.mines.size() != 1:
-		return
-	var full: float = g.mines[0].fuse
-	_step(g, 71)
-	Check.unchanged(g.mines.size(), 1, "and is still on the ground at frame 71 with no foe anywhere")
-	if g.mines.size() == 1:
-		Check.fell(full, g.mines[0].fuse, "with its fuse burning down and nothing to arm it")
-	_step(g, 1)
-	Check.unchanged(g.mines.size(), 0, "and it detonates on frame 72 anyway")
-
-
-## THE FRAME, PINNED ON THE VALUE AND ONE PAST IT.
-##
-## 1.2 seconds at dt = 1/60 is the first frame whose accumulated dt reaches the fuse. The
-## measurement is in this section's header: the ORIGINAL's own `Mine.update` detonates on
-## frame 72 and has recorded no hit after 71. Both are asserted below, because a frame
-## asserted only from one side is a rate expected to be a certainty -- "it eventually
-## explodes" is satisfied by a mine that explodes on frame 400.
-func _the_mine_detonates_on_frame_72_and_not_71() -> void:
-	var s := _mine_scene()
-	var g: Game = s["game"]
-	# A PRECONDITION, ASSERTED. With no mine in the world every measurement below is
-	# vacuous -- and "0 damage taken equals 0 damage carried" would have reported a port
-	# with no mine entity at all as having the damage right. Measured on a break that
-	# removed the mine: this line is what turns that into a failure.
-	Check.unchanged(g.mines.size(), 1, "the mine exists before its frame is counted")
-	var stored: float = g.mines[0].damage if g.mines.size() == 1 else 0.0
-	var at := -1
-	for i in 400:
-		g.step(FRAME, Vector2.ZERO)
-		if g.mines.is_empty():
-			at = i + 1
-			break
-	Check.unchanged(at, 72, "a 1.2s fuse at 1/60 detonates on frame 72")
-	# DERIVED FROM THE DEF, by the original's own arithmetic (`fuse -= dt`, then
-	# `fuse <= 0.0`), so the frame above is tied to `src/data.ts` and not only to a literal
-	# that was true the day it was written.
-	var derived := 0
-	var left := float(s["def"]["fuse"])
-	while left > 0.0:
-		left -= FRAME
-		derived += 1
-	Check.unchanged(at, derived, "which is the frame the def's own `fuse` computes to")
-	Check.approx(
-		s["hp_before"] - s["foe"].hp,
-		stored,
-		"and the blast deals exactly the damage the mine carried",
-		0.001
-	)
-
-	# ONE PAST IT, measured on a second mine so the first one's frame count cannot leak in.
-	var early := _mine_scene()
-	_step(early["game"], 71)
-	Check.unchanged(early["game"].mines.size(), 1, "and at frame 71 the mine is STILL on the ground")
-	Check.unchanged(early["foe"].hp, early["hp_before"], "so a foe standing ON it is unhurt")
-	_step(early["game"], 1)
-	Check.fell(early["hp_before"], early["foe"].hp, "and is hurt on frame 72")
-
-
-## THE BLAST RADIUS IS EXCLUSIVE.
-##
-##     src/entities.ts:769    if (d < this.radius) {
-##
-## MEASURED against the original's own `Mine.update`, radius 100: a foe at d = 99.999
-## recorded 1 hit, at d = 100.0 recorded 0 and at d = 100.001 recorded 0. This port's shared
-## `_strike_disc`, which the aura and the nova use, is `<= reach` -- so a mine routed through
-## it would be wrong on exactly one boundary case, and `Mine.update` has its own loop for
-## that reason.
-func _the_mine_blast_is_its_own_radius() -> void:
-	# THE RADIUS IS READ FROM THE FIRED MINE, not written down here: it is `reach_for` at
-	# level 1, so a `baseRange` changed in `src/data.ts` moves both sides of this boundary.
-	var probe := _mine_scene()
-	if probe["game"].mines.size() != 1:
-		Check.unchanged(probe["game"].mines.size(), 1, "a mine to measure the blast radius from")
-		return
-	var radius: float = probe["game"].mines[0].radius
-
-	var inside := _mine_scene(radius - 0.1)
-	_step(inside["game"], 72)
-	Check.fell(inside["hp_before"], inside["foe"].hp, "a foe just INSIDE the blast radius is hurt")
-
-	var boundary := _mine_scene(radius)
-	_step(boundary["game"], 72)
-	Check.unchanged(
-		boundary["foe"].hp,
-		boundary["hp_before"],
-		"a foe EXACTLY on the blast radius takes nothing"
-	)
-	# AND THE MINE REALLY DID GO OFF, so "took nothing" cannot be a mine that never fired --
-	# the shape of a probe that reports the most favourable result for the wrong reason.
-	Check.unchanged(boundary["game"].mines.size(), 0, "and that mine DID detonate")
-
-
-## THE ARMED STATE, WHICH IS THE ONLY THING THE FUSE CHANGES ON SCREEN.
-##
-##     const armed = self.fuse < self.maxFuse * 0.5;      -- renderMine, entity-render.ts:112
-##
-## `test/entity-render.test.ts:278` pins the boundary from the TypeScript side -- "exactly
-## half is unarmed" and "one step below the boundary IS armed" -- and `Mine.armed()` is that
-## rule with one home, called by `main.gd`'s `_draw_mine` and by nothing else.
-func _the_armed_state_turns_over_at_half_the_fuse() -> void:
-	var half := Mine.new(0.0, 0.0, 100.0, 45.0, 2.0)
-	half.fuse = 1.0
-	Check.unchanged(half.armed(), false, "exactly half the fuse is NOT armed")
-	half.fuse = 0.999
-	Check.unchanged(half.armed(), true, "one step below half IS armed")
-
-	# AND ON THE DEF'S OWN VALUE, so this is a claim about the Area Mine rather than about a
-	# fixture -- the boundary moved to wherever `src/data.ts` puts it.
-	var s := _mine_scene()
-	var g: Game = s["game"]
-	if g.mines.size() != 1:
-		Check.unchanged(g.mines.size(), 1, "a mine to measure the armed state of")
-		return
-	var def_fuse := float(s["def"]["fuse"])
-	Check.unchanged(g.mines[0].armed(), false, "a mine with its full fuse is unarmed")
-	var exact := Mine.new(0.0, 0.0, 100.0, 45.0, def_fuse)
-	exact.update(def_fuse * 0.5, [], null)
-	Check.approx(exact.fuse, def_fuse * 0.5, "half the def's fuse burned is exactly half", 0.0001)
-	Check.unchanged(exact.armed(), false, "and the def's own half-way point is NOT armed")
-	exact.update(0.01, [], null)
-	Check.unchanged(exact.armed(), true, "one step past it IS armed")
 
 
 func _check(cond: bool, label: String, detail: String) -> void:

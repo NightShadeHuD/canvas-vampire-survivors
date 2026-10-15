@@ -66,6 +66,23 @@ var is_clone := false
 var slow_timer := 0.0
 var slow_pct := 0.0
 
+## THE HIT FLASH: the FIRST branch of `renderEnemy`'s colour chain, and the one this port had
+## no timer for at all -- a foe that was hit looked exactly like a foe that was not.
+##
+##     this.flashTimer = 0.08;                            -- `Enemy.takeDamage`, the last
+##                                                           line of its body, UNCONDITIONALLY
+##     if (this.flashTimer > 0) this.flashTimer -= dt;     -- `Enemy.update`, in BOTH of its
+##                                                           branches: the bomber's early
+##                                                           `return` and the general path
+##
+## 0.08s is about five frames at 60fps, so a struck foe reads WHITE for a fifth of a second
+## and is then itself again. **THE DECAY IS THE WHOLE FEATURE.** A flash with no countdown is
+## a foe that is white forever, and that is the same class of bug as the dim that never
+## lifted -- `AGENTS.md` rule 18's fourth row, "the screen greyed out and stayed grey". It is
+## aged from the TOP of `chase`, above every early return in this file, so no foe can outlive
+## its flash by standing still.
+var flash_timer := 0.0
+
 func _init(d: Dictionary, start_x: float, start_y: float, hp_mult := 1.0, dmg_mult := 1.0) -> void:
 	def = d
 	def_id = d["id"]
@@ -95,6 +112,17 @@ func _init(d: Dictionary, start_x: float, start_y: float, hp_mult := 1.0, dmg_mu
 		_clone_timer = float(d.get("cloneCooldown", 5.5)) * randf()
 
 func take_damage(amount: float) -> void:
+	# THE FLASH IS SET FIRST AND UNCONDITIONALLY, which is where the original sets it and the
+	# one place it can go here. `Enemy.takeDamage` ends
+	#
+	#     this.hp -= dmg;
+	#     this.flashTimer = 0.08;
+	#
+	# with no early return at all, so a blow a shield absorbs ENTIRELY still flashes the foe:
+	# what the flash reports is that the hit landed, not how much of it got through. The
+	# `return` below is the one path the original does not have, and a timer set after it
+	# would make a fully-shielded hit invisible to the player.
+	flash_timer = FLASH_TIME
 	# Shield first, then the reduction applies to what is left. A golem with 60 shield
 	# and 50% reduction is not simply "90 more health" -- the two interact.
 	var incoming := amount
@@ -153,6 +181,13 @@ func slow_mult() -> float:
 ## its slow by standing still. `slow` is then read ONCE and multiplied into every movement
 ## below, which is what the original does at all five of its movement sites.
 func chase(target_x: float, target_y: float, delta: float) -> void:
+	# THE FLASH AGES FIRST, and for EVERY foe -- above the `d <= 0.001` return below, above
+	# every archetype branch, and outside the movement entirely. `Enemy.update` decays it in
+	# both of its branches, so a foe standing exactly on the hero, a foe with nowhere to go
+	# and an armed bomber all spend their flash at the same rate. A tick placed after any one
+	# of those returns is a foe that stays white while it does the thing it is doing.
+	if flash_timer > 0.0:
+		flash_timer -= delta
 	if slow_timer > 0.0:
 		slow_timer -= delta
 	var slow := slow_mult()
@@ -257,25 +292,64 @@ func _tick_clone(delta: float) -> void:
 # WHAT THIS FOE LOOKS LIKE
 #
 # A slow the player cannot SEE is half a feature, and the half that is missing is the one
-# that tells them the weapon worked. `renderEnemy` in `src/entity-render.ts` is a chain:
+# that tells them the weapon worked. `renderEnemy` in `src/entity-render.ts` is a CHAIN, and
+# the ORDER of it is the specification rather than a detail of it:
 #
 #     if (self.flashTimer > 0) ctx.fillStyle = '#ffffff';
 #     else if (self.slowTimer > 0) ctx.fillStyle = '#88ccff';
 #     else if (self.bomber && self.fuseArmed) { ...blink white / colour... }
 #     else ctx.fillStyle = self.color;
 #
-# The slow branch is the one with a field behind it here. The flash branch has no timer in
-# this port at all and the armed bomber has no draw site, so those two are REPORTED rather
-# than invented -- and the slow branch keeps the ORIGINAL'S POSITION in the chain, so
-# whichever of them is ported next lands ABOVE this one rather than below it.
+# ALL FOUR BRANCHES ARE HERE NOW, in `body_color`, which is the one place they live -- so the
+# drawn colour and the asserted colour cannot drift apart. The order is load-bearing and not
+# tidiness: a foe that is BOTH hit and slowed reads WHITE rather than iced blue, and one that
+# is slowed while its fuse burns reads iced blue rather than blinking. Each of those three
+# orderings is asserted by putting two states on ONE foe, because an implementation that
+# reordered the chain would pass every single-state check ever written about it.
 # ---------------------------------------------------------------------------
 
 ## `#88ccff`: "Slowed foes get a cold cast."
 const SLOW_TINT := Color("88ccff")
+## `'#ffffff'`, written twice in the original -- once for the hit flash and once for the armed
+## bomber's blink -- so it is one constant here rather than two names for one white. The
+## suites assert it against the `src/` literal, not against this constant.
+const WHITE_TINT := Color("ffffff")
+## `this.flashTimer = 0.08`. About five frames at 60fps, and 0.08 is the original's number.
+const FLASH_TIME := 0.08
+## `Math.floor(performance.now() / 120) % 2 === 0`. 120 MILLISECONDS IS THE HALF PERIOD: the
+## armed bomber is white for 0.12s and its own colour for 0.12s. The phase depends on the
+## CLOCK ALONE -- not on the fuse's remaining time, not on the foe's health, not on when the
+## fuse armed -- which is what makes it a blink rather than a fuse gauge.
+##
+## THE CLOCK IS THE GAME'S, NOT THE WALL'S. The original reads `performance.now()`, which runs
+## on while the game is paused; this reads `Game.elapsed`, which does not, for the reason the
+## hero's i-frame strobe already reads it: a paused frame must be a still frame. That
+## substitution is the port's and it is reported rather than hidden -- the PHASE therefore
+## differs from the original's to within the run's own clock, and the PERIOD does not.
+const BLINK_HALF_PERIOD := 0.12
 
 ## The colour the BODY is drawn in, so the rule has one home and the drawn body and the
-## asserted body cannot disagree. `main.gd`'s `_draw_foe` is the only caller.
-func body_color() -> Color:
+## asserted body cannot disagree. `main.gd`'s `_draw_foe` is the only caller, and it passes
+## `Game.elapsed`.
+##
+## `now` IS REQUIRED RATHER THAN DEFAULTED. A default of 0.0 would silently freeze the blink
+## in whichever half zero falls in (white, by the arithmetic below) for every caller that
+## forgot it -- a foe that is white forever, which is the exact defect the flash's decay
+## exists to prevent. A required argument is a caller that cannot forget.
+func body_color(now: float) -> Color:
+	if flash_timer > 0.0:
+		return WHITE_TINT
 	if slow_timer > 0.0:
 		return SLOW_TINT
+	# `self.bomber`, read here as the ARCHETYPE -- the field every other bomber behaviour in
+	# this file is dispatched on and the field `verify_archetypes.gd` drives the data by.
+	# `data/enemies.gd` carries `"bomber": true` as well; it is the same fact, and this port
+	# keeps ONE reader of it rather than two that can drift.
+	if archetype == "bomber" and fuse_armed:
+		return WHITE_TINT if blink_is_white(now) else Color(color)
 	return Color(color)
+
+## `const blink = Math.floor(performance.now() / 120) % 2 === 0;` -- true in the half that
+## draws WHITE, false in the half that draws the foe's own colour.
+func blink_is_white(now: float) -> bool:
+	return int(now / BLINK_HALF_PERIOD) % 2 == 0

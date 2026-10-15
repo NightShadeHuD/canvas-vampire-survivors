@@ -24,11 +24,11 @@
 ## Every one of those is a PARTICLE, so `Spark` is ported field for field from `Particle`
 ## in `src/entities.ts` -- the same random size, speed, decay and friction.
 ##
-## A particle says THAT something happened. It does not say WHAT WAS HIT, and the original
-## never needed it to: it draws a damage number on every hit (`_rollCrit` ->
-## `createFloatingText`) and this port does not. So a `Strike` also records the shape the
-## damage covered, and `main.gd` draws it. Each emit site names whether the original draws
-## that shape or whether it is the port's judgement call.
+## A particle says THAT something happened. It does not say WHAT WAS HIT. The original
+## answers that with a damage number on every hit (`_rollCrit` -> `createFloatingText`), and
+## `FloatingText` below IS that system, ported field for field from `src/entities.ts`. A
+## `Strike` also records the shape the damage covered, and `main.gd` draws it. Each emit site
+## names whether the original draws that shape or whether it is the port's judgement call.
 ##
 ## AND IT SCHEDULES, which is the original's `game.effects` doing the same job. Its one use
 ## is the evolved Frost Nova -- `game.effects?.schedule?.(0.4, () => { ... takeDamage ... })`
@@ -49,6 +49,12 @@ class_name Fx
 ## oldest is dropped rather than letting an adversarial run grow the array forever.
 const MAX_SPARKS := 512
 
+## The same valve for the damage numbers. The original's `Pool` caps only its FREE list, so
+## its live text count is unbounded in principle; in play it is bounded by the foes on
+## screen, and `MAX_TEXTS` is where the oldest is dropped rather than letting an adversarial
+## run grow the array forever.
+const MAX_TEXTS := 256
+
 ## How long a shape lives, in seconds. Long enough to be seen: 0.22 is thirteen frames.
 ## The Whip's sweep is the shortest because the original fires it every 1.5s and a band
 ## that lingers reads as a persistent aura rather than a lash.
@@ -63,6 +69,11 @@ var sparks: Array = []
 
 ## Every strike shape alive. Iterated by `main.gd` in the same way.
 var strikes: Array = []
+
+## Every damage number alive. Iterated by `main.gd` in the same way -- and the list is what
+## makes a number ASSERTABLE at all: the pixel tier can hide it and require the frame to
+## change, which no assertion about `Foe.hp` could ever stand in for.
+var texts: Array = []
 
 ## Damage scheduled for later. `WeaponFire` only ever APPENDS to this; `Game.step` is
 ## what drains it, because a pulse has to damage the foes and this object has none.
@@ -103,6 +114,67 @@ class Spark:
 		vy *= pow(friction, delta)
 		life -= decay * delta
 		size *= pow(0.3, delta)
+
+
+## A DAMAGE NUMBER: `FloatingText` in `src/entities.ts`, ported field for field.
+##
+##     this.life   = opts.life   ?? 1;       -> life, in SECONDS, spent at 1.2/s
+##     this.vy     = opts.vy     ?? -60;     -> vy, pixels per second, UPWARD
+##     this.size   = opts.size   ?? 16;      -> size, the font size
+##     this.weight = opts.weight ?? 'bold';  -> drawn bold (`main.gd._draw_text`)
+##     this.crit   = !!opts.crit;            -> crit, which changes TWO visible things
+##
+##     update(dt) { this.y += this.vy * dt; this.life -= 1.2 * dt; }
+##
+## -- `FloatingText` and its `update`. The rise is CONSTANT: `vy` is never scaled, so the
+## number climbs 60px/s for its whole life, and an un-set `life` of 1 spent at 1.2/s makes
+## that life 0.833s -- 50px of rise, gone in half a second. The fade is LINEAR in the same
+## number (`ctx.globalAlpha = Math.max(0, self.life)`), so the number is fully opaque for its
+## first 0.167s and then dims with the rise rather than holding and snapping out.
+##
+## `{ crit: true }` IS TWO VISIBLE CHANGES, and neither is the colour -- `_rollCrit` passes
+## `'#ffee44'` for a crit and the WEAPON's colour otherwise, so the colour belongs to the
+## call site. Both of the changes are read from `renderFloatingText`:
+##
+##     const sz = self.crit ? self.size * 1.6 : self.size;      -> 1.6x the font size
+##     if (self.crit) { strokeStyle = '#000'; lineWidth = 3; strokeText(self.text, ...); }
+##                                                             -> a black outline, drawn
+##                                                                BEFORE the fill text
+##
+## `size` is kept at the ORIGINAL's 16 and the 1.6 is applied at draw time (`font_size`),
+## because the one number a reader needs to check against `src/` is the one that is written
+## in `src/`.
+class FloatingText:
+	var text: String
+	var x: float
+	var y: float
+	var color: Color
+	var crit: bool
+	## Seconds left. The alpha IS this number, clamped (`alpha`).
+	var life := 1.0
+	## Pixels per second. NEGATIVE: the number rises.
+	var vy := -60.0
+	var size := 16.0
+
+	func _init(label: String, at_x: float, at_y: float, tint: Color, is_crit: bool) -> void:
+		text = label
+		x = at_x
+		y = at_y
+		color = tint
+		crit = is_crit
+
+	func update(delta: float) -> void:
+		y += vy * delta
+		life -= 1.2 * delta
+
+	## The font size the original draws this at: `self.crit ? self.size * 1.6 : self.size`.
+	func font_size() -> float:
+		return size * 1.6 if crit else size
+
+	## `ctx.globalAlpha = Math.max(0, self.life)`. THE one thing every drawing of a number
+	## reads, so a number cannot be painted opaque past its life or negative past its end.
+	func alpha() -> float:
+		return clampf(life, 0.0, 1.0)
 
 
 ## The area one weapon's fire covered, so the hit has a SHAPE on screen and not just a
@@ -222,6 +294,32 @@ func emit_blast(x: float, y: float, reach: float, color: Color) -> void:
 	strikes.append(Strike.new(Strike.Kind.BLAST, x, y, reach, color, BLAST_LIFE))
 
 
+## `Game.createFloatingText(text, x, y, color, opts)` -- the SINK, called from the places the
+## original calls it.
+##
+## THE POSITION IS THE CALL SITE'S, and it is what makes the port per-target: a damage number
+## goes at the FOE it is about (`enemy.x, enemy.y - 20`), never at the hero who dealt it. Two
+## foes caught by one Whip sweep get two numbers eighty pixels apart rather than one number at
+## the hero -- which is a difference a player can see, and which no assertion about `Foe.hp`
+## could ever have noticed.
+##
+## THE LABEL IS ALREADY A STRING, because it is one by this point in the original:
+## `FloatingText.text` is assigned `Math.round(dmg)` at the weapon sites and a literal at the
+## sites that draw a word. Rounding is the CALLER's act here for the same reason.
+##
+## `crit` changes the SIZE and the OUTLINE, and the colour above it is the caller's -- which
+## is how `_rollCrit` draws `#ffee44` for a crit and the weapon's own colour otherwise.
+##
+## NO RANDOMNESS, and that is a fact about the original rather than a choice made here:
+## `FloatingText` draws nothing from `Math.random()` -- no jittered angle, speed or lifetime,
+## unlike `Particle` beside it -- so a damage number consumes no draw and cannot move a seeded
+## sequence. `verify_weapons.gd` replays a seeded fire and counts the draws.
+func emit_text(label: String, x: float, y: float, color: Color, crit := false) -> void:
+	if texts.size() >= MAX_TEXTS:
+		texts.pop_front()
+	texts.append(FloatingText.new(label, x, y, color, crit))
+
+
 ## Queue a damage pulse `delay` seconds from now. `_fireNova`'s evolved second ring is
 ## the only caller, and `Game.step` is the only thing that lands it.
 func schedule_pulse(delay: float, radius: float, damage: float) -> void:
@@ -265,14 +363,33 @@ func update(delta: float) -> void:
 			live_strikes.append(strike)
 	strikes = live_strikes
 
+	# THE NUMBERS AGE HERE TOO, on the same call and by the same rule the original's own
+	# update loop uses (`ft.update(dt)`, then release at `life <= 0`). A number that is
+	# emitted and never aged is a number that never goes away -- the "screen greys out and
+	# stays grey" defect wearing a different hat, and the reason the lifetime is asserted
+	# rather than assumed.
+	var live_texts: Array = []
+	for text in texts:
+		text.update(delta)
+		if text.life > 0.0:
+			live_texts.append(text)
+	texts = live_texts
+
 ## Throw away everything alive. For a restart, and for a test that needs a still frame.
 func clear() -> void:
 	sparks.clear()
 	strikes.clear()
+	# A number outlives its hit by less than a second, so a restart that kept one would paint
+	# a damage figure over the menu -- the same reason the pulses go.
+	texts.clear()
 	# A restart drops scheduled damage with everything else. A pending pulse outliving
 	# the run it belonged to would land on the next one.
 	pulses.clear()
 
 ## True when there is nothing left to draw. A test can assert a still frame is still.
+##
+## `texts` counts, and it is the list a weapon's fire can fill without creating a `Shot`: a
+## floating text IS something to draw, so a sink that reported empty while holding one would
+## be lying to `verify_weapons.gd`'s "every weapon leaves something to DRAW".
 func is_empty() -> bool:
-	return sparks.is_empty() and strikes.is_empty()
+	return sparks.is_empty() and strikes.is_empty() and texts.is_empty()

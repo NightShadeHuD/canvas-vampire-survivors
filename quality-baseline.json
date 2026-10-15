@@ -25,8 +25,13 @@
         },
         {
             "id": "godot-not-installed-in-ci",
-            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent. NOTHING runs on a pull request, so before a commit reaches main the Godot half of this repository -- 13 suites, 483 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced a green gate under a PATH without Godot, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor who runs the gate gets a stronger check than the merge does. NARROWED, not discharged: .github/workflows/deploy-pages.yml now installs Godot 4.7.2 (pinned) and imports the project in a `verify` job that `deploy` needs, so the port IS enforced before anything is published -- but that triggers on push: main, AFTER the merge, so it cannot stop a bad commit reaching main. check:pixels still has no DISPLAY on a runner.",
+            "why": "check:godot and check:pixels both NOTICE and exit 0 where their tool is absent. NOTHING runs on a pull request, so before a commit reaches main the Godot half of this repository -- 13 suites, 548 assertions and the generated-data drift check -- is unenforced. Proved by a tooling audit: setting CONFIG.VERSION to 9.9.9 produced a green gate under a PATH without Godot, and the same tree failed correctly on drift the moment Godot was on PATH. A contributor who runs the gate gets a stronger check than the merge does. NARROWED, not discharged: .github/workflows/deploy-pages.yml now installs Godot 4.7.2 (pinned) and imports the project in a `verify` job that `deploy` needs, so the port IS enforced before anything is published -- but that triggers on push: main, AFTER the merge, so it cannot stop a bad commit reaching main. check:pixels still has no DISPLAY on a runner.",
             "removal": "The merge path runs the gate too -- a required status check on pull requests with Godot 4.7.x installed -- so the port is enforced BEFORE the merge and not only before the publish."
+        },
+        {
+            "id": "godot-mine-fuse-unread",
+            "why": "`\"fuse\": 1.2` is in the data and the TypeScript has a `Mine` entity with `fuse`/`maxFuse`, an armed state drawn at half-fuse, and a delayed blast. The Godot port strikes immediately on the fire frame with no mine entity, so there is no armed state to draw. Reported rather than invented when the visibility fix asked for the mine visual.",
+            "removal": "A Mine entity is ported with its fuse, or the field is declared unread."
         },
         {
             "id": "godot-early-evolve-unreachable",
@@ -39,24 +44,29 @@
             "removal": "Either the reader uses it, or the constant is deleted from src/data and the exporter."
         },
         {
-            "id": "godot-foe-flash-and-blink-unported",
-            "why": "src/entity-render.ts:217-227 draws a four-step chain: flash timer (white) > slow tint > armed-bomber blink > own colour. The port has NO flash timer at all and the bomber has no draw site, so two of the four steps do not exist. Pre-existing and previously unregistered -- found while porting the slow, which occupies the second position. `body_color()` keeps the slow branch in the original's chain POSITION so either lands above it.",
-            "removal": "A flash timer and a bomber blink exist, drawn in the original's order, with an assertion on the ordering."
-        },
-        {
-            "id": "godot-no-floating-damage-text",
-            "why": "src/weapons.ts:102 `_rollCrit` calls `game.createFloatingText(Math.round(dmg), x, y - 20, \"#ffee44\", {crit:true})` on EVERY hit, at a PER-TARGET position. The port has no floating-text system at all -- `grep -rn \"floating\\|FloatingText\" godot/ --include=*.gd` returns ONE hit, a comment in fx.gd:29 saying the port does not draw damage numbers. **Unassertable: no check can stand in for a drawing that does not exist.** Found while porting per-target crit, which is what makes the position per-target in the first place.",
-            "removal": "A floating-text system exists and a damage number is asserted to appear at the struck foe, not at the hero."
-        },
-        {
             "id": "godot-verify-achievements-partial-table",
             "why": "`verify_achievements.gd`'s boundary table is a HAND-WRITTEN list of 10 of the 21 achievement ids, and it omits `early_evolve` -- while `check:godot`'s own label for that suite claims \"EVERY achievement is reachable and fires on its boundary\". **A claim one row wider than the coverage**, which is the class AGENTS.md spends a section on. It is how `godot-early-evolve-unreachable` stayed invisible: the suite that claims to check every achievement never looked at the one that cannot fire. Found by the agent closing the volley-crit gap, measuring the adjacent claim.",
             "removal": "The table is derived from the achievement registry (the way `verify_weapons` drives the real weapon table, rule 12), so a new achievement without an implemented check fails the suite -- and the gate label matches what the suite does."
         },
         {
-            "id": "godot-two-archetype-rolls-unpinned",
-            "why": "`_roll_crit`'s doc prose claims the projectile, orbit, aura and mine arms each draw ZERO crits. **Only two of the four are pinned by an assertion.** Measured by the agent that merged onto da96c02: re-adding `_roll_crit` to the ORBIT arm leaves `verify_weapons` PASS, and so does re-adding it to the MINE arm. Projectile is pinned by the knife ratio (1.1083 vs 1.0000) and aura by the draw count (0.1763 vs 0.1678). **A prose claim wider than its coverage**, in the change that closed `godot-volley-wide-crit-on-four-archetypes` -- which is the same defect class the register entry `godot-verify-achievements-partial-table` records one file over. The fix is a per-arm draw-count assertion driven by the archetype table, not four hand-written cases.",
-            "removal": "All four arms are pinned by an assertion driven from the archetype table, and the prose claim matches the number of arms actually pinned."
+            "id": "godot-damage-number-settings-unguarded",
+            "why": "`createFloatingText` returns early TWICE in the original -- `src/main.ts:1759` `if (this.save.settings.reducedMotion) return;` and `:1763` if `damageNumbers === false` -- and neither guard has a reader in the port. `grep -rn 'damageNumbers' godot/` is 0 hits, so the field does not exist in this port's save at all, and `reducedMotion` is exactly 1 hit, the declaration at `godot/scripts/save.gd:60`, read by nothing. So the damage numbers cannot be switched off the way the original switches them off, and that is an ACCESSIBILITY regression rather than a missing convenience: `reducedMotion` exists to suppress exactly this kind of motion, and a rising, fading number is the most motion-heavy thing the port now draws.",
+            "removal": "`reducedMotion` is read by the floating-text sink, and `damageNumbers` exists in the port's save with an assertion that false suppresses the number and true does not."
+        },
+        {
+            "id": "godot-floating-text-call-sites-unwired",
+            "why": "`grep -rn createFloatingText src/` is 11 CALL SITES in 9 groups. TWO groups are wired: `_rollCrit`'s pair (melee/instant/nova/drain) and the projectile impact at `src/main.ts:1476`. The other EIGHT draw nothing, each named rather than folded into one 'numbers are not ported': `main.ts:1366` the cold tick `#88ccff` at -36; `main.ts:1384` contact damage `#ff3333` at -30; `entities.ts:214` `'Miss!'` `#88ffcc` at -30; `:390` the bomber's blast `#ff4433` at -28; `:547` an enemy bolt `#ff6644` at -30; `:737` `OrbitShard.update` `#ffffcc` at -18 (NO crit and NO hp guard); `:777` `Mine.update` `#ff9944` at -20; `:830` an XP pickup `#66bbff` at -40. The last two are the ones a reader of `_updateProjectiles` would NOT find, because neither is in `game.projectiles`.",
+            "removal": "All 11 call sites have a sink, or each of the eight is declared unread with the reason it is not drawn."
+        },
+        {
+            "id": "godot-bomber-flag-unread",
+            "why": "Rule 12. `godot/data/enemies.gd` carries `\"bomber\": true` on the Bomber row and NOTHING reads it: `grep -rn bomber godot/scripts/*.gd` returns only ARCHETYPE-STRING comparisons (`enemy.gd:192`, `game.gd:419`) plus identifiers like `_tick_bomber`. The original reads the BOOLEAN -- `src/entities.ts:338` `this.bomber = !!type.bomber`, `:376` `if (this.bomber)`, `src/entity-render.ts:222` `self.bomber && self.fuseArmed` gates the blink this work ported. **So this port's blink is gated on the archetype STRING where the original's is gated on the flag. They are the same fact today and two fields tomorrow.**",
+            "removal": "`enemy.gd` reads the declared `bomber` flag (or the exporter drops it), and `verify_archetypes.gd` drives the data by the flag the way `verify_weapons` drives the real weapon table."
+        },
+        {
+            "id": "check-claims-timeout-reads-low",
+            "why": "FOUND WHILE INTEGRATING. `scripts/lib/measurements.mjs:120` sums `/^ {2}ok {3}/` across 13 suites run with a **120 s timeout**, and sets `failed` ONLY on a `verify_X: FAIL` verdict line. **A TIMEOUT truncates with no verdict, so the total silently reads LOW and `check:claims` blames the DOCUMENT** -- the exact shape of entry 13 in `docs/PROBE-CAVEATS.md`, one level up at the measurement. CONTROL: `timeout 2 godot ... verify_slice.gd` -> 10 ok lines, NO verdict, 0 FAIL, i.e. exactly one low. Measured under load: `verify_slice` took **116.3 s against the 120 s limit**, and it is FIRST in the list, so it eats Godot's cold start. Observed live: `check:claims` read **547** once and **548** four times.",
+            "removal": "A truncated suite is reported as unmeasured (or the timeout is per-suite and generous), so a low total can never be mistaken for a document that disagrees."
         }
     ],
     "coverageFloors": {
@@ -398,17 +408,17 @@
     "godotAssertionFloors": {
         "res://verify_data.gd": 8,
         "res://verify_slice.gd": 11,
-        "res://verify_scene.gd": 101,
+        "res://verify_scene.gd": 100,
         "res://verify_play.gd": 14,
         "res://verify_xp.gd": 26,
-        "res://verify_weapons.gd": 146,
+        "res://verify_weapons.gd": 198,
         "res://verify_lightning.gd": 21,
         "res://verify_passives.gd": 20,
         "res://verify_invariants.gd": 11,
-        "res://verify_archetypes.gd": 19,
+        "res://verify_archetypes.gd": 33,
         "res://verify_assertions.gd": 50,
         "res://verify_achievements.gd": 35,
         "res://verify_save.gd": 21
     },
-    "pixelAssertionFloor": 43
+    "pixelAssertionFloor": 55
 }
