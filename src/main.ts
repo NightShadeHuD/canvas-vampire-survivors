@@ -36,6 +36,7 @@ import { InputManager } from './input.ts';
 import { HapticEngine } from './haptics.ts';
 import { loadKeymap, saveKeymap } from './keymap.ts';
 import { UI } from './ui.ts';
+import { html, mount } from './safe-html.ts';
 import { FpsMeter, ShakeCamera } from './systems.ts';
 import { SpatialHash } from './spatial-hash.ts';
 import { Pool, resetFloatingText, resetParticle } from './pool.ts';
@@ -52,6 +53,8 @@ import {
     recordHighScore,
     recordSpeedrunScore,
     resetSave,
+    sanitiseHighScoreEntry,
+    sanitiseSpeedrunEntry,
     saveSave,
     DEFAULT_SAVE,
     structuredCloneCompat
@@ -453,29 +456,46 @@ export class Game {
         if (typeof window === 'undefined') return;
         window.addEventListener('vs-leaderboard-import', (ev) => {
             const payload = (ev as CustomEvent).detail || {};
+            // Whatever was pasted into the Import box is untrusted by
+            // definition — it is the game's own "share this JSON" text, and
+            // anyone can send anyone anything. It is validated here, at the one
+            // place it enters, and NOT here alone: the entries that survive this
+            // gate still contain arbitrary STRINGS (a weapon name is a string
+            // and so is a payload), and the sink in `src/ui.ts` is what makes
+            // those inert. This gate bounds the numbers and the count; the
+            // escaper bounds everything else.
+            const maxEntries = 200;
             try {
                 if (Array.isArray(payload.normal)) {
                     const seen = new Set(
                         (this.save.highScores || []).map((r) => `${r.date}|${r.timeSurvived}`)
                     );
-                    for (const r of payload.normal) {
+                    let added = 0;
+                    for (const incoming of payload.normal) {
+                        if (added >= maxEntries) break;
+                        const r = sanitiseHighScoreEntry(incoming);
+                        if (!r) continue;
                         const k = `${r.date}|${r.timeSurvived}`;
-                        if (!seen.has(k)) {
-                            recordHighScore(this.save, r);
-                            seen.add(k);
-                        }
+                        if (seen.has(k)) continue;
+                        recordHighScore(this.save, r);
+                        seen.add(k);
+                        added++;
                     }
                     saveSave(this.save);
                 }
                 if (Array.isArray(payload.speedrun)) {
                     const existing = loadSpeedrunScores();
                     const seen = new Set(existing.map((r) => `${r.date}|${r.timeMs}`));
-                    for (const r of payload.speedrun) {
+                    let added = 0;
+                    for (const incoming of payload.speedrun) {
+                        if (added >= maxEntries) break;
+                        const r = sanitiseSpeedrunEntry(incoming);
+                        if (!r) continue;
                         const k = `${r.date}|${r.timeMs}`;
-                        if (!seen.has(k)) {
-                            recordSpeedrunScore(r);
-                            seen.add(k);
-                        }
+                        if (seen.has(k)) continue;
+                        recordSpeedrunScore(r);
+                        seen.add(k);
+                        added++;
                     }
                 }
                 // Refresh the open leaderboard view if the dialog is still up.
@@ -845,14 +865,16 @@ export class Game {
             overlay.style.display = 'none';
             this.startTutorialRun();
         };
-        overlay.innerHTML = `
-            <div class="overlay-card tutorial-offer-card">
+        mount(
+            overlay,
+            html` <div class="overlay-card tutorial-offer-card">
                 <h2>${_t('tutorialOffer')}</h2>
                 <div class="btn-row">
                     <button id="tutorialOfferYes" class="btn primary">${_t('tryTutorial')}</button>
                     <button id="tutorialOfferNo" class="btn ghost">${_t('skipTutorial')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         overlay.style.display = 'flex';
         overlay.querySelector('#tutorialOfferYes')?.addEventListener('click', accept);
         overlay.querySelector('#tutorialOfferNo')?.addEventListener('click', dismiss);
@@ -917,10 +939,12 @@ export class Game {
             }
             return;
         }
-        banner.innerHTML = `
-            <strong>${prompt.title}</strong>
-            <span class="tutorial-body">${prompt.body}</span>
-            <span class="tutorial-skip-hint">${_t('tutorialSkipHint')}</span>`;
+        mount(
+            banner,
+            html` <strong>${prompt.title}</strong>
+                <span class="tutorial-body">${prompt.body}</span>
+                <span class="tutorial-skip-hint">${_t('tutorialSkipHint')}</span>`
+        );
         banner.style.display = 'block';
     }
 

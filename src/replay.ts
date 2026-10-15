@@ -38,9 +38,17 @@
 // to `v2` without colliding with old payloads.
 export const REPLAY_STORAGE_KEY = 'vs_replay_last_v1';
 export const REPLAY_VERSION = 1;
-// Cap a recorded run at 30 minutes worth of frames at 60fps. Anything past
-// the cap is truncated (record() returns false) so a runaway test loop never
-// fills localStorage.
+// Cap a run at 30 minutes worth of frames at 60fps.
+//
+// F4: this used to be a WRITE-ONLY cap. `record()` refused frames past it and
+// nothing else ever asked, so a 149-byte blob with `frames: [[0,0,1000000000]]`
+// expanded a billion frames on READ and killed the renderer — and because the
+// blob stayed in localStorage, Replay crashed the tab on every visit with no
+// paste, no import box and no way out but clearing site data.
+//
+// It is now enforced wherever frames are EXPANDED (`expandFrames`, and through
+// it `ReplayPlayer` and `loadReplay`), because a cap that only one direction of
+// the round trip honours is not a cap.
 export const REPLAY_MAX_FRAMES = 60 * 60 * 30;
 
 // -- minimal localStorage adapter (mirrors storage.ts, kept local so replay --
@@ -105,7 +113,16 @@ export function compressFrames(frames: Array<[number, number]>) {
     return out;
 }
 
-/** Inverse of `compressFrames`: expand RLE triplets back to a per-frame list. */
+/**
+ * Inverse of `compressFrames`: expand RLE triplets back to a per-frame list.
+ *
+ * BOUNDED ON READ. `count` comes from a stored blob and is an attacker-chosen
+ * integer, so it is validated (a finite, positive number) and the TOTAL is
+ * capped at `REPLAY_MAX_FRAMES` — the same number `record()` has always
+ * enforced on the way in. The loop stops the moment the cap is reached rather
+ * than expanding and then truncating, because the expansion IS the denial of
+ * service: one frame is ~40 bytes of heap, so a billion of them is ~34 GB.
+ */
 export function expandFrames(rle: Array<[number, number, number]>) {
     // A PAIR, not a triplet. These two buffers look alike and are not: the one
     // above holds RLE runs of (x, y, count), this one holds expanded (x, y)
@@ -114,9 +131,19 @@ export function expandFrames(rle: Array<[number, number, number]>) {
     const out: Array<[number, number]> = [];
     if (!Array.isArray(rle)) return out;
     for (const entry of rle) {
+        if (out.length >= REPLAY_MAX_FRAMES) break;
         if (!Array.isArray(entry) || entry.length < 3) continue;
-        const [x, y, count] = entry;
-        for (let i = 0; i < count; i++) out.push([x, y]);
+        const x = entry[0];
+        const y = entry[1];
+        const count = entry[2];
+        // `typeof === 'number'`, not `Number(...)`. A numeric STRING coerces,
+        // and a validator that coerces is a validator that accepts a value of
+        // the wrong type — which is the whole class of defect this audit is.
+        if (typeof x !== 'number' || !Number.isFinite(x)) continue;
+        if (typeof y !== 'number' || !Number.isFinite(y)) continue;
+        if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) continue;
+        const take = Math.min(Math.floor(count), REPLAY_MAX_FRAMES - out.length);
+        for (let i = 0; i < take; i++) out.push([x, y]);
     }
     return out;
 }
@@ -252,14 +279,85 @@ export function saveReplay(blob) {
     }
 }
 
-/** Load the saved replay or `null` if none exists / version mismatch. */
-export function loadReplay() {
+/**
+ * Validate a parsed replay blob, or refuse it.
+ *
+ * `parsed.version !== REPLAY_VERSION` was the entire check (F5 and F4 both go
+ * through here). A version number says the payload was written by this build of
+ * the FORMAT and says nothing about whether the fields are the shape the reader
+ * assumes: `stage` reached `showReplayMenu`'s `innerHTML`, `frames` reached
+ * `expandFrames`, and `dt` reached the simulation step.
+ *
+ * Refusing returns `null`, which every caller already handles as "no replay" —
+ * so a malformed blob is a friendly empty state, not a crash and not a payload.
+ */
+export function sanitiseReplay(parsed: unknown): ReplayBlob | null {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const r = parsed as Record<string, unknown>;
+    if (r.version !== REPLAY_VERSION) return null;
+    if (!Array.isArray(r.frames)) return null;
+    const frames = sanitiseRle(r.frames);
+    if (!frames) return null;
+    const dt = Number(r.dt);
+    return {
+        version: REPLAY_VERSION,
+        savedAt: Math.max(0, finiteOr(r.savedAt, 0)),
+        seed: finiteOr(r.seed, 1) >>> 0,
+        // A slug, not a free string: `main.ts` writes it into
+        // `save.settings.stage`, and an unknown id falls back to the default
+        // stage rather than travelling any further.
+        stage: /^[a-z0-9_-]{1,32}$/.test(String(r.stage)) ? String(r.stage) : 'forest',
+        difficulty: /^[a-z]{1,16}$/.test(String(r.difficulty)) ? String(r.difficulty) : 'normal',
+        dt: Number.isFinite(dt) && dt > 0 && dt <= 1 ? dt : 1 / 60,
+        frames: frames,
+        finalKills: Math.max(0, Math.floor(finiteOr(r.finalKills, 0))),
+        finalTime: Math.max(0, finiteOr(r.finalTime, 0)),
+        finalLevel: Math.max(1, Math.floor(finiteOr(r.finalLevel, 1))),
+        truncated: r.truncated === true
+    };
+}
+
+/** A finite number, or a fallback. `Number(true)` is 1 and `Number(null)` is 0. */
+function finiteOr(value: unknown, fallback: number): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Clean an RLE frame list: three finite numbers per run, positions clamped to
+ * the normalised -1..1 input space, and no more runs than a capped replay could
+ * possibly contain. Returns `null` when the value is not a list at all, so the
+ * caller can refuse the whole blob.
+ */
+function sanitiseRle(raw: unknown[]): Array<[number, number, number]> | null {
+    if (!Array.isArray(raw)) return null;
+    const out: Array<[number, number, number]> = [];
+    const limit = Math.min(raw.length, REPLAY_MAX_FRAMES);
+    for (let i = 0; i < limit; i++) {
+        const entry = raw[i];
+        if (!Array.isArray(entry) || entry.length < 3) continue;
+        const x = entry[0];
+        const y = entry[1];
+        const count = entry[2];
+        if (typeof x !== 'number' || !Number.isFinite(x)) continue;
+        if (typeof y !== 'number' || !Number.isFinite(y)) continue;
+        if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) continue;
+        out.push([
+            Math.min(1, Math.max(-1, x)),
+            Math.min(1, Math.max(-1, y)),
+            Math.min(Math.floor(count), REPLAY_MAX_FRAMES)
+        ]);
+    }
+    return out;
+}
+
+/** Load the saved replay, or `null` if there is none or it does not validate. */
+export function loadReplay(): ReplayBlob | null {
     try {
         const raw = usableLS() ? window.localStorage.getItem(REPLAY_STORAGE_KEY) : _memoryFallback;
         if (!raw) return null;
         const parsed = JSON.parse(raw);
-        if (!parsed || parsed.version !== REPLAY_VERSION) return null;
-        return parsed;
+        return sanitiseReplay(parsed);
     } catch (err) {
         console.warn('[replay] failed to load replay', err);
         return null;

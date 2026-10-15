@@ -17,6 +17,7 @@ import { CONFIG } from './config.ts';
 import { t, setLocale, availableLocales } from './i18n.ts';
 import { getStage, listStages } from './stages.ts';
 import { buildShareText, dailyStreakSummary, loadDailyHistory } from './daily.ts';
+import type { StreakDay } from './daily.ts';
 import {
     DEFAULT_KEYMAP,
     KEYMAP_ACTIONS,
@@ -26,6 +27,7 @@ import {
     keyLabel,
     normaliseKey
 } from './keymap.ts';
+import { clearHtml, html, mount } from './safe-html.ts';
 
 export class UI {
     /** The owning `Game`; the UI reads state off it but never drives it. */
@@ -153,25 +155,28 @@ export class UI {
         const m = this.els.stagePickerScreen;
         if (!m) return;
         const stages = listStages();
-        m.innerHTML = `
-            <div class="overlay-card stage-picker-card">
+        mount(
+            m,
+            html` <div class="overlay-card stage-picker-card">
                 <h2>${t('chooseStage')}</h2>
                 <div class="stage-grid">
-                    ${stages
-                        .map(
-                            (s) => `
-                            <button class="stage-card ${s.id === currentId ? 'active' : ''}" data-stage="${s.id}">
+                    ${stages.map(
+                        (s) =>
+                            html` <button
+                                class="stage-card ${s.id === currentId ? 'active' : ''}"
+                                data-stage="${s.id}"
+                            >
                                 <div class="stage-icon">${s.icon}</div>
                                 <div class="stage-name">${s.name}</div>
                                 <div class="stage-desc">${s.description}</div>
                             </button>`
-                        )
-                        .join('')}
+                    )}
                 </div>
                 <div class="btn-row">
                     <button id="stageClose" class="btn primary">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -217,40 +222,46 @@ export class UI {
         // Render the 14 cells oldest -> newest so the row reads left-to-right
         // like a calendar; reverse the summary array (which is newest-first).
         const cells = summary.days.slice().reverse();
-        const cellHtml = cells
-            .map((d) => {
-                const cls = d.played
-                    ? d.won
-                        ? 'streak-cell won'
-                        : 'streak-cell played'
-                    : 'streak-cell missed';
-                const tip = d.played
-                    ? `${d.date} · ${Math.floor(d.timeSurvived / 60)}:${String(Math.floor(d.timeSurvived % 60)).padStart(2, '0')} · ${d.kills} kills`
-                    : `${d.date} — no run`;
-                const day = d.date.slice(8);
-                // role="listitem" because the wrapper is role="list"; axe
-                // reports aria-required-children without it.
-                return `<div class="${cls}" role="listitem" title="${tip}" aria-label="${tip}">${day}</div>`;
-            })
-            .join('');
+        const cellFor = (d: StreakDay) => {
+            const cls = d.played
+                ? d.won
+                    ? 'streak-cell won'
+                    : 'streak-cell played'
+                : 'streak-cell missed';
+            const tip = d.played
+                ? `${d.date} · ${Math.floor(d.timeSurvived / 60)}:${String(Math.floor(d.timeSurvived % 60)).padStart(2, '0')} · ${d.kills} kills`
+                : `${d.date} — no run`;
+            const day = d.date.slice(8);
+            // role="listitem" because the wrapper is role="list"; axe
+            // reports aria-required-children without it.
+            return html`<div class="${cls}" role="listitem" title="${tip}" aria-label="${tip}">
+                ${day}
+            </div>`;
+        };
         const empty =
             summary.current === 0 && summary.best === 0
-                ? `<div class="hs-empty">${t('noStreakYet')}</div>`
+                ? html`<div class="hs-empty">${t('noStreakYet')}</div>`
                 : '';
-        m.innerHTML = `
-            <div class="overlay-card streak-card">
+        mount(
+            m,
+            html` <div class="overlay-card streak-card">
                 <h2>${t('dailyStreak')}</h2>
                 <div class="streak-stats">
-                    <div class="streak-pill"><span>${t('currentStreak')}</span><strong>${summary.current}</strong></div>
-                    <div class="streak-pill"><span>${t('bestStreak')}</span><strong>${summary.best}</strong></div>
+                    <div class="streak-pill">
+                        <span>${t('currentStreak')}</span><strong>${summary.current}</strong>
+                    </div>
+                    <div class="streak-pill">
+                        <span>${t('bestStreak')}</span><strong>${summary.best}</strong>
+                    </div>
                 </div>
                 <div class="streak-label">${t('last14Days')}</div>
-                <div class="streak-grid" role="list">${cellHtml}</div>
+                <div class="streak-grid" role="list">${cells.map(cellFor)}</div>
                 ${empty}
                 <div class="btn-row">
                     <button id="streakClose" class="btn primary">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -276,21 +287,23 @@ export class UI {
             [',', t('helpKeySettings')],
             ['Enter / Space', t('helpKeyConfirm')]
         ];
-        m.innerHTML = `
-            <div class="overlay-card help-card">
+        mount(
+            m,
+            html` <div class="overlay-card help-card">
                 <h2>${t('helpTitle')}</h2>
                 <div class="help-rows">
-                    ${rows
-                        .map(
-                            ([k, v]) =>
-                                `<div class="help-row"><kbd>${k}</kbd><span>${v}</span></div>`
-                        )
-                        .join('')}
+                    ${rows.map(
+                        (row) =>
+                            html`<div class="help-row">
+                                <kbd>${row[0]}</kbd><span>${row[1]}</span>
+                            </div>`
+                    )}
                 </div>
                 <div class="btn-row">
                     <button id="helpClose" class="btn primary">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -307,8 +320,9 @@ export class UI {
     showHowToPlay(onClose?) {
         const m = this.els.howToPlayScreen;
         if (!m) return;
-        m.innerHTML = `
-            <div class="overlay-card howto-card">
+        mount(
+            m,
+            html` <div class="overlay-card howto-card">
                 <h2>${t('howToTitle')}</h2>
                 <ol class="howto-list">
                     <li>${t('howToBody1')}</li>
@@ -319,7 +333,8 @@ export class UI {
                 <div class="btn-row">
                     <button id="howtoClose" class="btn primary">${t('gotIt')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -348,14 +363,16 @@ export class UI {
             container?.appendChild(m);
         }
         if (!blob) {
-            m.innerHTML = `
-                <div class="overlay-card replay-card">
+            mount(
+                m,
+                html` <div class="overlay-card replay-card">
                     <h2>${t('replayLastRun')}</h2>
                     <div class="hs-empty">${t('noReplay')}</div>
                     <div class="btn-row">
                         <button id="replayClose" class="btn primary">${t('close')}</button>
                     </div>
-                </div>`;
+                </div>`
+            );
             m.style.display = 'flex';
             m.querySelector('#replayClose')?.addEventListener('click', () => {
                 m.style.display = 'none';
@@ -368,8 +385,9 @@ export class UI {
         const ss = Math.floor((blob.finalTime || 0) % 60)
             .toString()
             .padStart(2, '0');
-        m.innerHTML = `
-            <div class="overlay-card replay-card">
+        mount(
+            m,
+            html` <div class="overlay-card replay-card">
                 <h2>${t('replayLastRun')}</h2>
                 <div class="replay-summary">
                     <div><strong>${t('time')}:</strong> ${mm}:${ss}</div>
@@ -385,7 +403,8 @@ export class UI {
                 <div class="btn-row">
                     <button id="replayClose" class="btn ghost">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -423,8 +442,12 @@ export class UI {
                       d.getDate()
                   ).padStart(2, '0')}`;
             const ws = Array.isArray(r.weapons) && r.weapons.length ? r.weapons.join(' + ') : '—';
-            const nh = r.noHit ? `<span class="no-hit">${t('noHit')}</span>` : '';
-            return `<div class="hs-row wide"><span>${i + 1}</span><span>${mm}:${ss}</span><span>Lv.${r.level ?? 1}</span><span>${r.kills ?? 0}</span><span class="weapons">${ws}</span><span>${dstr}</span><span>${nh}</span></div>`;
+            const nh = r.noHit ? html`<span class="no-hit">${t('noHit')}</span>` : '';
+            return html`<div class="hs-row wide">
+                <span>${i + 1}</span><span>${mm}:${ss}</span><span>Lv.${r.level ?? 1}</span
+                ><span>${r.kills ?? 0}</span><span class="weapons">${ws}</span><span>${dstr}</span
+                ><span>${nh}</span>
+            </div>`;
         };
         const renderSpeedRow = (r, i) => {
             const ms = r.timeMs || 0;
@@ -444,19 +467,31 @@ export class UI {
                       d.getDate()
                   ).padStart(2, '0')}`;
             const ws = Array.isArray(r.weapons) && r.weapons.length ? r.weapons.join(' + ') : '—';
-            return `<div class="hs-row wide"><span>${i + 1}</span><span>${mm}:${ss}.${ml}</span><span>Lv.${r.level ?? 1}</span><span>${r.kills ?? 0}</span><span class="weapons">${ws}</span><span>${dstr}</span></div>`;
+            return html`<div class="hs-row wide">
+                <span>${i + 1}</span><span>${mm}:${ss}.${ml}</span><span>Lv.${r.level ?? 1}</span
+                ><span>${r.kills ?? 0}</span><span class="weapons">${ws}</span><span>${dstr}</span>
+            </div>`;
         };
-        m.innerHTML = `
-            <div class="overlay-card leaderboard-card">
+        const normalHead = html`<div class="hs-head wide">
+            <span>#</span><span>${t('time')}</span><span>${t('level')}</span
+            ><span>${t('kills')}</span><span>${t('weapons')}</span><span>${t('date')}</span
+            ><span>${t('noHit')}</span>
+        </div>`;
+        const speedHead = html`<div class="hs-head wide">
+            <span>#</span><span>${t('time')}</span><span>${t('level')}</span
+            ><span>${t('kills')}</span><span>${t('weapons')}</span><span>${t('date')}</span>
+        </div>`;
+        mount(
+            m,
+            html` <div class="overlay-card leaderboard-card">
                 <h2>${t('leaderboard')}</h2>
                 <section class="lb-section">
                     <h3>${t('highScores')} (${normalScores.length})</h3>
                     <div class="hs-list scroll">
                         ${
                             normalScores.length
-                                ? `<div class="hs-head wide"><span>#</span><span>${t('time')}</span><span>${t('level')}</span><span>${t('kills')}</span><span>${t('weapons')}</span><span>${t('date')}</span><span>${t('noHit')}</span></div>` +
-                                  normalScores.map(renderRow).join('')
-                                : `<div class="hs-empty">${t('noHighScores')}</div>`
+                                ? [normalHead, normalScores.map(renderRow)]
+                                : html`<div class="hs-empty">${t('noHighScores')}</div>`
                         }
                     </div>
                 </section>
@@ -465,19 +500,25 @@ export class UI {
                     <div class="hs-list scroll">
                         ${
                             speedrunScores.length
-                                ? `<div class="hs-head wide"><span>#</span><span>${t('time')}</span><span>${t('level')}</span><span>${t('kills')}</span><span>${t('weapons')}</span><span>${t('date')}</span></div>` +
-                                  speedrunScores.map(renderSpeedRow).join('')
-                                : `<div class="hs-empty">${t('noHighScores')}</div>`
+                                ? [speedHead, speedrunScores.map(renderSpeedRow)]
+                                : html`<div class="hs-empty">${t('noHighScores')}</div>`
                         }
                     </div>
                 </section>
-                <textarea id="lbJson" class="lb-json" rows="4" aria-label="${t('paste')}" placeholder='${t('paste')}'></textarea>
+                <textarea
+                    id="lbJson"
+                    class="lb-json"
+                    rows="4"
+                    aria-label="${t('paste')}"
+                    placeholder="${t('paste')}"
+                ></textarea>
                 <div class="btn-row">
                     <button id="lbExport" class="btn ghost">${t('export')}</button>
                     <button id="lbImport" class="btn ghost">${t('import')}</button>
                     <button id="lbClose" class="btn primary">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -518,24 +559,25 @@ export class UI {
         if (!m) return;
         const total = ACHIEVEMENTS.length;
         const earned = ACHIEVEMENTS.filter((a) => unlocked[a.id]).length;
-        m.innerHTML = `
-            <div class="overlay-card achievements-card">
+        mount(
+            m,
+            html` <div class="overlay-card achievements-card">
                 <h2>${t('achievements')} <span class="ach-count">${earned} / ${total}</span></h2>
                 <div class="ach-grid">
                     ${ACHIEVEMENTS.map((a) => {
                         const got = !!unlocked[a.id];
-                        return `
-                            <div class="ach-card ${got ? 'earned' : 'locked'}">
-                                <div class="ach-card-icon">${got ? a.icon : '🔒'}</div>
-                                <div class="ach-card-name">${got ? a.name : '???'}</div>
-                                <div class="ach-card-desc">${a.description}</div>
-                            </div>`;
-                    }).join('')}
+                        return html` <div class="ach-card ${got ? 'earned' : 'locked'}">
+                            <div class="ach-card-icon">${got ? a.icon : '🔒'}</div>
+                            <div class="ach-card-name">${got ? a.name : '???'}</div>
+                            <div class="ach-card-desc">${a.description}</div>
+                        </div>`;
+                    })}
                 </div>
                 <div class="btn-row">
                     <button id="achClose" class="btn primary">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         const close = () => {
             m.style.display = 'none';
@@ -601,7 +643,7 @@ export class UI {
 
     _renderChips(container, items) {
         if (!container) return;
-        container.innerHTML = '';
+        clearHtml(container);
         for (const it of items) {
             const div = document.createElement('div');
             div.className = 'chip active' + (it.level >= it.max ? ' maxed' : '');
@@ -629,7 +671,7 @@ export class UI {
 
     showLevelUp(player, onPick) {
         const options = this.els.upgradeOptions;
-        options.innerHTML = '';
+        clearHtml(options);
         const pool = buildUpgradePool(player);
         // pool is [...live, ...maxed]. We pick from `live` first, fall back to
         // maxed only when there is nothing else to surface.
@@ -666,18 +708,21 @@ export class UI {
                 lvl + 1 === up.data.evolveLevel &&
                 up.data.evolveName;
             const evoHtml = willEvolve
-                ? `<div class="evolve-tag">→ ${up.data.evolveName}</div>`
+                ? html`<div class="evolve-tag">→ ${up.data.evolveName}</div>`
                 : '';
             if (isMaxed) div.classList.add('maxed');
             div.setAttribute(
                 'aria-label',
                 `${up.data.name}${label}. ${up.data.description}${willEvolve ? '. Evolves into ' + up.data.evolveName : ''}`
             );
-            div.innerHTML = `
-                <div class="name">${up.data.icon} ${up.data.name}${label}</div>
-                <div class="desc">${up.data.description}</div>
-                ${evoHtml}
-            `;
+            mount(
+                div,
+                html`
+                    <div class="name">${up.data.icon} ${up.data.name}${label}</div>
+                    <div class="desc">${up.data.description}</div>
+                    ${evoHtml}
+                `
+            );
             // MAXED options heal a sliver instead of vanishing — they pay out something.
             div.addEventListener('click', () => onPick(isMaxed ? null : up));
             div.setAttribute('tabindex', '0');
@@ -775,13 +820,15 @@ export class UI {
         if (!host) return;
         const el = document.createElement('div');
         el.className = 'ach-toast';
-        el.innerHTML = `
-            <div class="ach-icon">${ach.icon}</div>
-            <div class="ach-body">
-                <div class="ach-title">${t('achievementUnlocked')}</div>
-                <div class="ach-name">${ach.name}</div>
-                <div class="ach-desc">${ach.description}</div>
-            </div>`;
+        mount(
+            el,
+            html` <div class="ach-icon">${ach.icon}</div>
+                <div class="ach-body">
+                    <div class="ach-title">${t('achievementUnlocked')}</div>
+                    <div class="ach-name">${ach.name}</div>
+                    <div class="ach-desc">${ach.description}</div>
+                </div>`
+        );
         host.appendChild(el);
         // fade-in
         requestAnimationFrame(() => el.classList.add('visible'));
@@ -802,12 +849,18 @@ export class UI {
             opts.vibrationSupported !== false
                 ? checkboxRow('vibration', settings.vibration !== false)
                 : '';
+        // One template rather than two concatenated fragments: `html` returns a
+        // SafeHtml, and `+` on two of them is a type error by design — the
+        // operator that joins strings silently drops the escaping guarantee.
         const remapRow = opts.onRemap
-            ? `<div class="settings-row"><span>${t('customizeControls')}</span>` +
-              `<button data-action="remap">${t('customizeControls')}</button></div>`
+            ? html`<div class="settings-row">
+                  <span>${t('customizeControls')}</span>
+                  <button data-action="remap">${t('customizeControls')}</button>
+              </div>`
             : '';
-        m.innerHTML = `
-            <div class="settings-card">
+        mount(
+            m,
+            html` <div class="settings-card">
                 <h2>${t('settings')}</h2>
                 ${sliderRow('masterVolume', settings.masterVolume)}
                 ${sliderRow('sfxVolume', settings.sfxVolume)}
@@ -819,8 +872,7 @@ export class UI {
                 ${checkboxRow('reducedMotion', settings.reducedMotion)}
                 ${checkboxRow('colorblind', !!settings.colorblind)}
                 ${checkboxRow('damageNumbers', settings.damageNumbers !== false)}
-                ${checkboxRow('criticalFlash', settings.criticalFlash !== false)}
-                ${vibrationRow}
+                ${checkboxRow('criticalFlash', settings.criticalFlash !== false)} ${vibrationRow}
                 ${selectRow('locale', settings.locale, availableLocales())}
                 ${selectRow('touchButtonScale', String(settings.touchButtonScale ?? 1), ['0.8', '1', '1.2'])}
                 ${remapRow}
@@ -828,7 +880,8 @@ export class UI {
                     <button class="danger" data-action="reset">${t('resetData')}</button>
                     <button data-action="close">${t('close')}</button>
                 </div>
-            </div>`;
+            </div>`
+        );
         m.style.display = 'flex';
         m.addEventListener('input', handler);
         m.addEventListener('change', handler);
@@ -921,32 +974,38 @@ export class UI {
                 const keys = working[action] || [];
                 const isCapturing = capturingAction === action;
                 const labels = keys.map((k) => keyLabel(k)).join(' / ') || '—';
-                const row =
-                    `<div class="remap-row${isCapturing ? ' capturing' : ''}" data-action="${action}" tabindex="0">` +
-                    `<span class="remap-label">${t('remap_' + action) || action}</span>` +
-                    `<span class="remap-keys${conflictKeys.has(keys[0]) ? ' conflict' : ''}">${
-                        isCapturing ? t('pressAnyKey') : labels
-                    }</span>` +
-                    '</div>';
-                return row;
-            }).join('');
+                return html` <div
+                    class="remap-row${isCapturing ? ' capturing' : ''}"
+                    data-action="${action}"
+                    tabindex="0"
+                >
+                    <span class="remap-label">${t('remap_' + action) || action}</span>
+                    <span class="remap-keys${conflictKeys.has(keys[0]) ? ' conflict' : ''}"
+                        >${isCapturing ? t('pressAnyKey') : labels}</span
+                    >
+                </div>`;
+            });
             const conflictMsg = conflicts.length
-                ? `<div class="remap-conflicts">${t('keymapConflict')}: ${conflicts
-                      .map((c) => `${keyLabel(c.key)} → ${c.actions.join(' / ')}`)
-                      .join(', ')}</div>`
+                ? html`<div class="remap-conflicts">
+                      ${t('keymapConflict')}:
+                      ${conflicts
+                          .map((c) => `${keyLabel(c.key)} → ${c.actions.join(' / ')}`)
+                          .join(', ')}
+                  </div>`
                 : '';
-            host.innerHTML = `
-                <div class="settings-card remap-card">
+            mount(
+                host,
+                html` <div class="settings-card remap-card">
                     <h2>${t('customizeControls')}</h2>
                     <div class="remap-hint">${t('remapHint')}</div>
-                    ${rows}
-                    ${conflictMsg}
+                    ${rows} ${conflictMsg}
                     <div class="settings-buttons">
                         <button data-action="reset-defaults">${t('resetDefaults')}</button>
                         <button data-action="cancel">${t('cancel')}</button>
                         <button data-action="save">${t('save')}</button>
                     </div>
-                </div>`;
+                </div>`
+            );
             host.style.display = 'flex';
         };
 
@@ -994,7 +1053,7 @@ export class UI {
 
         const cleanup = () => {
             host.style.display = 'none';
-            host.innerHTML = '';
+            clearHtml(host);
             host.removeEventListener('click', onClick);
             window.removeEventListener('keydown', onKey, true);
         };
@@ -1020,34 +1079,42 @@ export class UI {
         // Render leaderboard under the run summary.
         if (this.els.highScoreList) {
             const rows = game.save.highScores || [];
-            // Speedrun splits block (if applicable).
-            let splitsHtml = '';
-            if (game.speedrunMode && game.speedrunSplits?.length) {
-                splitsHtml =
-                    `<div class="splits"><div class="splits-head">${t('splits')}</div>` +
-                    game.speedrunSplits
-                        .map((sp) => {
-                            const mm = Math.floor(sp.mark / 60)
-                                .toString()
-                                .padStart(2, '0');
-                            const ss = Math.floor(sp.mark % 60)
-                                .toString()
-                                .padStart(2, '0');
-                            const rs = (sp.realMs / 1000).toFixed(2);
-                            return `<div class="split-row"><span>${mm}:${ss}</span><span>${rs}s</span></div>`;
-                        })
-                        .join('') +
-                    '</div>';
-            }
+            // Speedrun splits block (if applicable). A ternary, not a `let` then
+            // assign: the initialiser `''` would fix the type as `string` and
+            // the assignment of a fragment would then be rejected.
+            const splitsHtml =
+                game.speedrunMode && game.speedrunSplits?.length
+                    ? html`<div class="splits">
+                          <div class="splits-head">${t('splits')}</div>
+                          ${game.speedrunSplits.map((sp) => {
+                              const mm = Math.floor(sp.mark / 60)
+                                  .toString()
+                                  .padStart(2, '0');
+                              const ss = Math.floor(sp.mark % 60)
+                                  .toString()
+                                  .padStart(2, '0');
+                              const rs = (sp.realMs / 1000).toFixed(2);
+                              return html`<div class="split-row">
+                                  <span>${mm}:${ss}</span><span>${rs}s</span>
+                              </div>`;
+                          })}
+                      </div>`
+                    : '';
             if (!rows.length) {
-                this.els.highScoreList.innerHTML =
-                    splitsHtml + `<div class="hs-empty">${t('noHighScores')}</div>`;
+                mount(
+                    this.els.highScoreList,
+                    html`${splitsHtml}
+                        <div class="hs-empty">${t('noHighScores')}</div>`
+                );
             } else {
-                this.els.highScoreList.innerHTML =
-                    splitsHtml +
-                    `<div class="hs-head"><span>#</span><span>${t('time')}</span><span>${t('level')}</span><span>${t('kills')}</span><span>${t('date')}</span></div>` +
-                    rows
-                        .map((r, i) => {
+                mount(
+                    this.els.highScoreList,
+                    html`${splitsHtml}
+                        <div class="hs-head">
+                            <span>#</span><span>${t('time')}</span><span>${t('level')}</span
+                            ><span>${t('kills')}</span><span>${t('date')}</span>
+                        </div>
+                        ${rows.map((r, i) => {
                             const mm = Math.floor(r.timeSurvived / 60)
                                 .toString()
                                 .padStart(2, '0');
@@ -1056,9 +1123,12 @@ export class UI {
                                 .padStart(2, '0');
                             const d = new Date(r.date || 0);
                             const dstr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                            return `<div class="hs-row"><span>${i + 1}</span><span>${mm}:${ss}</span><span>${r.level}</span><span>${r.kills}</span><span>${dstr}</span></div>`;
-                        })
-                        .join('');
+                            return html`<div class="hs-row">
+                                <span>${i + 1}</span><span>${mm}:${ss}</span><span>${r.level}</span
+                                ><span>${r.kills}</span><span>${dstr}</span>
+                            </div>`;
+                        })}`
+                );
             }
         }
 
@@ -1070,7 +1140,11 @@ export class UI {
             if (card && !card.querySelector('.daily-share-row')) {
                 const wrap = document.createElement('div');
                 wrap.className = 'daily-share-row';
-                wrap.innerHTML = `<button id="btnShareDaily" class="btn ghost">${t('shareDaily')}</button><pre id="dailyShareText" class="share-preview" hidden></pre>`;
+                mount(
+                    wrap,
+                    html`<button id="btnShareDaily" class="btn ghost">${t('shareDaily')}</button>
+                        <pre id="dailyShareText" class="share-preview" hidden></pre>`
+                );
                 // Insert before the .btn-row.
                 const before = card.querySelector('.btn-row');
                 if (before) card.insertBefore(wrap, before);
@@ -1210,30 +1284,27 @@ function pickN<T>(arr: T[], n: number): T[] {
 }
 
 function sliderRow(key, value) {
-    return `
-        <label class="settings-row">
-            <span>${t(key)}</span>
-            <input type="range" min="0" max="1" step="0.05" value="${value}" data-key="${key}">
-            <output>${Math.round(value * 100)}%</output>
-        </label>`;
+    return html` <label class="settings-row">
+        <span>${t(key)}</span>
+        <input type="range" min="0" max="1" step="0.05" value="${value}" data-key="${key}" />
+        <output>${Math.round(value * 100)}%</output>
+    </label>`;
 }
 
 function selectRow(key, value, values) {
-    return `
-        <label class="settings-row">
-            <span>${t(key)}</span>
-            <select data-key="${key}">
-                ${values.map((v) => `<option value="${v}" ${v === value ? 'selected' : ''}>${v}</option>`).join('')}
-            </select>
-        </label>`;
+    return html` <label class="settings-row">
+        <span>${t(key)}</span>
+        <select data-key="${key}">
+            ${values.map((v) => html`<option value="${v}" ${v === value ? 'selected' : ''}>${v}</option>`)}
+        </select>
+    </label>`;
 }
 
 function checkboxRow(key, value) {
-    return `
-        <label class="settings-row">
-            <span>${t(key)}</span>
-            <input type="checkbox" data-key="${key}" ${value ? 'checked' : ''}>
-        </label>`;
+    return html` <label class="settings-row">
+        <span>${t(key)}</span>
+        <input type="checkbox" data-key="${key}" ${value ? 'checked' : ''} />
+    </label>`;
 }
 
 // Expose catalogue count for badges / tests.

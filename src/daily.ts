@@ -63,6 +63,19 @@ export function dailySeed(dateStr: string) {
  * daily based on the seed so players can't cheese a single map every day.
  * @param {string} [dateStr] defaults to UTC today
  */
+/**
+ * One cell of the 14-day streak calendar, ready to render: `date` is always a
+ * real `YYYY-MM-DD` from the window (never a stored string), and the three
+ * numbers are always numbers thanks to `sanitiseDailyEntry`.
+ */
+export interface StreakDay {
+    date: string;
+    played: boolean;
+    won: boolean;
+    timeSurvived: number;
+    kills: number;
+}
+
 /** One recorded daily attempt, keyed by ISO date in storage. */
 export interface DailyEntry {
     date: string;
@@ -76,6 +89,16 @@ export interface DailyEntry {
     level?: number;
     /** Whether the day was played at all, as opposed to merely listed. */
     played?: boolean;
+    /** Whole-run damage-free flag; carried so a rewrite does not drop it. */
+    noHit?: boolean;
+    /** Weapon ids carried at the end of the run. */
+    weapons?: string[];
+    /**
+     * Epoch ms the entry was written. REQUIRED, not optional: `saveDailyResult`
+     * always stamps it and `sanitiseDailyEntry` always fills it, so a reader
+     * never has to ask whether it is there.
+     */
+    savedAt: number;
 }
 
 export function dailyChallenge(dateStr?: string) {
@@ -117,15 +140,90 @@ function usableLS() {
     }
 }
 
-export function loadDailyHistory() {
+export function loadDailyHistory(): Record<string, DailyEntry> {
     try {
         const raw = usableLS() ? window.localStorage.getItem(DAILY_STORAGE_KEY) : _memory;
         if (!raw) return {};
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : {};
+        return sanitiseDailyHistory(parsed);
     } catch {
         return {};
     }
+}
+
+/** How many (date, stage) records are kept. 14 days x a handful of stages. */
+const DAILY_MAX_ENTRIES = 128;
+
+/**
+ * Validate a parsed daily history.
+ *
+ * `parsed && typeof parsed === 'object' ? parsed : {}` was the whole check, and
+ * it accepts an array, a `Date`, an object whose every value is a string, and
+ * an object with a million keys. F10 is the one that mattered: `kills` was
+ * interpolated raw into `title="…"` and `aria-label="…"` on every calendar
+ * cell, so a string in a numeric field was an attribute injection that
+ * re-rendered on every visit.
+ *
+ * The KEY is checked as well as the value. Anything else lets a record claim a
+ * date it is not filed under, and `dailyStreakSummary` derives the streak from
+ * the dates it is handed.
+ */
+export function sanitiseDailyHistory(parsed: unknown): Record<string, DailyEntry> {
+    const out: Record<string, DailyEntry> = {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return out;
+    const src = parsed as Record<string, unknown>;
+    let kept = 0;
+    for (const key of Object.keys(src)) {
+        if (kept >= DAILY_MAX_ENTRIES) break;
+        const entry = sanitiseDailyEntry(key, src[key]);
+        if (!entry) continue;
+        out[key] = entry;
+        kept++;
+    }
+    return out;
+}
+
+/** Coerce one number into a bounded, finite value. */
+function dailyNumber(value: unknown, fallback: number, max: number): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(Math.max(0, n), max);
+}
+
+/**
+ * Validate one daily record against the key it is stored under, or refuse it.
+ *
+ * `kills` and `timeSurvived` are REQUIRED to be numbers: they are the two
+ * fields rendered into the calendar cell, and defaulting a string to 0 is what
+ * turns "this record is malformed" into "this record says the player killed
+ * zero", which is a different claim.
+ */
+export function sanitiseDailyEntry(key: string, raw: unknown): DailyEntry | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return null;
+    if (typeof r.stage !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(r.stage)) return null;
+    if (key !== r.date + '-' + r.stage) return null;
+    if (typeof r.timeSurvived !== 'number' || !Number.isFinite(r.timeSurvived)) return null;
+    if (typeof r.kills !== 'number' || !Number.isFinite(r.kills)) return null;
+    const entry: DailyEntry = {
+        date: r.date,
+        stage: r.stage,
+        timeSurvived: dailyNumber(r.timeSurvived, 0, 86400),
+        kills: dailyNumber(r.kills, 0, 1000000000),
+        level: dailyNumber(r.level, 1, 100000),
+        seed: dailyNumber(r.seed, 0, 4294967295),
+        savedAt: dailyNumber(r.savedAt, 0, 4102444800000),
+        won: r.won === true,
+        noHit: r.noHit === true,
+        played: true
+    };
+    if (Array.isArray(r.weapons)) {
+        entry.weapons = r.weapons
+            .filter((w) => typeof w === 'string' && w.length > 0 && w.length <= 64)
+            .slice(0, 32);
+    }
+    return entry;
 }
 
 function writeDailyHistory(history) {
@@ -184,11 +282,18 @@ export function _resetDailyForTests() {
  * as the "best" streak. The 14-day calendar list is returned ready-to-render
  * (newest first) with `played` / `won` flags so the UI is just a `.map`.
  *
- * @param {object} [history] loadDailyHistory() output; defaults to live
+ * @param {object} [history] loadDailyHistory() output; defaults to live. Typed
+ *   `object` rather than `Record<string, DailyEntry>` because the existing
+ *   callers pass `[]` as an "empty history" placeholder, and refusing that
+ *   would be a change to a caller's contract smuggled in with a type
+ *   annotation. The body narrows it.
  * @param {Date} [now] override for tests
- * @returns {{ current:number, best:number, days:Array<{date:string, played:boolean, won:boolean, timeSurvived:number, kills:number}> }}
+ * @returns {{ current:number, best:number, days:StreakDay[] }}
  */
-export function dailyStreakSummary(history, now = new Date()) {
+export function dailyStreakSummary(
+    history?: object,
+    now = new Date()
+): { current: number; best: number; days: StreakDay[] } {
     const all = history || loadDailyHistory();
     // Collapse all entries to one record per date (best timeSurvived wins
     // when multiple stages share a date) so the streak is "did the player
@@ -202,13 +307,7 @@ export function dailyStreakSummary(history, now = new Date()) {
         }
     }
     // Build the 14-day calendar window ending at `now` (UTC).
-    const days: Array<{
-        date: string;
-        played: boolean;
-        won: boolean;
-        timeSurvived: number;
-        kills: number;
-    }> = [];
+    const days: StreakDay[] = [];
     for (let i = 0; i < 14; i++) {
         const d = new Date(now.getTime() - i * 86400 * 1000);
         const key = todayKey(d);
