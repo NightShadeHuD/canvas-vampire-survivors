@@ -15,15 +15,6 @@ extends Node2D
 
 enum State { MENU, PLAYING, DEAD, LEVEL_UP, PAUSED }
 
-## `renderMine`'s inline numbers, named so the drawing and any assertion about it read the
-## same value: a 10px body with a 1.5px white rim.
-const MINE_BODY_RADIUS := 10.0
-const MINE_RIM_WIDTH := 1.5
-## `performance.now() / 60` in the original, and `performance.now()` is MILLISECONDS -- so
-## the armed pulse turns over every 2*PI*0.06 = 0.377s and this divisor is that 60ms in
-## seconds. Written as the original's period rather than an invented one.
-const MINE_PULSE_PERIOD := 0.06
-
 var game: Game
 var state := State.MENU
 ## The three offers currently on screen, cleared when one is taken.
@@ -40,6 +31,17 @@ var paused_panel: VBoxContainer
 ## The dim behind a modal, hidden unless one is up. Set where it is created; a dim that
 ## outlives its modal is a dim over the whole game, which is what it was.
 var shade_rect: ColorRect = null
+
+## `lineWidth = 3` in `renderFloatingText`, rounded down to the integer outline width
+## `draw_string_outline` takes. A crit number is the only thing that uses it.
+const OUTLINE_PX := 2
+## How far a `FontVariation` is emboldened to stand in for CSS `bold`. The original names a
+## KEYWORD and gives no number, so this is the port's judgement call -- reported in the change
+## that added it rather than buried here.
+const EMBOLDEN := 0.6
+## The bold font the damage numbers are drawn in, built on first use. Kept on the node, not on
+## `Fx`: `fx.gd` is deliberately data with no nodes, and a font is a resource.
+var _number_font: FontVariation = null
 
 @onready var camera: Camera2D = $Camera2D
 @onready var menu: CanvasLayer = $Menu
@@ -470,13 +472,6 @@ func _draw() -> void:
 	# pickup they will not notice they took.
 	for orb in game.orbs:
 		_draw_orb(orb)
-	# MINES next, which is the original's order (`game-render.ts:80-81` draws `expOrbs`
-	# and then `mines`): a mine lies on the ground UNDER the actors that walk over it. It
-	# is drawn for its whole fuse, not only once armed, because a mine a player cannot see
-	# is a mine they cannot avoid -- and `_draw_mine` below is where the fuse becomes
-	# visible.
-	for mine in game.mines:
-		_draw_mine(mine)
 	# Shots UNDER the actors, so a bolt passing behind a foe still reads as passing
 	# behind it. Drawn at all because a weapon whose projectile is invisible is the
 	# same class of bug as a hero who is -- and that one shipped.
@@ -496,6 +491,12 @@ func _draw() -> void:
 	# draws `game.particles` after the player and the projectiles, never before it.
 	for spark in game.fx.sparks:
 		_draw_spark(spark)
+	# THE DAMAGE NUMBERS, after the sparks and over them -- the original's order again, since
+	# `game-render.ts` draws `game.floatingTexts` immediately after `game.particles` and
+	# inside the same world transform. A number a spark can cover is a number the player
+	# cannot read on exactly the hits that matter most.
+	for text in game.fx.texts:
+		_draw_text(text)
 
 ## The hero, matching `src/entity-render.ts`: a soft glow, a solid body, a pale core,
 ## and the weapon's reach as a pulsing ring.
@@ -552,9 +553,7 @@ func garlic_reach(hero: Hero) -> float:
 ##   RING   a nova, growing from the hero OUT TO the reach, so the moment of maximum
 ##          danger is the moment the ring arrives at the radius that hurts.
 ##   BEAM   the drain tether, hero to foe.
-##   BLAST  the mine's DETONATION, at the radius the damage used. The mine's own disc, which
-##          the original fills for the whole fuse, is `_draw_mine` -- this is the flash at
-##          the instant the fuse runs out.
+##   BLAST  the mine, at the radius the port hit with.
 func _draw_strike(strike: Fx.Strike) -> void:
 	var a := strike.fade()
 	var c := strike.color
@@ -574,10 +573,8 @@ func _draw_strike(strike: Fx.Strike) -> void:
 			# and at 100% on the frame it dies, which is the frame the damage landed.
 			var radius := strike.reach * (0.25 + 0.75 * (1.0 - a))
 			if strike.kind == Fx.Strike.Kind.BLAST:
-				# The DETONATION, drawn where the mine was. `renderMine` fills this circle
-				# for as long as the mine is on the ground and `_draw_mine` above now does
-				# exactly that; this is the second fill at the instant the fuse runs out,
-				# so the frame the damage lands on is a frame a player can read.
+				# `renderMine` fills this circle while the mine is armed. This port has no
+				# armed mine, so the fill belongs to the detonation instead.
 				draw_circle(Vector2(strike.x, strike.y), strike.reach, Color(c.r, c.g, c.b, 0.16 * a))
 			draw_arc(Vector2(strike.x, strike.y), radius, 0.0, TAU, 64, Color(c.r, c.g, c.b, 0.7 * a), 3.0)
 		Fx.Strike.Kind.BEAM:
@@ -596,6 +593,76 @@ func _draw_spark(spark: Fx.Spark) -> void:
 		spark.size,
 		Color(spark.color.r, spark.color.g, spark.color.b, clampf(spark.life, 0.0, 1.0))
 	)
+
+## ONE DAMAGE NUMBER. `renderFloatingText` in `src/entity-render.ts`, drawn:
+##
+##     ctx.globalAlpha = Math.max(0, self.life);
+##     ctx.fillStyle   = self.color;
+##     const sz        = self.crit ? self.size * 1.6 : self.size;
+##     ctx.font        = `${self.weight} ${sz}px system-ui, sans-serif`;
+##     ctx.textAlign   = 'center';
+##     if (self.crit) { strokeStyle = '#000'; lineWidth = 3; strokeText(...); }
+##     ctx.fillText(self.text, self.x, self.y);
+##
+## FOUR THINGS ARE TRANSLATED RATHER THAN COPIED, and each is named here because a port that
+## hid them would look more faithful than it is:
+##
+##   `textAlign = 'center'`    Godot's `draw_string` has no such flag. The string's own width
+##                             is measured and half of it subtracted -- the same centring by a
+##                             longer route, measured in the same font and size it is drawn
+##                             at, so a bold or crit number centres as well as a plain one.
+##   `${sz}px` where sz = 25.6 Godot takes an INTEGER font size, so a crit rounds 16 * 1.6 =
+##                             25.6 to 26. A crit number is therefore 1.5% larger than the
+##                             original's, which is under a pixel of glyph height.
+##   `lineWidth = 3`           Canvas strokes an outline CENTRED on the glyph edge (1.5px
+##                             out); `draw_string_outline` grows it outward instead. 2 is the
+##                             nearest integer to 1.5.
+##   `weight = 'bold'`         Reproduced with a `FontVariation` and `variation_embolden`
+##                             rather than by shipping a bold font file. The embolden factor
+##                             is the port's judgement call; the original names a CSS keyword
+##                             with no numeric equivalent, so there is nothing to read.
+##
+## The alpha reaches the OUTLINE as well as the fill, because the original's `globalAlpha`
+## covers both of its calls -- an outline that outlived its number would leave black ghosts
+## rising off every hit.
+func _draw_text(text: Fx.FloatingText) -> void:
+	var font := number_font()
+	var px := int(round(text.font_size()))
+	var width := font.get_string_size(text.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+	# `self.y` is the BASELINE in both renderers -- `fillText` and `draw_string` agree -- so
+	# it needs no translation at all.
+	var at := Vector2(text.x - width / 2.0, text.y)
+	var tint := Color(text.color.r, text.color.g, text.color.b, text.alpha())
+	if text.crit:
+		draw_string_outline(
+			font,
+			at,
+			text.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			px,
+			OUTLINE_PX,
+			Color(0, 0, 0, text.alpha())
+		)
+	draw_string(font, at, text.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, tint)
+
+## The font the numbers are drawn in -- `bold 16px system-ui, sans-serif` in the original, and
+## this project has no `system-ui` to fall back to. Godot's fallback font is the closest thing
+## available: a bundled sans that renders the same glyphs on every machine. BOLD is made with
+## a `FontVariation` rather than a second font file, because the weight is doing one job --
+## making a damage number read at a glance -- and `FontVariation` is what Godot offers for it.
+##
+## Built ONCE and kept, so a screen full of numbers does not build a font per number per
+## frame. Public so the pixel tier can measure the instrument before trusting it: a font that
+## reports zero width for a known string draws NOTHING, and a check that reads "no pixels
+## changed" would then be reporting on a dead instrument (`docs/PROBE-CAVEATS.md`).
+func number_font() -> FontVariation:
+	if _number_font == null:
+		var bold := FontVariation.new()
+		bold.base_font = ThemeDB.fallback_font
+		bold.variation_embolden = EMBOLDEN
+		_number_font = bold
+	return _number_font
 
 ## A shot in flight. Orbit shards are drawn as a ring segment, everything else as a
 ## bright core with a trail, so a boomerang and a knife are distinguishable at a glance.
@@ -633,64 +700,21 @@ func _draw_orb(orb: Orb) -> void:
 	if orb.magnet_speed > 0.0:
 		draw_circle(p, orb.size * 0.45, Color(1, 1, 1, 0.85 * a))
 
-## A mine on the ground, matching `renderMine` in `src/entity-render.ts:111`:
-##
-##     export function renderMine(ctx, self) {
-##         const armed = self.fuse < self.maxFuse * 0.5;
-##         const pulse = armed ? 0.5 + Math.sin(performance.now() / 60) * 0.5 : 0.3;
-##         ctx.fillStyle = `rgba(255,80,80,${0.25 + pulse * 0.35})`;
-##         ctx.arc(self.x, self.y, self.radius, 0, Math.PI * 2); ctx.fill();
-##         ctx.fillStyle = armed ? '#ff4444' : '#aa4444';
-##         ctx.arc(self.x, self.y, 10, 0, Math.PI * 2); ctx.fill();
-##         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-##     }
-##
-## TWO THINGS A PLAYER READS OFF THIS FRAME, and both of them are the FUSE:
-##
-##   * THE DISC IS THE BLAST RADIUS. It is drawn at `self.radius`, which is the number
-##     `Mine.update` damages with -- so the circle a player is standing outside is exactly
-##     the circle that will not hurt them. Until the fuse was ported this port had no mine
-##     at all and drew the blast AFTER the damage landed, which shows a player the radius
-##     they have already been hit by.
-##   * ARMED IS BRIGHTER. Past half its fuse the body turns `#ff4444` and the disc begins to
-##     pulse; before that it is `#aa4444` at a steady alpha. `Mine.armed()` owns that rule,
-##     one level down, so the state a suite asserts and the state a player sees are the same
-##     value rather than two copies of the same comparison.
-##
-## THE CLOCK IS `game.elapsed`, NOT `performance.now()`. The original's divisor is in
-## MILLISECONDS, so its period is 2*PI*0.06s; `MINE_PULSE_PERIOD` is that in seconds, which
-## is the same period. `elapsed` is the port's clock for every other time-driven drawing --
-## the Garlic ring reads it too -- and it is what `verify_pixels.gd` pins to 0.0 for BOTH
-## halves of a with/without capture. A wall clock here would make those two frames differ
-## for a reason that is not the mine.
-func _draw_mine(mine: Mine) -> void:
-	var armed := mine.armed()
-	var pulse := (0.5 + sin(game.elapsed / MINE_PULSE_PERIOD) * 0.5) if armed else 0.3
-	draw_circle(
-		Vector2(mine.x, mine.y),
-		mine.radius,
-		Color(1.0, 80.0 / 255.0, 80.0 / 255.0, 0.25 + pulse * 0.35)
-	)
-	draw_circle(
-		Vector2(mine.x, mine.y),
-		MINE_BODY_RADIUS,
-		Color("ff4444") if armed else Color("aa4444")
-	)
-	draw_arc(
-		Vector2(mine.x, mine.y), MINE_BODY_RADIUS, 0.0, TAU, 32, Color.WHITE, MINE_RIM_WIDTH
-	)
-
-## A foe, matching `src/entity-render.ts`: body in its data colour -- or the iced blue of a
-## SLOWED one -- a pale core, and an HP bar once it has been hit.
+## A foe, matching `src/entity-render.ts`: body in its data colour -- the WHITE of a foe that
+## has just been hit, the iced blue of a SLOWED one, or the armed bomber's blink -- a pale
+## core, and an HP bar once it has been hit.
 ##
 ## THE BODY COLOUR COMES FROM THE FOE rather than from a second copy of the rule written
 ## here. `renderEnemy`'s chain is `flashTimer` -> `slowTimer` -> the armed bomber's blink ->
-## the data colour, and `Foe.body_color` owns the slow branch of it -- so the colour a suite
-## asserts and the colour a player sees are the same value, and a slowed foe cannot be
-## simulated without being drawn.
+## the data colour, and `Foe.body_color` owns all four branches of it -- so the colour a suite
+## asserts and the colour a player sees are the same value, and a hit foe, a slowed foe or a
+## bomber with a burning fuse cannot be simulated without being drawn.
+##
+## `game.elapsed` is the blink's phase, and it is passed rather than reached for: the foe has
+## no clock of its own, and a `body_color()` with no argument would freeze the blink.
 func _draw_foe(foe: Foe) -> void:
 	var p := Vector2(foe.x, foe.y)
-	draw_circle(p, foe.size, foe.body_color())
+	draw_circle(p, foe.size, foe.body_color(game.elapsed))
 	draw_circle(p, foe.size * 0.5, Color(1, 1, 1, 0.25))
 
 	if foe.hp < foe.max_hp:

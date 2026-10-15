@@ -343,10 +343,17 @@ func _strike(weapon: Dictionary, hero: Hero, foes: Array, level: int) -> Array:
 		before.append(float(f.hp))
 	var shots: Array = []
 	WeaponFire.fire(weapon, hero, foes, shots, level)
+	# A SINK, because `Shot.resolve` now rolls the projectile's own per-hit crit through one
+	# and requires it -- see the note there. NEITHER WEAPON THIS HELPER IS CALLED WITH PUSHES
+	# A `Shot` (Lightning is `instant` and Soul Drain is `drain`, and both damage where they
+	# stand), so `shots` is empty, the loop below never runs and nothing is ever written to
+	# this. It is here so the call is well-formed, and it is created ONCE rather than inside
+	# the loop for the reason any allocation outside a loop is.
+	var sink := Fx.new()
 	for i in 120:
 		for s in shots:
 			s.update(FRAME, hero.x, hero.y, hero.x, hero.y)
-			s.resolve(foes, Callable())
+			s.resolve(foes, Callable(), hero, sink)
 	var loss: Array = []
 	for i in foes.size():
 		loss.append(float(before[i]) - float(foes[i].hp))

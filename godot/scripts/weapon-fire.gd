@@ -79,6 +79,60 @@ const NOVA_PULSE_DAMAGE := 0.6
 const NOVA_SLOW_PCT := 0.5
 const NOVA_SLOW_DURATION := 1.2
 
+# ---------------------------------------------------------------------------
+# THE DAMAGE NUMBERS
+#
+# `_rollCrit` in `src/weapons.ts` does two things: it rolls, and it DRAWS THE NUMBER. The
+# colour and the height above the foe are the FOUR CALL SITES' and not its own:
+#
+#     216  _fireMelee    _rollCrit(player, game, baseDmg, enemy.x,  enemy.y - 20, '#ffaa00')
+#     289  _fireInstant  _rollCrit(player, game, baseDmg, target.x, target.y - 20, '#ffff66')
+#     395  _fireNova     _rollCrit(player, game, baseDmg, enemy.x,  enemy.y - 20, '#88ddff')
+#     454  _fireDrain    _rollCrit(player, game, baseDmg, e.x,      e.y - 16, '#ff66aa')
+#
+#     112  the CRIT branch, for every weapon:  `'#ffee44'` with `{ crit: true }`
+#
+# Each colour is named here for the reason `MELEE_HALF_HEIGHT` is: the number the player reads
+# over a foe has one home, and a suite can name the weapon it is checking. `-20` is three of
+# the four sites and `-16` is the fourth, which is why they are two constants and not one.
+#
+# AND NO NUMBER REACHES THE OTHER FOUR ARCHETYPES **THROUGH THIS FUNCTION** -- which is a
+# claim about the original rather than an omission here. `_fireProjectile`, `_fireAura` and
+# `_fireMine` call `_rollCrit` NOWHERE, and `OrbitShard` reads `this.damage`. Where those
+# four get a number, they get it SOMEWHERE ELSE, and this file is not that place:
+#
+#   projectile  `main.ts:1465-1483` draws one on IMPACT, with its own per-hit crit and the
+#               two colours `'#ffee44'` / `'#fff'`. That is `projectile.gd`'s, it is a
+#               DIFFERENT roll from `_rollCrit` (no `evolveBonusCrit`), and it is why the
+#               projectile arm below passes no sink to anything.
+#   orbit       `OrbitShard.update` draws `'#ffffcc'` at `e.y - 18`, with NO crit and no
+#               `hp > 0` guard. DRAWING NOWHERE IN THIS PORT -- reported, not invented.
+#   aura        `_fireAura` contains no `createFloatingText` at all. GENUINELY SILENT, and
+#               the one archetype of the four that is.
+#   mine        `Mine.update` draws `'#ff9944'` at `enemy.y - 20` over every foe in its
+#               blast. DRAWING NOWHERE IN THIS PORT -- reported, not invented: the `Mine`
+#               object is a separate change and the number belongs to it, not to `fire()`.
+# ---------------------------------------------------------------------------
+
+## The height above the foe's centre that a damage number is drawn at: `enemy.y - 20`.
+const NUMBER_DY := -20.0
+## `_fireDrain`'s own offset, `e.y - 16`. The tether's number sits closer to the foe than the
+## other three, and the original says so four pixels at a time.
+const DRAIN_NUMBER_DY := -16.0
+## The Whip's sweep, `src/weapons.ts:216` -- also the colour the drawn sweep band uses.
+const MELEE_NUMBER := Color("ffaa00")
+## Lightning's strike, `src/weapons.ts:289`. A CHAIN HOP draws none (see `_fire_instant`).
+const INSTANT_NUMBER := Color("ffff66")
+## Frost Nova's burst, `src/weapons.ts:395` -- one per foe the ring catches.
+const NOVA_NUMBER := Color("88ddff")
+## Soul Drain's tether, `src/weapons.ts:454`. The only one of the four at `-16`.
+const DRAIN_NUMBER := Color("ff66aa")
+## `_rollCrit`'s CRIT branch, `src/weapons.ts:112`: ONE colour for every weapon, plus
+## `{ crit: true }`, which is the size and the outline. `projectile.gd` draws this same
+## literal for the projectile impact crit -- a second face of one colour in the original, and
+## two different rolls, so the two are named where they are used rather than shared.
+const CRIT_NUMBER := Color("ffee44")
+
 ## The reach a weapon fires with, in ONE place.
 ##
 ##     baseRange * (1 + (level - 1) * 0.1) * areaMult
@@ -125,18 +179,33 @@ static func crit_chance_for(weapon: Dictionary, hero: Hero, evolved: bool) -> fl
 		chance += float(weapon["evolveBonusCrit"])
 	return chance
 
-## ONE CRIT ROLL, for ONE target: `_rollCrit`'s arithmetic without its two
-## `createFloatingText` calls.
+## ONE CRIT ROLL *AND ITS ONE DAMAGE NUMBER*, for ONE target. `_rollCrit` in full --
+## `src/weapons.ts:102`:
 ##
-##     if (chance > 0 && Math.random() < chance) { const dmg = baseDamage * 2; ... }
+##     if (chance > 0 && Math.random() < chance) {
+##         const dmg = baseDamage * 2;
+##         game.createFloatingText(Math.round(dmg), x, y, '#ffee44', { crit: true });
+##         return dmg;
+##     }
+##     game.createFloatingText(Math.round(baseDamage), x, y, color);
 ##     return baseDamage;
 ##
-## A FLOATING TEXT IS NOT PORTED, and that is why this returns a NUMBER where the original
-## returns a number AND draws one. `fx.gd` has no floating-text system and this port renders
-## no damage numbers at all -- the original's own `Strike` note says so. The original puts
-## that text at `(x, y - 20)` of the FOE it is about to damage, so the POSITION is per-target:
-## a per-fire port could not have produced it even if the damage had matched, and no
-## assertion here can stand in for a drawing that does not exist. Reported as an open gap.
+## -- the ROLL and the DRAW are one function in the original, so they are one function here.
+## `fx` is the sink `game` is in the original: null means NO NUMBER, which is what the aura,
+## the orbit and the mine pass (see the header note), and what a headless caller with no
+## interest in drawing passes. The PER-TARGET loops that use this are the four below; the
+## PROJECTILE's own number is a different roll in `projectile.gd`, and NO number is drawn by
+## `fire()` for that archetype.
+##
+## THE POSITION IS THE FOE'S. That is the whole reason the draw lives here rather than once
+## per fire: `x`/`y` are the TARGET's coordinates, so two foes inside one Whip band get two
+## numbers eighty pixels apart, and neither of them is at the hero. One number at the hero
+## would draw the same thing for a hit that landed and a hit that missed, which is the half of
+## this feature that a per-fire port could not have reproduced even with the damage right.
+##
+## `Math.round` is repeated at the two emit sites rather than at the caller, which is where
+## the original writes it -- and `str`/`roundi` are its GDScript spelling rather than a
+## formatting choice of this port's.
 ##
 ## WHO ROLLS, AND HOW OFTEN. `grep -n "_rollCrit" src/weapons.ts` is four lines, and those
 ## four are the whole of the original's crit:
@@ -152,16 +221,29 @@ static func crit_chance_for(weapon: Dictionary, hero: Hero, evolved: bool) -> fl
 ## no-crit, a variance the original does not have. That is the declared gap
 ## `godot-crit-rolled-once-per-fire`, and the four loops above are where it is closed.
 ##
-## THE FOUR ARCHETYPES WITH NO CALL SITE -- projectile, orbit, aura and mine -- never roll in
-## the original at all: `_fireProjectile`, `_fireAura` and `_fireMine` hand `getDamage()`
-## straight to the shot or the mine, and `OrbitShard` reads `this.damage`. This port used to
-## roll ONE for each of them per fire, and that roll is GONE: the four `match` arms below pass
-## `dmg` -- `getDamage(player)` -- straight through, as the original does. MEASURED, rather
-## than read off the grep: one `fire()` at four foes in range takes three draws for a level-1
-## Whip, four for a level-5 Whip, one per Lightning strike (three at level 5) and four for a
-## Frost Nova, and ZERO for a Knife, a Magic Wand, an Orbiter, an Area Mine, a Boomerang, a
-## Retro Blaster or Garlic. That is the whole of the original's crit, and it is now the whole
-## of this port's.
+## THE FOUR ARCHETYPES WITH NO CALL SITE HERE -- projectile, orbit, aura and mine -- never
+## reach `_rollCrit` in the original: `_fireProjectile`, `_fireAura` and `_fireMine` hand
+## `getDamage()` straight to the shot or the mine, and `OrbitShard` reads `this.damage`. This
+## port used to roll ONE for each of them per fire, and that roll is GONE: the four `match`
+## arms below pass `dmg` -- `getDamage(player)` -- straight through, as the original does.
+## MEASURED, rather than read off the grep: one `fire()` at four foes in range takes three
+## draws for a level-1 Whip, four for a level-5 Whip, one per Lightning strike (three at
+## level 5) and four for a Frost Nova, and ZERO for a Knife, a Magic Wand, an Orbiter, an Area
+## Mine, a Boomerang, a Retro Blaster or Garlic.
+##
+## AND "NO CALL SITE" IS NOT "NO ROLL", which is the distinction this paragraph used to
+## flatten and which the PROJECTILE archetype is the counter-example to. `_fireProjectile`
+## rolls nothing, and the port rolls nothing for it in `fire()` -- but the shot it pushed is
+## rolled for ON IMPACT, once per foe it touches, by `_updateProjectiles`:
+##
+##     src/main.ts:1470   const chance = this.player.getCritChance();
+##     src/main.ts:1471   const crit = chance > 0 && Math.random() < chance;
+##
+## -- a FIFTH roll site the four `_rollCrit` lines above do not contain, on the HERO's chance
+## with no weapon bonus, doubling a LOCAL copy of `p.damage`, and drawing `'#ffee44'`/`'#fff'
+## only when `enemy.hp > 0`. `projectile.gd`'s `resolve` is where it lives. So the original's
+## crit is four per-target `_rollCrit` sites PLUS this one, and the ORBIT, AURA and MINE
+## archetypes are the three with no roll anywhere at all.
 ##
 ## AND THE DECLARED FIELD THE OLD ROLL WAS KEPT FOR IS DEAD. `evolveBonusCrit: 0.1` sits on
 ## the evolved KNIFE, which is a projectile, and `_rollCrit` is the ONLY reader of that field
@@ -176,9 +258,26 @@ static func crit_chance_for(weapon: Dictionary, hero: Hero, evolved: bool) -> fl
 ## It is why this function takes a `chance` rather than reaching for the hero itself: the
 ## chance is read ONCE per fire by the caller, and WHICH archetypes roll at all is the caller's
 ## business -- four of the eight now pass this function nothing to roll with.
-static func _roll_crit(base_damage: float, chance: float, rng: RandomNumberGenerator) -> float:
+static func _roll_crit(
+	base_damage: float,
+	chance: float,
+	rng: RandomNumberGenerator,
+	fx: Fx = null,
+	x := 0.0,
+	y := 0.0,
+	color := Color.WHITE
+) -> float:
+	# THE RANDOM DRAW COMES FIRST IN BOTH BRANCHES, which is the original's order and the
+	# reason a seeded sequence still replays: `_randf` is called before anything is emitted,
+	# and `emit_text` draws NOTHING from any generator. A damage number that jittered its own
+	# position would have moved every recorded draw count in `verify_weapons.gd`.
 	if chance > 0.0 and _randf(rng) < chance:
-		return base_damage * 2.0
+		var doubled := base_damage * 2.0
+		if fx != null:
+			fx.emit_text(str(roundi(doubled)), x, y, CRIT_NUMBER, true)
+		return doubled
+	if fx != null:
+		fx.emit_text(str(roundi(base_damage)), x, y, color)
 	return base_damage
 
 ## A float in `[0, 1)` from the generator the CALLER supplied when there is one, and from the
@@ -243,17 +342,11 @@ static func orbit_count(weapon: Dictionary, hero: Hero, level: int) -> int:
 ## contract, and `verify_weapons.gd` is the caller that pins one.
 static func fire(
 	weapon: Dictionary, hero: Hero, foes: Array, shots: Array, level: int = 1, fx: Fx = null,
-	rng: RandomNumberGenerator = null, mines: Variant = null
+	rng: RandomNumberGenerator = null
 ) -> Array:
 	# `fx` is the visual sink: the caller owns it, and a caller with no interest in
 	# drawing (the headless suites) passes nothing. A weapon that applies damage directly
 	# creates no `Shot`, and without this it left nothing on screen at all.
-	#
-	# `mines` is the same idea for the one archetype that creates an ENTITY rather than a
-	# shot or a spark: `_fireMine` pushes a `Mine` into `game.mines` and a static function
-	# has no game to push into. Variant and defaulted to null rather than defaulted to an
-	# empty array, so "this caller wants no mines" is a state the branch can SEE instead of
-	# a throwaway list it silently fills.
 	var created: Array = []
 	var kind: String = str(weapon["type"])
 	# The hero's passives, applied HERE rather than at each archetype. This is the hook
@@ -330,7 +423,7 @@ static func fire(
 			# PER TARGET. `src/weapons.ts:216`, inside `_fireMelee`'s `for (const enemy of
 			# candidates)`: the roll is the loop body's first line, so two foes inside one
 			# band are two independent coin flips.
-			_strike_sweep(hero, foes, reach, dmg, evolved, crit, rng)
+			_strike_sweep(hero, foes, reach, dmg, evolved, crit, rng, fx)
 			if fx != null:
 				if evolved:
 					# `game.createParticles(player.x, player.y, '#ff6644', 12)` -- the
@@ -349,6 +442,15 @@ static func fire(
 			# NO ROLL: `_fireAura` damages with `getDamage(player)` and calls `_rollCrit`
 			# NOWHERE in the original. Garlic declares no `evolveBonusCrit` either way, so
 			# the volley roll this used to take had nothing to decide -- and it is gone.
+			#
+			# AND NO TEXT SINK, which is a claim about the original rather than an omission:
+			# `_fireAura` contains no `createFloatingText` at all, so a foe dying inside the
+			# Garlic ring never had a number over it. `_strike_disc_unrolled` takes no sink
+			# parameter for exactly this reason -- of its three callers one is genuinely
+			# silent and the other two are the Area Mine's, whose `Mine.update` number
+			# belongs to the `Mine` object and is DRAWING NOWHERE in this port. A sink that
+			# existed and was deliberately not passed would be a caller that could forget;
+			# there is nothing to pass.
 			_strike_disc_unrolled(hero.x, hero.y, foes, reach, dmg)
 			# `createParticles(player.x + cos(a) * r, player.y + sin(a) * r, '#88ff88', 1)`
 			# on 40% of fires -- a RATE in the original too, so a fire that emits nothing
@@ -377,7 +479,12 @@ static func fire(
 			# PER TARGET. `src/weapons.ts:395`, inside `_fireNova`'s `for (const enemy of
 			# candidates)`: every foe the burst catches is its own coin flip, and the
 			# `nova_hits` handed to the slow are the foes this same predicate reached.
-			var nova_hits := _strike_all_in_range(hero, foes, reach, dmg, crit, rng)
+			# `#88ddff` is the FOURTH of `_rollCrit`'s call sites' colours, and it travels
+			# into the disc so every foe the burst catches gets its own number at its own
+			# position -- not one number at the hero for the whole ring.
+			var nova_hits := _strike_all_in_range(
+				hero, foes, reach, dmg, crit, rng, fx, NOVA_NUMBER
+			)
 			var nova_slow_pct: float = float(weapon.get("slowPct", NOVA_SLOW_PCT))
 			var nova_slow_dur: float = float(weapon.get("slowDuration", NOVA_SLOW_DURATION))
 			for caught in nova_hits:
@@ -423,7 +530,9 @@ static func fire(
 			# contradicts. `src/data.ts` says "Smites a random foe. Lv3+ chains." The code
 			# and that assertion are replaced together; `_fire_instant` below carries the
 			# rest of the original, quoted rather than invented.
-			var hits := _fire_instant(weapon, hero, foes, reach, dmg, level, rng, evolved, crit)
+			var hits := _fire_instant(
+				weapon, hero, foes, reach, dmg, level, rng, evolved, crit, fx
+			)
 			if fx != null:
 				# `createParticles(target.x, target.y, '#ffff66', 14)` runs INSIDE the
 				# original's strike loop and `8` runs inside its chain loop, so EVERY foe
@@ -446,7 +555,7 @@ static func fire(
 			# targets)`: the evolved weapon tethers TWO foes and rolls TWICE, so either one
 			# can be doubled on its own. `_strike_nearest` hands back what each foe was
 			# actually dealt, because the heal is the SUM of those rolls.
-			var drained := _strike_nearest(hero, foes, reach, dmg, draining, crit, rng)
+			var drained := _strike_nearest(hero, foes, reach, dmg, draining, crit, rng, fx)
 			# Soul Drain heals on tick -- `lifestealPct` is on the data -- for
 			# `totalDmg * steal`, summed over what it ACTUALLY drained. Two things were
 			# wrong in the one line this replaces: it healed even when nothing was in
@@ -478,57 +587,45 @@ static func fire(
 					)
 					fx.emit_beam(hero.x, hero.y, foe.x, foe.y, Color("ff88cc"))
 		"mine":
-			# A MINE ARMS FIRST. `_fireMine` in `src/weapons.ts:353` damages NOTHING:
-			#
-			#     const fuse = this.def.fuse || 1.2;
-			#     game.mines = game.mines || [];
-			#     game.mines.push(new Mine(player.x, player.y, radius, dmg, fuse));
-			#
-			# -- and `Mine.update`, `fuse` seconds later, is what lands the blast, at the
-			# spot the mine was dropped on. This branch used to strike on the fire frame and
-			# throw the fuse away (the declared gap `godot-mine-fuse-unread`), so the data's
-			# number changed nothing a player could see.
-			#
-			# THE `mines` SINK IS TO `game.mines` WHAT `shots` ALREADY IS TO `game.shots`.
-			# The original reaches into the game to push one and a static fire function
-			# cannot, so the array is handed in like every other thing this function writes.
-			# `Mine.update` owns the blast, and it is there rather than in `_strike_disc`
-			# because the original's own radius test is a STRICT `<` and that disc is `<=`.
-			#
-			# NO ROLL, and that is not an omission: `_fireMine` passes `getDamage(player)`
-			# into `new Mine(...)` and `Mine.update` calls `enemy.takeDamage(this.damage)`
-			# with no crit -- so the charge and its evolved twin both carry the un-rolled
-			# base, exactly as the two `new Mine(...)` calls in the original do. The volley
-			# roll this arm used to take is ONE of the four the original has no call site for;
-			# see the note on `_roll_crit`.
-			var mine_fuse: float = float(weapon.get("fuse", Mine.DEFAULT_FUSE))
-			# `const a = Math.random() * Math.PI * 2;` -- drawn whenever the weapon is
-			# evolved, sink or no sink, so whether a caller wanted the mine cannot change
-			# what the next weapon in the volley draws.
-			var cluster_angle := (randf() * TAU) if evolved else 0.0
-			if mines != null:
-				mines.append(Mine.new(hero.x, hero.y, reach, dmg, mine_fuse))
-				if evolved:
-					# `_fireMine`'s evolved Cluster Mine, quoted:
-					#
-					#     game.mines.push(new Mine(player.x + Math.cos(a) * 60,
-					#                              player.y + Math.sin(a) * 60,
-					#                              radius * 0.8, dmg, fuse));
-					#
-					# A SECOND charge at full damage, 60px away, covering 80% of the radius
-					# -- and its own `Mine.update`, which is where its 20 sparks and its
-					# blast disc come from. The angle has no data behind it in the original
-					# either, so it is a global draw: what a player sees is two overlapping
-					# blasts, not which way round they are.
-					mines.append(
-						Mine.new(
-							hero.x + cos(cluster_angle) * CLUSTER_OFFSET,
-							hero.y + sin(cluster_angle) * CLUSTER_OFFSET,
-							reach * CLUSTER_RADIUS_MULT,
-							dmg,
-							mine_fuse
-						)
-					)
+			# A mine this slice treats as a delayed nova: the fuse is real in the data
+			# and the arming behaviour is not ported, so it strikes immediately rather
+			# than pretending to arm. Named here so it is not mistaken for finished.
+			# NO ROLL: `_fireMine` passes `getDamage(player)` into `new Mine(...)` and
+			# `Mine.update` calls `enemy.takeDamage(this.damage)` with no crit -- so the
+			# charge and its evolved twin both carry the un-rolled base, exactly as the
+			# two `new Mine(...)` calls in the original do.
+			_strike_disc_unrolled(hero.x, hero.y, foes, reach, dmg)
+			if fx != null:
+				# WHAT THE ORIGINAL DRAWS, and what it therefore cannot be reproduced as:
+				# `renderMine` fills the blast radius and paints a 10px body that turns
+				# bright red once `armed = fuse < maxFuse * 0.5`. That armed state needs a
+				# mine that ARMS, and this port has none -- so the DETONATION is what is
+				# reproduced (`Mine.update`: `createParticles(this.x, this.y, '#ff8833', 20)`
+				# plus the blast radius the damage used). No fuse is invented for a mine
+				# that is already gone.
+				fx.emit_particles(hero.x, hero.y, Color("ff8833"), 20)
+				fx.emit_blast(hero.x, hero.y, reach, Color("ff8833"))
+			if evolved:
+				# `_fireMine`'s evolved Cluster Mine, quoted:
+				#
+				#     const a = Math.random() * Math.PI * 2;
+				#     game.mines.push(new Mine(player.x + Math.cos(a) * 60,
+				#                              player.y + Math.sin(a) * 60,
+				#                              radius * 0.8, dmg, fuse));
+				#
+				# A SECOND charge at full damage, 60px away, covering 80% of the radius --
+				# and a second `Mine.update`, which is where the 20 sparks and the blast
+				# disc come from. The angle has no data behind it in the original either,
+				# so it is a global draw: what a player sees is two overlapping blasts,
+				# not which way round they are.
+				var cluster_angle := randf() * TAU
+				var cluster_x := hero.x + cos(cluster_angle) * CLUSTER_OFFSET
+				var cluster_y := hero.y + sin(cluster_angle) * CLUSTER_OFFSET
+				var cluster_reach := reach * CLUSTER_RADIUS_MULT
+				_strike_disc_unrolled(cluster_x, cluster_y, foes, cluster_reach, dmg)
+				if fx != null:
+					fx.emit_particles(cluster_x, cluster_y, Color("ff8833"), 20)
+					fx.emit_blast(cluster_x, cluster_y, cluster_reach, Color("ff8833"))
 		_:
 			push_warning("weapon archetype '%s' has no implementation" % kind)
 
@@ -618,7 +715,7 @@ static func _fire_orbit(hero: Hero, reach: float, dmg: float, count: int) -> Arr
 ## Garlic ring's lie again, one weapon along.
 static func _strike_sweep(
 	hero: Hero, foes: Array, reach: float, dmg: float, evolved: bool, chance: float,
-	rng: RandomNumberGenerator
+	rng: RandomNumberGenerator, fx: Fx = null
 ) -> void:
 	for foe in foes:
 		if foe.dead:
@@ -634,35 +731,39 @@ static func _strike_sweep(
 				continue
 			if absf(dy) > MELEE_HALF_HEIGHT:
 				continue
-		# THE ROLL IS THE LOOP BODY'S FIRST LINE in `src/weapons.ts:216`, so it is here.
-		# One foe inside the band is one coin flip, whatever the foe beside it did.
-		foe.take_damage(_roll_crit(dmg, chance, rng))
+		# THE ROLL IS THE LOOP BODY'S FIRST LINE in `src/weapons.ts:216`, so it is here, and
+		# the NUMBER it draws comes with it. One foe inside the band is one coin flip,
+		# whatever the foe beside it did -- and one number, at THAT foe.
+		foe.take_damage(
+			_roll_crit(dmg, chance, rng, fx, foe.x, foe.y + NUMBER_DY, MELEE_NUMBER)
+		)
 
-## Everything within `reach`, PER FOE -- Frost Nova is the only caller, and it is the only
-## one of the three disc weapons whose damage the original rolls for. Garlic does NOT come
-## through here: `_fireAura` calls `_rollCrit` nowhere, so its damage is rolled nowhere and it
-## uses `_strike_disc_unrolled`. The Area Mine used to as well; it now lands its own blast in
-## `Mine.update`, at `Mine.radius`, because the original's own predicate is a strict `<`.
+## Everything within `reach`, PER FOE -- Frost Nova is the only caller left, and it is the
+## only one of the three disc weapons whose damage the original rolls for. Garlic and Area
+## Mine do NOT come through here: `_fireAura` and `_fireMine` call `_rollCrit` nowhere, so
+## they use `_strike_disc_unrolled`, which rolls nothing at all.
 ##
 ## Returns the foes it HIT, because Frost Nova has to do a second thing to exactly those
 ## foes -- and it is handed the same set this predicate damaged rather than a second disc
 ## re-derived, so the slow and the damage cannot disagree.
 static func _strike_all_in_range(
-	hero: Hero, foes: Array, reach: float, dmg: float, chance: float, rng: RandomNumberGenerator
+	hero: Hero, foes: Array, reach: float, dmg: float, chance: float,
+	rng: RandomNumberGenerator, fx: Fx = null, color := Color.WHITE
 ) -> Array:
-	return _strike_disc(hero.x, hero.y, foes, reach, dmg, chance, rng)
+	return _strike_disc(hero.x, hero.y, foes, reach, dmg, chance, rng, fx, color)
 
 ## The same disc, around an arbitrary point rather than the hero. `_strike_all_in_range`
-## is this centred on the hero, and the aura reaches it through `_strike_disc_unrolled`,
-## whose centre is the hero as well. A caller that needs a centre of its own passes one --
-## the mine does not, because a mine blasts where it lies.
+## is this centred on the hero; the aura and the two mine charges reach it through
+## `_strike_disc_unrolled`, whose centre is the hero for one and the SECOND charge's own
+## position for the other.
 ##
 ## `<= reach`, and the hits are returned so a caller that applies a SECOND effect -- the
 ## nova's slow -- applies it to the set this predicate actually reached rather than to a
 ## set it worked out again for itself.
 static func _strike_disc(
 	cx: float, cy: float, foes: Array, reach: float, dmg: float, chance: float,
-	rng: RandomNumberGenerator
+	rng: RandomNumberGenerator, fx: Fx = null, color := Color.WHITE,
+	number_dy := NUMBER_DY
 ) -> Array:
 	var hit: Array = []
 	for foe in foes:
@@ -672,25 +773,25 @@ static func _strike_disc(
 		var dy: float = foe.y - cy
 		if sqrt(dx * dx + dy * dy) <= reach:
 			# PER FOE, so a nova that catches eight foes rolls eight times and a fire
-			# can double some of them and not others. A caller whose archetype `_rollCrit`
-			# has no call site in does not come through here with a chance -- it uses
-			# `_strike_disc_unrolled`, which is the same predicate with nothing left
-			# to decide.
-			foe.take_damage(_roll_crit(dmg, chance, rng))
+			# can double some of them and not others -- AND EIGHT NUMBERS, one over each
+			# foe, which is what `color` and `number_dy` are for. A caller whose archetype
+			# `_rollCrit` has no call site in does not come through here with a chance --
+			# it uses `_strike_disc_unrolled`, which is the same predicate with nothing
+			# left to decide and NO sink, so it draws nothing.
+			foe.take_damage(
+				_roll_crit(dmg, chance, rng, fx, foe.x, foe.y + number_dy, color)
+			)
 			hit.append(foe)
 	return hit
 
 ## The same disc, struck with damage that was never rolled at all.
 ##
-## The aura is the only caller. `_fireAura` in `src/weapons.ts` calls `_rollCrit` NOWHERE --
-## it hands `getDamage(player)` to every foe it touches -- so there is no roll for the
-## original to have, per foe or per fire, and there is none here. The Area Mine and its
-## evolved cluster were the other two callers until the fuse was ported: a mine's blast now
-## lands in `Mine.update`, at `Mine.radius`, and it is there rather than here because the
-## original's own predicate is a strict `<` while this one is `<=`. The chance below is a
-## stated ZERO rather than an absent argument: this predicate is `_strike_disc` with nothing
-## left to decide, and naming it is what keeps the difference between this and the nova a word
-## a reader can follow.
+## The aura, the mine and the mine's evolved cluster are the three callers. `_fireAura` and
+## `_fireMine` in `src/weapons.ts` call `_rollCrit` NOWHERE -- they hand `getDamage(player)`
+## to every foe they touch -- so there is no roll for the original to have, per foe or per
+## fire, and there is none here. The chance below is a stated ZERO rather than an absent
+## argument: this predicate is `_strike_disc` with nothing left to decide, and naming it is
+## what keeps the difference between these three and the nova a word a reader can follow.
 ##
 ## AND IT IS MEASURED, not merely asserted by this comment: `verify_weapons.gd`'s
 ## `_the_aura_rolls_nothing_and_is_the_control` fires Garlic through a SEEDED generator at a
@@ -751,7 +852,8 @@ static func _fire_instant(
 	level: int,
 	rng: RandomNumberGenerator,
 	evolved: bool,
-	chance: float
+	chance: float,
+	fx: Fx = null
 ) -> Array:
 	var targets: Array = []
 	for foe in foes:
@@ -802,8 +904,15 @@ static func _fire_instant(
 		# draws its candidate FIRST, and the crit is drawn after the foe is chosen:
 		#
 		#     const cand = targets[Math.floor(Math.random() * targets.length)];
-		#     const dmg = this._rollCrit(player, game, baseDmg, target.x, ...);
-		var strike_dmg := _roll_crit(dmg, chance, rng)
+		#     const dmg = this._rollCrit(player, game, baseDmg, target.x, target.y - 20,
+		#                               '#ffff66');
+		#
+		# AND THE NUMBER GOES OVER THE FOE THAT WAS STRUCK, at `#ffff66`, which is the third
+		# of `_rollCrit`'s four call sites. It is drawn BEFORE `take_damage` here, as the
+		# original draws it, so the position is the foe's at the moment of the strike.
+		var strike_dmg := _roll_crit(
+			dmg, chance, rng, fx, struck.x, struck.y + NUMBER_DY, INSTANT_NUMBER
+		)
 		struck.take_damage(strike_dmg)
 		hits.append({"foe": struck, "sparks": 14})
 
@@ -875,7 +984,7 @@ static func _pick_index(rng: RandomNumberGenerator, n: int) -> int:
 ## rather than one roll multiplied by `struck.size()` now that the two rolls are independent.
 static func _strike_nearest(
 	hero: Hero, foes: Array, reach: float, dmg: float, count: int, chance: float,
-	rng: RandomNumberGenerator
+	rng: RandomNumberGenerator, fx: Fx = null
 ) -> Array:
 	var in_range: Array = []
 	for foe in foes:
@@ -890,10 +999,19 @@ static func _strike_nearest(
 	var struck: Array = []
 	for i in mini(count, in_range.size()):
 		# PER TARGET: `src/weapons.ts:454` is inside `_fireDrain`'s `for (const e of
-		# targets)`, so both of the evolved weapon's tethers roll for themselves. WHAT
+		# targets)`, so both of the evolved weapon's tethers roll for themselves -- and each
+		# draws its OWN number over its own foe, in `#ff66aa`, 16px up rather than 20. WHAT
 		# EACH FOE WAS DEALT travels back with it, because the heal is `totalDmg * steal`
 		# and `totalDmg` is the sum of THESE numbers rather than one number times a count.
-		var dealt := _roll_crit(dmg, chance, rng)
+		var dealt := _roll_crit(
+			dmg,
+			chance,
+			rng,
+			fx,
+			in_range[i]["foe"].x,
+			in_range[i]["foe"].y + DRAIN_NUMBER_DY,
+			DRAIN_NUMBER
+		)
 		in_range[i]["foe"].take_damage(dealt)
 		struck.append({"foe": in_range[i]["foe"], "damage": dealt})
 	return struck

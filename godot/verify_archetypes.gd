@@ -22,6 +22,10 @@ func _init() -> void:
 	_ranged_keeps_its_distance_and_fires()
 	_splitter_leaves_children_that_cannot_split_again()
 	_bomber_arms_and_hurts_the_hero()
+	# ...AND THE DRAW SITE THAT FUSE WAS FOR. `renderEnemy` blinks an armed bomber's body in
+	# `src/entity-render.ts`, and the port had the fuse and no drawing of it -- so a bomber
+	# about to detonate in your face looked exactly like one that was not.
+	_an_armed_bomber_blinks_on_the_clock()
 	_illusionist_clones_are_worth_no_experience()
 
 	# BOTH harnesses. `Check.*` sets its own flag, and a suite that printed a FAIL
@@ -148,6 +152,109 @@ func _bomber_arms_and_hurts_the_hero() -> void:
 	_check(armed_at >= 0, "a bomber arms once in range", "armed at frame %d" % armed_at)
 	_check(g.hero.hp < 100.0, "and the blast hurts the HERO, not just foes", "hp %0.1f" % g.hero.hp)
 
+## THE ARMED BOMBER BLINKS, AND IT BLINKS *ON A PERIOD*.
+##
+## `renderEnemy`'s third branch, `src/entity-render.ts:222-225`:
+##
+##     } else if (self.bomber && self.fuseArmed) {
+##         const blink = Math.floor(performance.now() / 120) % 2 === 0;
+##         ctx.fillStyle = blink ? '#ffffff' : self.color;
+##
+## -- the DRAW SITE this port did not have, gated on the fuse it did. What the blink depends
+## on is worth answering in an assertion rather than in a comment: it is TIME and nothing else.
+## Not the fuse's remaining seconds, not the health, not the moment it armed -- 120ms white,
+## 120ms own colour, for as long as `fuse_armed` holds, and the phase is whatever the clock
+## reads when the frame is drawn. A "fuse gauge" that reddened as the timer ran down would look
+## plausible and would be a different feature.
+##
+## THE TWO WAYS THIS CAN BE WRONG ARE BOTH HERE: a bomber that never changes colour (no draw
+## site at all, which is what the port had), and one that changes and never changes BACK (a
+## one-way tint). The third sample exists for the second: 0 -> 0.12 -> 0.24 must read
+## white -> own colour -> WHITE, and a check that stopped at two samples cannot tell a blink
+## from a single white state that happens to be sitting there.
+func _an_armed_bomber_blinks_on_the_clock() -> void:
+	# `performance.now() / 120` -- 120 MILLISECONDS is the HALF period. The spec literal is
+	# written here rather than read from `Foe.BLINK_HALF_PERIOD`, so a check cannot follow the
+	# constant it is checking to any value at all.
+	const HALF_PERIOD := 0.12
+	var g := Game.without_spawns()
+	var bomber := Foe.new(_foe_def("bomber"), g.hero.x + 60.0, g.hero.y)
+	g.foes.append(bomber)
+
+	# THE PRECONDITION, ASSERTED. Nothing below means anything unless the fuse arms, and the
+	# port has no blink flag to set by hand -- it is `fuse_armed` or nothing. Driven through
+	# `chase`, which is what arms it in play: it starts 60px from the hero, inside `fuseRange`.
+	Check.unchanged(bomber.fuse_armed, false, "a bomber that has not closed is NOT armed")
+	Check.unchanged(
+		bomber.body_color(0.0),
+		Color(bomber.color),
+		"so it wears its own colour even in the blink's white half -- an unarmed bomber never blinks"
+	)
+	bomber.chase(g.hero.x, g.hero.y, FRAME)
+	Check.unchanged(
+		bomber.fuse_armed, true, "inside fuseRange the fuse ARMS, or nothing below is reachable"
+	)
+
+	# THE BLINK: two samples half a period apart, a third a full period on.
+	var white: Color = bomber.body_color(0.0)
+	var colour: Color = bomber.body_color(HALF_PERIOD)
+	Check.unchanged(white, Color("ffffff"), "an armed bomber is drawn WHITE in one half of the blink")
+	# THE CHANNEL IS DERIVED, and this is not tidiness. The first version of this line read
+	# `white.r` against `colour.r` -- and the bomber is `#ff6644`, whose RED is 1.0, so the
+	# assertion failed at |1.0000 - 1.0000| against a blink that was working perfectly. The
+	# difference between white and this foe lives in GREEN (0.4 -> 1.0) and BLUE (0.267 -> 1.0).
+	# A hand-picked channel is the magnitude-asserted-where-the-claim-was-a-change trap from
+	# `assertions.gd`, one level down: the claim is "the colour changed", so what is compared
+	# is the LARGEST change across the channels rather than a channel chosen in advance.
+	Check.differs(
+		_channel_gap(white, colour),
+		0.0,
+		0.1,
+		"and a different colour in the other half -- it CHANGES by at least 0.1 somewhere"
+	)
+	Check.unchanged(colour, Color(bomber.color), "and what it changes to is its own data colour")
+	Check.unchanged(
+		bomber.body_color(HALF_PERIOD * 2.0),
+		Color("ffffff"),
+		"and it is WHITE AGAIN one full period later -- a BLINK, not a one-way tint"
+	)
+	# THE PERIOD ITSELF, not merely "it differs twice": a sample inside each half has to stay
+	# in that half, which is what separates a 240ms cycle from a repaint on every frame.
+	Check.unchanged(
+		bomber.body_color(HALF_PERIOD * 0.5), white, "half a half-period in, it is STILL the same white"
+	)
+	Check.unchanged(
+		bomber.body_color(HALF_PERIOD * 1.5),
+		colour,
+		"and half a period on from that, STILL its own colour"
+	)
+
+	# THE CHAIN, one ordering at a time and all on this ONE foe. Each of these fails for an
+	# implementation that reordered `body_color`'s branches, and none of them fails for an
+	# implementation that draws the blink correctly by itself.
+	bomber.apply_slow(0.5, 60.0)
+	Check.rose(
+		0.0, bomber.slow_timer, "the bomber is ALSO slowed now, or the ordering below proves nothing"
+	)
+	Check.unchanged(
+		bomber.body_color(HALF_PERIOD),
+		Color("88ccff"),
+		"so the SLOW is drawn above the blink: the armed bomber is iced blue, not its own colour"
+	)
+	Check.unchanged(
+		bomber.body_color(0.0),
+		Color("88ccff"),
+		"and in the blink's WHITE half too -- the blink does not show through a slow at all"
+	)
+	bomber.take_damage(1.0)
+	Check.rose(0.0, bomber.flash_timer, "and now the bomber has been HIT as well")
+	Check.unchanged(
+		bomber.body_color(HALF_PERIOD),
+		Color("ffffff"),
+		"so the FLASH is drawn above both: white in the half the slow was showing in"
+	)
+
+
 func _illusionist_clones_are_worth_no_experience() -> void:
 	var g := Game.new(999.0)
 	var ill := Foe.new(_foe_def("illusionist"), 400.0, 100.0)
@@ -189,6 +296,16 @@ func _illusionist_clones_are_worth_no_experience() -> void:
 	# the first spawn -- `spawn_timer` starts at 0, so one foe appears immediately --
 	# and the first version of this test counted that bat as a clone.
 	Check.approx(float(clone_xp[0]), 0.0, "and they are worth NO experience", 0.5)
+
+## The largest per-channel difference between two colours.
+##
+## The channel a change lands on is a property of the TWO COLOURS, not of the claim: white
+## against the bomber's `#ff6644` moves green (0.4 -> 1.0) and blue (0.267 -> 1.0) while red is
+## 1.0 in both. Asserting on a channel chosen in advance is a magnitude pinned where the claim
+## was a change, and it fails against correct code -- which is how this helper got here.
+func _channel_gap(a: Color, b: Color) -> float:
+	return maxf(maxf(absf(a.r - b.r), absf(a.g - b.g)), absf(a.b - b.b))
+
 
 func _check(cond: bool, label: String, detail: String) -> void:
 	if cond:

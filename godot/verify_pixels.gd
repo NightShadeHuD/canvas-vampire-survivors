@@ -262,6 +262,259 @@ func _init() -> void:
 		% [free_px, slowed_px, back_px, Color(slow_foe.color)]
 	)
 
+	# --- THE HIT FLASH IS VISIBLE, AND IT REVERSES -------------------------------------
+	#
+	# `renderEnemy`'s FIRST branch, `src/entity-render.ts:218`:
+	#
+	#     if (self.flashTimer > 0) ctx.fillStyle = '#ffffff';
+	#
+	# -- set by `Enemy.takeDamage` on EVERY hit (`this.flashTimer = 0.08`) and aged by
+	# `Enemy.update`. The port had no flash timer at all, so a foe that had just been hit was
+	# drawn exactly like one that had not. `verify_weapons.gd` pins the VALUES the chain
+	# returns; this is the other half, and the one a player actually receives.
+	#
+	# THE TWO CLAIMS, AND WHY BOTH ARE HERE. A hit must CHANGE the pixel, and the change must
+	# REVERSE -- a flash that never decays is a foe that is white forever, which is the "the
+	# screen greyed out and stayed grey" defect this repository shipped once. A check with
+	# only the first half passes for exactly that bug.
+	var flash_state: int = main.state
+	main.state = main.State.PAUSED
+	main.paused_panel.visible = false
+	main.game.foes.clear()
+	var flash_foe := _stray_foe(main.game, 90.0, 0.0)
+	# The same BODY pixel the slow section samples: outside the pale core (`size * 0.5`) and
+	# inside the rim, on the horizontal through the foe's centre. The foe is `sturdy` and at
+	# full health when the first frame is taken, so no HP bar reaches this row either.
+	var flash_on_screen: Vector2 = main.get_canvas_transform() * Vector2(flash_foe.x, flash_foe.y)
+	var bx := int(flash_on_screen.x + flash_foe.size * 0.75)
+	var by := int(flash_on_screen.y)
+	var unhit := await _capture_of(main)
+	var unhit_px := unhit.get_pixel(bx, by)
+	# THE FLASH THE GAME SETS, through the only thing that sets it. Nothing here writes
+	# `flash_timer` itself: the claim is about what a hit does to the screen.
+	flash_foe.take_damage(1.0)
+	var hit_frame := await _capture_of(main)
+	var hit_px := hit_frame.get_pixel(bx, by)
+	# A DIRECTION, not a magnitude. The bat is `#8844ff`, so white moves RED (0.533 -> 1.0) and
+	# GREEN (0.267 -> 1.0) while blue is already 1.0. The exact colour is pinned in
+	# `verify_weapons.gd` against `body_color`; what this side pins is that the value REACHES
+	# THE SCREEN, which no assertion about the field can do.
+	Check.rose(
+		float(unhit_px.r), float(hit_px.r), "a hit foe's body is drawn BRIGHTER on screen (red)"
+	)
+	Check.rose(
+		float(unhit_px.g), float(hit_px.g), "and brighter in green too -- it is the original's WHITE"
+	)
+	# ...AND IT REVERSES. Aged through `chase`, which is the ONLY thing that ages it in play --
+	# `Game.step` calls it once per foe per frame. The foe cannot move (it is a `_stray_foe`,
+	# speed 0), so the pixel sampled is the same piece of body before and after.
+	for _tick in int(ceil(0.08 / FRAME)):
+		flash_foe.chase(main.game.hero.x, main.game.hero.y, FRAME)
+	var faded := await _capture_of(main)
+	var faded_px := faded.get_pixel(bx, by)
+	Check.unchanged(flash_foe.flash_timer > 0.0, false, "the flash has expired by the frame it is read on")
+	Check.unchanged(
+		faded_px,
+		unhit_px,
+		"CONTROL: and the body pixel is BACK to what it was before the hit -- the flash reverses"
+	)
+	print(
+		"  note  the foe's body pixel: unhit %s -> hit %s -> flashed off %s (data colour %s)"
+		% [unhit_px, hit_px, faded_px, Color(flash_foe.color)]
+	)
+	main.state = flash_state
+
+	# --- THE ARMED BOMBER BLINKS, ON A PERIOD -----------------------------------------
+	#
+	# `renderEnemy`'s third branch, `src/entity-render.ts:222-225`:
+	#
+	#     } else if (self.bomber && self.fuseArmed) {
+	#         const blink = Math.floor(performance.now() / 120) % 2 === 0;
+	#         ctx.fillStyle = blink ? '#ffffff' : self.color;
+	#
+	# The port had the FUSE and no drawing of it: a bomber about to detonate in your face
+	# looked exactly like one that was not. What the blink depends on is TIME -- 120ms white,
+	# 120ms its own colour, phase taken from the clock when the frame is drawn -- and the three
+	# samples below are what separates that from a one-way tint: white, own colour, WHITE.
+	#
+	# PAUSED AND FROZEN, which is what makes the phase measurable at all: `game.elapsed` does
+	# not advance, so setting it IS setting the phase.
+	var blink_state: int = main.state
+	main.state = main.State.PAUSED
+	main.paused_panel.visible = false
+	main.game.foes.clear()
+	# `performance.now() / 120`: 120 MILLISECONDS is the HALF period, written as the spec
+	# literal rather than read from `Foe.BLINK_HALF_PERIOD`.
+	const BLINK_HALF := 0.12
+	var bomber := Foe.new(Enemies.ENEMIES["BOMBER"], main.game.hero.x + 60.0, main.game.hero.y)
+	Check.sturdy(bomber)
+	bomber.speed = 0.0
+	main.game.foes.append(bomber)
+	# THE PRECONDITION, AND IT IS THE FUSE RATHER THAN A FLAG SET BY HAND: 60px is inside
+	# `fuseRange` (80), so one `chase` -- what arms it in play -- arms it here.
+	bomber.chase(main.game.hero.x, main.game.hero.y, FRAME)
+	Check.unchanged(bomber.fuse_armed, true, "the bomber ARMED, or the blink below is unreachable")
+	var bomber_on_screen: Vector2 = main.get_canvas_transform() * Vector2(bomber.x, bomber.y)
+	var mx := int(bomber_on_screen.x + bomber.size * 0.75)
+	var my := int(bomber_on_screen.y)
+	main.game.elapsed = 0.0
+	var blink_white := await _capture_of(main)
+	var white_px := blink_white.get_pixel(mx, my)
+	main.game.elapsed = BLINK_HALF
+	var blink_colour := await _capture_of(main)
+	var colour_px := blink_colour.get_pixel(mx, my)
+	main.game.elapsed = BLINK_HALF * 2.0
+	var blink_again := await _capture_of(main)
+	var again_px := blink_again.get_pixel(mx, my)
+	# The bomber is `#ff6644`: white moves GREEN (0.4 -> 1.0) and BLUE (0.267 -> 1.0) while red
+	# is 1.0 in both. The channel carrying the change is the DATA's, so the assertion reads the
+	# one that moves rather than choosing one in advance -- the first version of the headless
+	# check chose red and failed against a working blink.
+	Check.rose(
+		float(colour_px.g), float(white_px.g), "an armed bomber is drawn BRIGHTER in the white half of its blink"
+	)
+	Check.unchanged(
+		colour_px,
+		Color(bomber.color),
+		"and wears its own data colour in the other half -- the blink is the two of them"
+	)
+	Check.unchanged(
+		again_px,
+		white_px,
+		"CONTROL: and it is WHITE AGAIN one full period later -- it BLINKS, it does not tint once"
+	)
+	# AND THE CLOCK ALONE DOES NOTHING. Disarming the fuse must remove the blink at every phase
+	# while `game.elapsed` goes on doing what it was doing -- without this, every assertion
+	# above would pass for an implementation that flashed every foe white on a timer.
+	bomber.fuse_armed = false
+	main.game.elapsed = 0.0
+	var unarmed_a := await _capture_of(main)
+	main.game.elapsed = BLINK_HALF
+	var unarmed_b := await _capture_of(main)
+	Check.unchanged(
+		unarmed_b.get_pixel(mx, my),
+		unarmed_a.get_pixel(mx, my),
+		"CONTROL: with the fuse unarmed the same clock change moves NO pixel -- the blink is the FUSE"
+	)
+	print(
+		"  note  the bomber's body pixel: white %s -> own colour %s -> white again %s"
+		% [white_px, colour_px, again_px]
+	)
+	main.game.elapsed = 0.0
+	main.state = blink_state
+	# THE FOES GO WITH THE SECTION, and this is a measured coupling rather than tidiness.
+	# `_draw` draws `game.enemy_shots` BEFORE `game.foes`, so a foe parked where a later check
+	# puts its bolt HIDES that bolt -- and the hostile-bolt check below measures a bolt exactly
+	# `hero.x + 60`, which is where this section's bomber stands to arm its fuse. Left there,
+	# a correctly drawn bolt changed ZERO pixels and the check went red: watched, with no other
+	# difference between the two runs.
+	main.game.foes.clear()
+
+	# --- THE DAMAGE NUMBER IS ON SCREEN, AT THE FOE, AND IT GOES ----------------------
+	#
+	# `_rollCrit`, `src/weapons.ts:112-115`, on EVERY hit:
+	#
+	#     game.createFloatingText(Math.round(dmg), x, y, '#ffee44', { crit: true });
+	#     game.createFloatingText(Math.round(baseDamage), x, y, color);
+	#
+	# `verify_weapons.gd` pins the label, the colour and the position IN THE DATA -- and a
+	# value in a field is not a number a player can see, which is the whole of rule 18. This
+	# measures the pixels, and it measures WHERE they are, because "at the struck foe" is the
+	# claim: a number over the hero would draw the same thing for a hit and a miss.
+	var number_run := await _paused_run()
+	var number_main = number_run["main"]
+	var number_game: Game = number_run["game"]
+	# THE INSTRUMENT, BEFORE IT IS TRUSTED. A font that measures zero for a known string draws
+	# NOTHING, and every "the frame changed" reading below would then be a reading about a dead
+	# instrument (`docs/PROBE-CAVEATS.md`, rule 19: show it a known signal first).
+	var number_font = number_main.number_font()
+	Check.unchanged(number_font != null, true, "the damage-number font exists")
+	Check.rose(
+		0.0,
+		number_font.get_string_size("12", HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x,
+		"CONTROL: the font MEASURES a known string -- the instrument reads a signal at all"
+	)
+	number_game.hero.weapons.clear()
+	number_game.hero.add_weapon(_weapon_by_id("whip"))
+	number_game.cooldowns.clear()
+	var number_foe := _stray_foe(number_game, 80.0, 0.0)
+	var foe_at: Vector2 = number_main.get_canvas_transform() * Vector2(number_foe.x, number_foe.y)
+	var hero_at: Vector2 = number_main.get_canvas_transform() * Vector2(
+		number_game.hero.x, number_game.hero.y
+	)
+	# FIRED THROUGH THE REAL ENTRY POINT AND THE GAME'S OWN SINK, which is the pair
+	# `Game.step` calls. Sparks and the sweep shape come with it, so they are cleared: what is
+	# measured below is the NUMBER and nothing standing beside it.
+	WeaponFire.fire(_weapon_by_id("whip"), number_game.hero, number_game.foes, [], 1, number_game.fx)
+	Check.rose(0.0, float(number_game.fx.texts.size()), "the whip's hit left a number in the sink")
+	# Healed back to full, so no HP bar joins the diff -- the same reason `_fx_pixel_diff`
+	# heals: a bar that appears in one capture and not the other is not the number.
+	for foe in number_game.foes:
+		foe.hp = foe.max_hp
+	number_game.fx.sparks.clear()
+	number_game.fx.strikes.clear()
+	var with_number := await _capture_of(number_main)
+	var held: Array = number_game.fx.texts.duplicate()
+	number_game.fx.texts.clear()
+	var without_number := await _capture_of(number_main)
+	var box := _change_bbox(with_number, without_number)
+	Check.rose(0.0, float(box["count"]), "the damage number CONTRIBUTES PIXELS to the frame")
+	var centre := Vector2(box["cx"], box["cy"])
+	# THE CLAIM `quality-baseline.json` NAMES, as a direction: the number is nearer the FOE
+	# than the hero who dealt it. `fell(before, after)` is "after is smaller", so the hero
+	# distance is the one before.
+	Check.fell(
+		centre.distance_to(hero_at),
+		centre.distance_to(foe_at),
+		"the number is drawn CLOSER TO THE FOE than to the hero -- it is per-TARGET, not per-fire"
+	)
+	Check.at_most(
+		centre.distance_to(foe_at),
+		40.0,
+		"and within 40px of it: above the foe, where `enemy.y - 20` puts it"
+	)
+	# IT RISES, and that is a direction rather than a magnitude: `update` does `y += vy * dt`
+	# with `vy = -60`, so the number climbs and screen y FALLS. The topmost changed row is
+	# compared with itself, which needs no glyph metrics and cannot be satisfied by a number
+	# that merely faded in place.
+	number_game.fx.texts.append_array(held)
+	for _tick in 24:
+		number_game.fx.update(FRAME)
+	var risen := await _capture_of(number_main)
+	var risen_box := _change_bbox(with_number, risen)
+	Check.rose(0.0, float(risen_box["count"]), "the number MOVED between the two frames")
+	# `fell(before, after)` asserts AFTER IS SMALLER, and screen y grows DOWNWARD -- so the
+	# BIRTH box's top row is what goes in first. Written the other way round first, this
+	# failed at (268.0000 -> 292.0000) against a number rising exactly 24px in 24 ticks.
+	Check.fell(
+		float(box["top"]),
+		float(risen_box["top"]),
+		"and the change moved UP the screen -- `vy = -60` carries it 60px a second"
+	)
+	# AND IT GOES. `life` starts at 1 and is spent at 1.2/s -- 0.833s -- and the pixel half of
+	# "a number that never expires is a screen full of them" is that the frame afterwards is
+	# IDENTICAL to the frame the number was never drawn in.
+	for _tick in 60:
+		number_game.fx.update(FRAME)
+	Check.unchanged(number_game.fx.texts.size(), 0, "the number is gone from the sink after its life")
+	var after_life := await _capture_of(number_main)
+	Check.unchanged(
+		_diff(after_life, without_number),
+		0,
+		"CONTROL: and the frame is IDENTICAL to the one it was never drawn in -- the number goes away"
+	)
+	print(
+		"  note  the damage number: %d px changed, centre %s, foe %s, hero %s"
+		% [int(box["count"]), centre, foe_at, hero_at]
+	)
+	# THE SCENE GOES AWAY AGAIN, and that is not tidiness. A capture here is of the WHOLE
+	# VIEWPORT, and a scene added later is drawn ON TOP of the ones before it -- floor
+	# included. The hostile-bolt check below measures the FIRST scene, and with this one left
+	# alive its bolt changed ZERO pixels while being drawn perfectly correctly. Measured, not
+	# predicted: the bolt check went red the moment this section was inserted above it.
+	number_main.queue_free()
+	await process_frame
+
 	# --- HOSTILE BOLTS ----------------------------------------------------------------
 	# Simulated every frame, drawn by nothing. The audit's method, kept: put a bolt in the
 	# world, take it away, and require the frame to change.
@@ -387,6 +640,23 @@ func _init() -> void:
 			var rig := await _weapon_rig(def, frames)
 			var px := await _fx_pixel_diff(rig["main"], rig["game"])
 			seen.append("%d:%d" % [frames, px])
+			# THE RIG IS FREED AS SOON AS IT HAS BEEN MEASURED, and this is load-bearing
+			# rather than tidy. A capture is of the WHOLE VIEWPORT, so every scene ever
+			# created keeps being drawn on every frame -- measured: 56 live scenes after this
+			# loop, one per `_weapon_rig` call. That was survivable while a paused scene drew
+			# nothing that changed, and it stopped being survivable when the damage numbers
+			# arrived: a paused scene never ages its texts, so each rig that landed a hit
+			# holds its number for good. Measured at the end of this loop: 25 damage numbers
+			# repainted every frame, on top of the 56 scenes. The frame cost therefore grows
+			# WITH the loop, which is exactly where the captures start missing what they are
+			# measuring -- watched as the sixth weapon onwards reading ZERO pixels while the
+			# first five read their usual counts.
+			#
+			# Freed AFTER the measurement and BEFORE the next rig, so each measurement is of a
+			# viewport holding one scene: identical to what the pristine tree measured for
+			# every weapon that draws no number.
+			rig["main"].queue_free()
+			await process_frame
 			if px > best:
 				best = px
 				best_at = frames
@@ -405,81 +675,6 @@ func _init() -> void:
 	Check.unchanged(silent, [], "EVERY weapon in the data creates a visible effect")
 	Check.at_least(float(measured), float(Weapons.WEAPONS.size()), "all %d weapons were measured" % Weapons.WEAPONS.size())
 	Check.at_least(float(archetypes.size()), 8.0, "every archetype in the data is represented")
-
-
-	# THE MINE'S FUSE IS VISIBLE, AND IT IS THE ONLY WARNING A PLAYER GETS
-	# ---------------------------------------------------------------------------
-	# `renderMine` is the whole of the mine's screen presence: a disc out to
-	# `self.radius`, a 10px body and a white rim, with the body `#ff4444` once
-	# `fuse < maxFuse * 0.5` and `#aa4444` before that. So two things have to be true of
-	# the frame, and neither of them is a statement about state:
-	#
-	#   (a) THE MINE IS DRAWN FOR ITS WHOLE FUSE, not only at the moment it blows. 72
-	#       frames at 1/60 is the warning a player gets; a mine that appears only as a
-	#       blast is a mine nobody can walk away from.
-	#   (b) AN ARMED MINE LOOKS DIFFERENT FROM AN UNARMED ONE. "It is about to go off" is
-	#       the only thing that tells a player to move.
-	#
-	# MEASURED AS PIXELS AND NOT AS STATE, which is the whole reason this tier exists:
-	# `verify_weapons.gd` pins `Mine.armed()` and `verify_scene.gd` pins that `_draw` calls
-	# it, and NEITHER can see a `_draw` that stopped drawing mines at all. The state would
-	# be perfect and the screen empty.
-	print("\n-- the mine's fuse, as pixels --")
-	var mine_run := await _paused_run()
-	var mine_game: Game = mine_run["game"]
-	var mine_main: Node2D = mine_run["main"]
-	# NO FOES: an HP bar is a difference between two captures that has nothing to do with
-	# the mine, which is why `_fx_pixel_diff` heals them back before both of its own.
-	mine_game.foes.clear()
-	var mine_def: Dictionary = _weapon_by_id("mine")
-	var blast: float = float(mine_def["baseRange"])
-	var fuse: float = float(mine_def["fuse"])
-	# OFFSET FROM THE HERO. A mine is dropped where the hero stands, but the hero is drawn
-	# ON TOP of it -- so the body-colour pixel below would be the hero's, and the check that
-	# "armed is brighter" would be measuring the wrong circle entirely.
-	var mine_at := Vector2(mine_game.hero.x + mine_game.hero.size * 8.0, mine_game.hero.y)
-	var mine_px: Vector2 = mine_main.get_canvas_transform() * mine_at
-	# THE CLOCK IS PINNED, so the armed pulse is the same number in both halves of every
-	# pair below and a difference can never be the sine.
-	mine_game.elapsed = 0.0
-	var mine := Mine.new(mine_at.x, mine_at.y, blast, 45.0, fuse)
-
-	var without := await _capture_of(mine_main)
-	mine_game.mines.append(mine)
-	mine.fuse = fuse
-	var unarmed_was: bool = mine.armed()
-	var unarmed := await _capture_of(mine_main)
-	mine.fuse = fuse * 0.4
-	var armed_was: bool = mine.armed()
-	var armed := await _capture_of(mine_main)
-	mine_game.mines.clear()
-	var again := await _capture_of(mine_main)
-
-	# THE PREMISES, ASSERTED BEFORE ANY DIFF IS BELIEVED. Two captures that are the same
-	# state would make "armed looks different" a statement about noise, and a mine removed
-	# and put back must return the frame EXACTLY -- which is the instrument's own control.
-	Check.unchanged(unarmed_was, false, "PREMISE: the first mine capture is UNARMED")
-	Check.unchanged(armed_was, true, "PREMISE: the second is ARMED")
-	Check.unchanged(_diff(without, again), 0, "CONTROL: mine removed and put back is the same frame")
-
-	Check.at_least(float(_diff(without, unarmed)), 1.0, "the mine IS DRAWN before it is armed")
-	Check.at_least(float(_diff(unarmed, armed)), 1.0, "and an ARMED mine is a different frame")
-
-	# AND THE BODY TURNS BRIGHTER, MEASURED AT THE BODY'S OWN PIXEL. The body is drawn
-	# OPAQUE over the disc, so this pixel is `#aa4444` or `#ff4444` and nothing else --
-	# which makes it a measurement of the ARMED STATE rather than of "these two frames
-	# differ somewhere". A `_draw_mine` that ignored `armed()` and painted one colour
-	# would pass the diff above (the disc's alpha pulses either way) and fails here.
-	var unarmed_body: Color = unarmed.get_pixel(int(mine_px.x), int(mine_px.y))
-	var armed_body: Color = armed.get_pixel(int(mine_px.x), int(mine_px.y))
-	Check.differs(float(armed_body.r), float(unarmed_body.r), 0.2, "the armed body is the BRIGHTER red")
-
-	# AND THE DISC IS THE BLAST RADIUS. Outermost differing pixel along the ray from the
-	# MINE out: `renderMine` fills `self.radius`, and `self.radius` is the number
-	# `Mine.update` damages with -- so the circle a player is standing outside is exactly
-	# the circle that will not hurt them.
-	var drawn_blast := _ray_radius(without, unarmed, mine_px)
-	Check.approx(float(drawn_blast), blast, "the drawn disc is at the radius the blast uses", 3.0)
 
 
 	# THE GARLIC RING MUST NOT LIE ABOUT ITS REACH
@@ -755,6 +950,43 @@ func _capture() -> Image:
 	if tex == null:
 		return Image.new()
 	return tex.get_image()
+
+
+## The pixels that differ between two frames, as a COUNT and as a POSITION: the centroid of
+## the changed samples, plus the topmost and bottommost rows that changed.
+##
+## Sampled every 4th pixel, exactly as `_diff` samples, so the two agree about what "changed"
+## means. A count can only say THAT something moved; a position is what separates "a damage
+## number appeared over the foe" from "a damage number appeared over the hero", which are the
+## same count and different games.
+func _change_bbox(a: Image, b: Image) -> Dictionary:
+	var none := {"count": 0, "cx": -1.0, "cy": -1.0, "top": -1, "bottom": -1}
+	if a.get_width() != b.get_width() or a.get_height() != b.get_height():
+		return none
+	var count := 0
+	var sum_x := 0
+	var sum_y := 0
+	var top := -1
+	var bottom := -1
+	for x in range(0, a.get_width(), 4):
+		for y in range(0, a.get_height(), 4):
+			if a.get_pixel(x, y) != b.get_pixel(x, y):
+				count += 1
+				sum_x += x
+				sum_y += y
+				if top < 0 or y < top:
+					top = y
+				if y > bottom:
+					bottom = y
+	if count == 0:
+		return none
+	return {
+		"count": count,
+		"cx": float(sum_x) / float(count),
+		"cy": float(sum_y) / float(count),
+		"top": top,
+		"bottom": bottom,
+	}
 
 
 ## How many pixels differ between two frames.
