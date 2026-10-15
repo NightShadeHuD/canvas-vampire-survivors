@@ -245,5 +245,21 @@
         "run": "node scripts/check-reach.mjs",
         "why": "A CONTROL MUST APPLY THE OFFER ITS WHOLE TEXT DESCRIBES. Each button shows its own title and label with the NEXT offer DESCRIPTION, so the player reads one upgrade description and receives another upgrade. This was green while `displayed=` read only the leading NAME -- a title and a label are enough to name an offer, and `description` is read in exactly one place in the whole repository, so no other gate could notice. `displayed=` now requires the name, the label AND the description to belong to one offer, and this break reports \"shows text matching NONE of the offers it could have been built from\". `requires: godot` because the failure is produced by driving the game.",
         "touches": ["godot/scripts/main.gd"]
+    },
+    {
+        "gate": "check:sw-cache",
+        "break": "node scripts/edit.mjs service-worker.js --anchor \"const CACHE = 'survivor-\" --replace \"const CACHE = 'survivor-stale-\"",
+        "creates": [],
+        "run": "node scripts/check-sw-cache.mjs",
+        "why": "THE NAME NO LONGER MATCHES WHAT IS CACHED, which is the whole defect: this worker is cache-first, so a returning player is served the old bundle until the worker's own bytes change, and the name IS the release. This break reproduces the shipped state exactly -- `survivor-v3.0.1` sat there for 146 commits, 46 of them touching `src/`. The anchor is one line and the gate refuses the byte-identical-everything-else case, so the failure can only be the name.",
+        "touches": ["service-worker.js"]
+    },
+    {
+        "gate": "check:sw-cache",
+        "break": "node scripts/edit.mjs src/pool.ts --anchor 'export class' --replace 'export  class'",
+        "creates": [],
+        "run": "node scripts/check-sw-cache.mjs",
+        "why": "A SOURCE CHANGE WITH NO REGENERATION, in a module the worker does NOT precache. `src/pool.ts` compiles to `dist/pool.js`, which `main.js` imports and the fetch handler then serves cache-first forever. The FIRST version of this gate derived its inputs from the worker's own `ASSETS` list, so it stayed GREEN through exactly this edit -- the original defect, alive for the twelve imported-but-not-listed modules. The input set is all of `src/` now, and this entry is what holds it there.",
+        "touches": ["src/pool.ts"]
     }
 ]

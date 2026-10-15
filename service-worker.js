@@ -25,16 +25,18 @@
  * therefore does not change what a returning player runs — unless the BYTES OF
  * THIS FILE change, because only then does the browser install a new worker,
  * and only `activate` deletes the old cache. `dist/*.js` can change all it
- * likes; this string is the release.
+ * likes; this line is the release.
  *
- * It had not changed since `0d67e16` — 146 commits, 46 of them touching `src/`.
- * Every one of those releases was invisible to anyone who had already played.
+ * It used to be hand-maintained, and it had not changed since `0d67e16` — 146
+ * commits, 46 of them touching `src/`. Every one of those releases was
+ * invisible to anyone who had already played.
  *
- * So: BUMP IT IN ANY COMMIT THAT CHANGES `dist/`. The durable fix is a
- * build-time hash — see the note at the bottom of this file — and it is not
- * implemented because it needs a build step the repository does not have.
+ * GENERATED. The name is a digest of everything this worker caches, so it
+ * cannot be forgotten. `npm run gen:sw-cache` writes it and
+ * `npm run check:sw-cache` refuses a name that does not match its inputs. Do
+ * not edit the line below by hand.
  */
-const CACHE = 'survivor-v3.0.1';
+const CACHE = 'survivor-641df02e5627b140';
 const ASSETS = [
     './',
     './index.html',
@@ -58,24 +60,29 @@ const ASSETS = [
 ];
 
 /**
- * WHAT A DURABLE FIX WOULD TAKE
+ * HOW THE NAME IS KEPT HONEST
  *
- * A name derived from the bytes it caches, so forgetting is not possible:
+ * `scripts/lib/sw-cache-name.mjs` derives it from the content this worker
+ * caches: this file's own source with the line above removed, every precached
+ * asset, the `src/` each `./dist/*.js` is compiled from, and the toolchain that
+ * compiles them. So it moves whenever any byte a player receives moves.
  *
- *   1. `scripts/build.mjs` already owns `dist/`. After `tsc` emits, hash every
- *      file in `dist/` (plus `index.html` and `styles.css`, which the asset list
- *      also covers) with `node:crypto`, and write the digest into a generated
- *      `dist/sw-cache-name.js` — or substitute a `__CACHE_NAME__` placeholder
- *      into a copy of this file as it lands in `dist/`.
- *   2. Serve the worker from `dist/` and register `./dist/service-worker.js`,
- *      because a root-scoped worker cannot be generated into `dist/` without
- *      changing its scope.
- *   3. Make `npm run verify` refuse a committed `dist/` whose name does not
- *      match its contents, so the drift is a gate rather than a habit.
+ * The plan this comment used to carry was re-derived and three parts of it did
+ * not survive:
  *
- * That is three changes and one of them moves a file the deploy workflow
- * assembles, which is a cascade for a commit whose job is a security fix. It is
- * described here, not done, and it is the FIRST thing to do next.
+ *   - `dist/` is gitignored, so a drift gate reading the emitted tree would have
+ *     nothing to read in a fresh checkout, and a gate whose verdict depends on
+ *     an untracked artefact enforces nothing.
+ *   - `npm run build` writing this line would leave the drift gate unable to
+ *     fail, because `build` is the last step of `npm run verify` (rule 13). It
+ *     does not touch this file; `npm run gen:sw-cache` does.
+ *   - moving the worker into `dist/` would give it a scope of `/dist/`. A
+ *     worker's default scope is its own directory and GitHub Pages cannot send
+ *     `Service-Worker-Allowed`, so it would stop controlling `index.html`,
+ *     `styles.css` and `/`. It stays at the root, and `check:sw-cache` asserts
+ *     the registration path and the deploy copy so a move cannot go unnoticed.
+ *
+ * The residual risk is stated where it is owned, in `scripts/check-sw-cache.mjs`.
  */
 self.addEventListener('install', (event) => {
     event.waitUntil(

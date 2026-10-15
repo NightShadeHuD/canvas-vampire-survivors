@@ -8,10 +8,10 @@ The evidence column below quotes values. These are the ones checked automaticall
 
 | name                  | value |
 | --------------------- | ----- |
-| `tests`               | 955   |
+| `tests`               | 981   |
 | `testFloor`           | 816   |
 | `suppressionCeilings` | 9     |
-| `verifySteps`         | 25    |
+| `verifySteps`         | 26    |
 
 <!-- claims:end -->
 
