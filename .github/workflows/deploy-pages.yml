@@ -1,15 +1,48 @@
 name: Deploy to GitHub Pages
 
-# Publishing only. THE GATE IS NOT HERE.
+# THE GATE RUNS HERE, BEFORE THE ARTIFACT IS UPLOADED.
 #
-# GitHub Actions no longer verifies anything: `npm run ci` runs the full gate on the
-# machine doing the work and reports the `Verify` status itself. This workflow used to
-# carry a `verify` job duplicating the CI one -- and for several commits the two were NOT
-# identical while their comments claimed they were. That whole class of drift is gone with
-# the duplicate, which is the one unambiguous good thing about moving the runner.
+# This header used to read `Publishing only. THE GATE IS NOT HERE.` -- and it was true, which
+# was the defect. Nothing verified this bundle: the only thing standing between drift and
+# production was `.githooks/pre-push`, a hook on one laptop, bypassable with `--no-verify`
+# and not run on merge at all. A commit could reach players with nothing having checked it
+# here.
 #
-# **What this workflow no longer guarantees:** a commit can reach production without the
-# gate having passed, if whoever merged reported a status they had not earned.
+# Now the `verify` job runs `npm run verify` -- the same tier-1 chain `npm run ci` runs, and
+# `deploy` needs it, so **a bundle that fails the gate cannot be uploaded, let alone
+# published.** (`verifySteps` in `docs/ENGINEERING-STANDARDS.md` is the gated gate count;
+# this file deliberately does not repeat it, because prose is not covered by `check:claims`.)
+#
+# GODOT IS INSTALLED AND PINNED IN THE GATE JOB, AND THE PROJECT IS IMPORTED BEFORE IT RUNS.
+# Neither is decoration, and together they are why this is not simply `npm run verify`:
+#
+#   - With no `godot` on PATH, `check:godot` prints `NOTICE:` and exits 0, so `npm run verify`
+#     EXITS 0 while the whole Godot half -- 13 suites, 453 assertions and the generated-data
+#     drift check -- goes unverified. Measured on this repository: Godot off PATH gives
+#     "all 26 gates passed, 2 of which checked nothing". A green gate is not a checked gate.
+#   - Without the `--import`, the suites cannot load at all and the gate fails at gate 5
+#     blaming a DOCUMENT -- `claims "godotAssertions" is 453, but the measurement is 0` --
+#     because `check:claims` measures by RUNNING them.
+#
+# The version pin is deliberate: `godotAssertionFloors` are exact per-suite counts derived
+# from one particular Godot's output format, so a different version can fail the gate for a
+# reason that is not a behaviour change.
+#
+# **WHAT THIS GATE DOES NOT COVER, stated rather than implied:**
+#
+#   - TIER 2 DOES NOT RUN. `boot-smoke.mjs`, `a11y-audit.mjs` and `check:sw-delivery.mjs` need
+#     a browser, which the runner would have to install on every deploy. A bundle can
+#     therefore reach players having passed tier 1 and no browser test.
+#   - THE PIXEL TIER DOES NOT RUN. `check:pixels` needs a DISPLAY and a GitHub runner has no
+#     screen, so it would `NOTICE:` and check nothing. It is the only tier that asks what a
+#     PLAYER sees, and it is not in this path.
+#   - THIS IS A PUBLISH GATE, NOT A MERGE GATE. It runs on `push: main`, so it cannot stop a
+#     commit reaching `main` -- only publishing one that is already there. Nothing verifies
+#     the merge.
+#
+# **A comment that becomes false is the drift this repository hunts.** If you remove the Godot
+# install, delete the paragraph above that says it is here -- and read the last step of the
+# `verify` job, which is what stops that removal from being silent.
 
 on:
     push:
@@ -26,8 +59,124 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
+    # THE GATE. `deploy` needs this job, so a failure here stops the publish before the
+    # artifact is uploaded. The header says exactly what it covers and what it does not.
+    verify:
+        name: Verify (the gate)
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  # `check:assertions` compares the tree against its base revision, so it
+                  # needs the history a shallow clone omits. Without this the gate reports
+                  # that no base revision is reachable and SKIPS -- which is a notice, not a
+                  # pass, and a gate that never runs here is not doing its job.
+                  fetch-depth: 0
+
+            # Node 24: required for native TypeScript type stripping, which the migration
+            # relies on to run `test/*.ts` directly with no build step. Node 20 cannot.
+            - name: Setup Node.js
+              uses: actions/setup-node@v7
+              with:
+                  node-version: '24'
+                  cache: 'npm'
+
+            - name: Install dependencies
+              run: npm ci
+
+            # The port's 13 suites, 453 assertions and the generated-data drift check all
+            # run through Godot, and `.godot/` (the `class_name` cache) is gitignored -- so a
+            # fresh checkout needs one `--import` before any `verify_*.gd` will load.
+            #
+            # WITHOUT THIS STEP the whole Godot half was enforced only on whichever
+            # contributor happened to have Godot installed: `check:godot` printed `NOTICE:`
+            # and exited 0, so the gate was green while checking none of it. A tooling audit
+            # proved it by setting `CONFIG.VERSION` to `9.9.9` and getting a full green run
+            # under a PATH without Godot, while the same tree failed correctly on drift the
+            # moment Godot was on PATH.
+            #
+            # PINNED, and asserted rather than merely requested: `godotAssertionFloors` are
+            # exact per-suite counts derived from one particular Godot's output format, so an
+            # unpinned upgrade could change the FORMAT rather than the behaviour and fail the
+            # gate for a reason that is not a behaviour change.
+            - name: Install Godot 4.7.2 (pinned)
+              run: |
+                  set -euo pipefail
+                  GODOT_VERSION=4.7.2
+                  curl -fsSL -o /tmp/godot.zip \
+                    "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+                  unzip -q /tmp/godot.zip -d /tmp/godot
+                  sudo mv "/tmp/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+                  sudo chmod +x /usr/local/bin/godot
+                  godot --version
+                  if ! godot --version | grep -q "^${GODOT_VERSION}\.stable"; then
+                      echo "::error::Godot is $(godot --version), not ${GODOT_VERSION}.stable. Refusing to run a gate whose assertion floors were measured against a different version."
+                      exit 1
+                  fi
+
+            # Build the `class_name` cache the suites need, and prove they can LOAD before
+            # the gate that runs them. Without this the failure surfaces at gate 5 blaming a
+            # DOCUMENT -- `claims "godotAssertions" is 453, but the measurement is 0` --
+            # because the measurement runs the suites and they cannot parse.
+            - name: Import the Godot project
+              run: godot --headless --path godot --import
+
+            # Tier 1: every gate in `scripts/verify.mjs`. ITS LAST GATE IS `build`, so the
+            # browser artifact is proven to compile before anything is assembled or uploaded.
+            - name: Run the gate (tier 1)
+              run: |
+                  # `pipefail` is load-bearing, and this is the whole reason it is here:
+                  # without it a pipeline's status is `tee`'s, which is always 0, so a
+                  # FAILING GATE WOULD PASS THIS STEP and the bundle would publish anyway.
+                  # Watched both ways before it was written down -- without `pipefail` a
+                  # failing command reports status 0 and carries on; with it, status 3 and
+                  # the step stops.
+                  set -euo pipefail
+                  npm run verify 2>&1 | tee /tmp/verify.log
+
+            # `npm run verify` EXITS 0 EVEN WHEN THE GODOT HALF CANNOT RUN -- a gate with
+            # nothing to check prints `NOTICE:` and is counted in the gate's own "checked
+            # nothing" list instead. So a green gate is not the same thing as a checked gate,
+            # and this step is the difference between "the gate passed" and "the gate checked
+            # the thing".
+            #
+            # MEASURED BOTH WAYS, and the reason this is an assertion rather than a sentence:
+            # on a clean checkout WITH Godot imported, `npm run verify` prints "all 26 gates
+            # passed, and every one checked something". With Godot off PATH the same tree
+            # prints "2 of which checked nothing" and names `check:reach` and `check:godot`.
+            #
+            # TWO INDEPENDENT SIGNALS, because one of them changing shape must not turn this
+            # into a pass: the gate's summary list, and the `(checked nothing` marker on
+            # `check:godot`'s own result line. If the Godot install or the import above ever
+            # stops working, one of the two fires and this refuses to publish -- rather than
+            # publishing a bundle whose Godot half nothing looked at.
+            - name: Refuse to publish if the Godot half of the gate did not run
+              run: |
+                  set -euo pipefail
+                  log=/tmp/verify.log
+
+                  # The gate must have reached its own summary. If it did not, this guard
+                  # cannot conclude anything -- and it says so instead of passing by default,
+                  # because "I could not check" must never look like "I checked".
+                  if ! grep -qE '^verify: all [0-9]+ gates passed' "$log"; then
+                      echo "::error::the gate left no summary line in the log, so this step cannot tell what ran. Refusing to publish rather than passing by default."
+                      tail -20 "$log"
+                      exit 1
+                  fi
+
+                  if grep -qE '^  - check:(godot|reach):' "$log" \
+                     || grep -qE '^  ok +check:godot .*\(checked nothing' "$log"; then
+                      echo "::error::the gate passed, but the Godot half CHECKED NOTHING. Install and import Godot 4.7.2, or delete this step and state in the header that the port is unverified here."
+                      grep -E '^verify: all|^  - check:|^  ok +check:godot ' "$log" || true
+                      exit 1
+                  fi
+
+                  echo "The Godot half of the gate ran: neither check:godot nor check:reach reported that it checked nothing."
+
     build:
         name: Build static site
+        needs: verify
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -43,8 +192,9 @@ jobs:
               run: npm ci
 
             # The page loads ./dist/main.js, so the site cannot be assembled
-            # from the sources any more — it must be built. The gate runs
-            # `npm run build` too, but on a different machine, so it is built here.
+            # from the sources any more — it must be built. The `verify` job runs
+            # `npm run build` too (it is that chain's last gate), but on a different
+            # machine, so the artifact that actually ships is built here.
             - name: Build the browser artifact
               run: npm run build
 
@@ -73,7 +223,10 @@ jobs:
 
     deploy:
         name: Deploy to GitHub Pages
-        needs: build
+        # `verify` is named directly as well as reached through `build`, so the gate is an
+        # explicit dependency of the publish rather than an implicit one. If it fails, no
+        # artifact is uploaded and this job never runs.
+        needs: [verify, build]
         runs-on: ubuntu-latest
         environment:
             name: github-pages
