@@ -12,7 +12,12 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planEdit, applyEdit, DEFAULT_EXPECTED } from '../scripts/lib/source-edit.mjs';
+import {
+    planEdit,
+    applyEdit,
+    selectExactly,
+    DEFAULT_EXPECTED
+} from '../scripts/lib/source-edit.mjs';
 
 // ---------------------------------------------------------------------------
 // planEdit — the refusals
@@ -205,4 +210,35 @@ test('source-edit/apply: a replacement CONTAINING the anchor is not refused', ()
     });
     assert.equal(result.ok, true, result.reason ?? '');
     assert.match(fs.files.get('src/a.ts') as string, /export class X \{ \/\/ note/);
+});
+
+// ---------------------------------------------------------------------------
+// selectExactly — the same refusal, over a COLLECTION
+// ---------------------------------------------------------------------------
+
+test('source-edit/select: a selection matching the declared count is returned', () => {
+    const selection = selectExactly([1, 2, 3], (n: number) => n > 1, 2);
+    assert.equal(selection.ok, true);
+    assert.deepEqual(selection.matched, [1, 2]);
+});
+
+test('source-edit/select: THE INCIDENT — seven matches against one is refused', () => {
+    // A loop on `gate == 'check:reach'` matched seven entries of
+    // `gate-selftests.json` and overwrote all seven breaks with one string.
+    const entries = [1, 2, 3, 4, 5, 6, 7].map(() => ({ gate: 'check:reach' }));
+    const selection = selectExactly(entries, (e: { gate: string }) => e.gate === 'check:reach', 1);
+    assert.equal(selection.ok, false);
+    assert.match(selection.reason ?? '', /matched 7 of 7 items but 1 was expected/);
+    assert.deepEqual(selection.matched, [0, 1, 2, 3, 4, 5, 6]);
+});
+
+test('source-edit/select: an expectation of zero or a fraction is refused', () => {
+    // The count is the whole mechanism, so a count that is not a count is
+    // refused rather than coerced.
+    assert.match(selectExactly([1], () => true, 0).reason ?? '', /positive integer/);
+    assert.match(selectExactly([1], () => true, 1.5).reason ?? '', /positive integer/);
+});
+
+test('source-edit/select: a non-array is refused', () => {
+    assert.match(selectExactly(null as never, () => true, 1).reason ?? '', /not an array/);
 });

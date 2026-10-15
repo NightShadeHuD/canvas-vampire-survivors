@@ -106,5 +106,11 @@ test('claims: an UNMEASURED figure is reported, not compared', () => {
     >);
     assert.equal(v.ok, true, 'an absent tool is not a wrong number');
     assert.equal(v.unmeasured.length, 1, 'and it is reported rather than skipped silently');
-    assert.match(v.unmeasured[0], /needs a tool that is not here/);
+    // The wording widened when `measurements.godotAssertions` learned to return `null`
+    // for a FAILING suite as well as for an absent Godot: measured, one broken assertion
+    // in `verify_save.gd` gave 20 `ok` lines against 21 assertions that ran, and the
+    // claim was compared against the wrong number — blaming `docs/GODOT-PORT.md` for a
+    // red suite. The message now states what the gate knows ("could not be measured
+    // here") rather than guessing which of the two happened.
+    assert.match(v.unmeasured[0], /could not be measured here/);
 });

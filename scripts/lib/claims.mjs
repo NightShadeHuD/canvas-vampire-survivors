@@ -136,7 +136,13 @@ export function judgeClaims(claims, measured) {
         // This sat inside the single-number branch first, so a claim with a registry entry
         // of `null` fell through to `want.src` and threw on the null. Found by its own test.
         if (want === null) {
-            unmeasured.push(`line ${c.line}: "${c.gate}" needs a tool that is not here`);
+            unmeasured.push(
+                // "could not be measured here" rather than "needs a tool that is not
+                // here": `measurements.godotAssertions` now returns null when a Godot
+                // suite FAILS as well as when Godot is absent, and the report should
+                // state what it knows rather than guess the reason.
+                `line ${c.line}: "${c.gate}" could not be measured here`
+            );
             continue;
         }
 

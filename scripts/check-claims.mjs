@@ -84,7 +84,33 @@ if (!verdict.ok) {
 }
 
 const names = [...new Set(claims.map((c) => c.gate))].join(', ');
+
+// `judgeClaims` HAS ALWAYS RETURNED an `unmeasured` list, AND NOTHING READ IT.
+//
+// It holds every claim whose measurement returned `null` — a claim whose tool is not
+// on this machine, which is not the same as a claim that is wrong. The pass line then
+// said every claim "match[ed] the measurement" while one had never been compared. The
+// shape, measured: without Godot on PATH `measurements.godotAssertions` returns null
+// rather than throwing, so `docs/GODOT-PORT.md`'s two Godot figures were counted as
+// matching on a machine that could not measure them.
+//
+// **A report that claims what it did not check is the defect this repository spends
+// its time on**, and the fix is the one `verify` already uses: say how many were
+// checked and NAME the ones that were not.
+//
+// Not a failure: a thing that could not be measured is not a thing that failed — the
+// distinction `check-assertions` makes when no base is reachable. Not a `NOTICE:`
+// line either: `verify` counts those as gates that "checked nothing", and this gate
+// did check the rest.
+const checked = claims.length - verdict.unmeasured.length;
 console.log(
-    `check-claims: ${claims.length} claim(s) across ${documents.length} document(s) ` +
-        `match the measurement (${names}).`
+    `check-claims: ${checked} of ${claims.length} claim(s) across ${documents.length} ` +
+        `document(s) match the measurement (${names}).`
 );
+for (const u of verdict.unmeasured) console.log(`  UNMEASURED ${u}`);
+if (verdict.unmeasured.length > 0) {
+    console.log(
+        '  Each is a claim this machine could not measure — a tool that is not here, or\n' +
+            '  a suite that is not green. **These claims are unchecked here, not verified.**'
+    );
+}

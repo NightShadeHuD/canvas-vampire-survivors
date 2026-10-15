@@ -160,6 +160,7 @@ run is a partial run.
 | --------------------- | ----- |
 | `verifySteps`         | 26    |
 | `suppressionCeilings` | 9     |
+| `agentRules`          | 19    |
 
 <!-- claims:end -->
 
