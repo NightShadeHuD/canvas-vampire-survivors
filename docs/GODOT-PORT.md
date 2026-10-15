@@ -11,7 +11,7 @@ drift silently.
 | name              | value |
 | ----------------- | ----- |
 | `godotSuites`     | 13    |
-| `godotAssertions` | 433   |
+| `godotAssertions` | 453   |
 | `weapons`         | 11    |
 | `achievements`    | 21    |
 
@@ -380,6 +380,59 @@ Eight archetypes: `aura`, `melee`, `nova`, `instant`, `drain`, `mine`, `orbit` a
    hero's passives entirely. Noted rather than fixed: no passive grants a damage
    multiplier yet, so there is nothing to apply -- but the hook is missing and the
    first damage passive added will silently do nothing.
+
+#### The crit was rolled once per fire; it is now rolled per target
+
+`quality-baseline.json` declared `godot-crit-rolled-once-per-fire`. `grep -n "_rollCrit"
+src/weapons.ts` is four lines -- 216 (`_fireMelee`), 289 (`_fireInstant`), 395 (`_fireNova`) and
+454 (`_fireDrain`) -- and **every one of them sits inside a per-target loop.** The port rolled
+once, before the `match kind:` dispatch, and multiplied that single number into every archetype:
+a Whip sweep that caught four foes doubled all four or none of them, so the EXPECTED damage was
+right and the variance was not.
+
+Each of those four loops is now pinned by measurements a per-fire roll cannot pass:
+
+```
+  ok   one fire at 4 foes takes 4 crit draws, not one  (0.9455 vs 0.9455 (tol 0.0000))
+  ok   and the sweep MIXES -- some foes doubled and others not (p = 0.25)  (0.6825 vs expected 0.6797 (tol 0.0600, 1200 trials))
+  ok   one burst at 4 foes takes 4 crit draws, not one  (0.9455 vs 0.9455 (tol 0.0000))
+  ok   an evolved tether takes ONE roll per foe  (0.5478 vs 0.5478 (tol 0.0000))
+  ok   the two tethers roll independently (p = 0.25)  (0.3725 vs expected 0.3750 (tol 0.0600, 1200 trials))
+  ok   and the heal is `steal` of what the two ACTUALLY took, on every one of 1200 fires  (0 -> 0)
+  ok   and NEVER mixes in 1200 fires -- the instrument CAN read all-or-nothing  (0 -> 0)
+```
+
+The **draw count** is exact rather than statistical: one crit roll is one `randf()` from the
+caller's own `RandomNumberGenerator`, so after a fire at four foes that generator must be four
+draws further along its sequence and no other number of draws. The **mix** is a rate over
+twelve hundred fires: a fire counts as mixed when its targets did not all lose the same health,
+which a shared roll does on exactly 0 of them and four independent rolls do on 68%. At p = 0.25
+and N = 4 the mixed share has a standard deviation of 0.0135, so the 0.06 tolerance is 4.4 sigma
+-- a false-failure probability just under 1e-5, while a per-fire roll sits 50 sigma away.
+
+**Garlic is the control**, and it is the reason the rate is worth reading: the aura is an
+archetype this port rolls once for on purpose, and it goes through the identical instrument over
+the identical 1200 fires. It must read 0 mixed, or the instrument is what is being measured.
+
+Two things this touched that are not the crit itself:
+
+- **Soul Drain's heal is the SUM of two rolls.** `totalDmg` accumulates inside the very loop the
+  crit is rolled in, so one crit of two tethers heals 3x a plain tether. `dmg * drained.size()`
+  equalled that sum only while both tethers shared one roll -- which is now measured, on 447 of
+  1200 fires, as a different number.
+- **The evolved second ring never crits.** `const d2 = baseDmg * 0.6` is taken from
+  `getDamage(player)` before any `_rollCrit`, and the scheduled callback rolls nothing of its
+  own. The port had been carrying its per-fire, possibly doubled `dmg` into the pulse.
+
+**NOT closed, and named rather than glossed:** `_fireProjectile`, `_fireAura`, `_fireMine` and
+`OrbitShard` call `_rollCrit` **nowhere** in the original, and this port rolls once per fire for
+all four. Removing that roll is not a tidy follow-up: `evolveBonusCrit` is declared on the
+evolved Knife, which is a projectile, and `_bonus_crit_is_read` proves the field is read by
+measuring the evolved Knife's damage rise -- so deleting the roll leaves a declared field unread
+and fails a check that passes today. **And no damage number is drawn at all.** The original's
+`_rollCrit` also calls `createFloatingText` at `(x, y - 20)` of the foe it is about to damage --
+a per-target POSITION -- and `fx.gd` has no floating-text system, which is a gap no assertion
+here can stand in for.
 
 #### Two of my tests were wrong and looked like bugs
 

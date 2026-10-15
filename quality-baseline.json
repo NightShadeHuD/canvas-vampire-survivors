@@ -34,11 +34,6 @@
             "removal": "A Mine entity is ported with its fuse, or the field is declared unread."
         },
         {
-            "id": "godot-crit-rolled-once-per-fire",
-            "why": "The port rolls crit ONCE per fire (weapon-fire.gd) while the original rolls PER TARGET inside each archetype loop, and Soul Drain heals `dmg * pct` where the original heals `totalDmg * steal` summed over every drained target. Both make multi-target weapons weaker than the original in a way no assertion covers.",
-            "removal": "Crit is rolled per target and the drain heals from the summed damage, with an assertion on each."
-        },
-        {
             "id": "godot-early-evolve-unreachable",
             "why": "run.gd declares `evolved_before_seven_min` and achievements.gd READS it, but nothing in godot/ ever assigns it -- grep returns exactly those two hits. src/main.ts sets it when a weapon crosses its evolve level before 7 minutes, so the `early_evolve` achievement cannot fire even now that evolution is ported. Larger and related: no AchievementTracker.newly_earned call exists anywhere in godot/scripts/, so achievements are not wired into play in this slice at all.",
             "removal": "A Run instance in play assigns it at the crossing, and an achievement assertion proves it fires."
@@ -52,6 +47,16 @@
             "id": "godot-foe-flash-and-blink-unported",
             "why": "src/entity-render.ts:217-227 draws a four-step chain: flash timer (white) > slow tint > armed-bomber blink > own colour. The port has NO flash timer at all and the bomber has no draw site, so two of the four steps do not exist. Pre-existing and previously unregistered -- found while porting the slow, which occupies the second position. `body_color()` keeps the slow branch in the original's chain POSITION so either lands above it.",
             "removal": "A flash timer and a bomber blink exist, drawn in the original's order, with an assertion on the ordering."
+        },
+        {
+            "id": "godot-no-floating-damage-text",
+            "why": "src/weapons.ts:102 `_rollCrit` calls `game.createFloatingText(Math.round(dmg), x, y - 20, \"#ffee44\", {crit:true})` on EVERY hit, at a PER-TARGET position. The port has no floating-text system at all -- `grep -rn \"floating\\|FloatingText\" godot/ --include=*.gd` returns ONE hit, a comment in fx.gd:29 saying the port does not draw damage numbers. **Unassertable: no check can stand in for a drawing that does not exist.** Found while porting per-target crit, which is what makes the position per-target in the first place.",
+            "removal": "A floating-text system exists and a damage number is asserted to appear at the struck foe, not at the hero."
+        },
+        {
+            "id": "godot-volley-wide-crit-on-four-archetypes",
+            "why": "projectile, orbit, aura and mine call `_rollCrit` NOWHERE in src/ -- they hand `getDamage(player)` straight to the shot -- so the port's single volley-wide roll is a port artifact, not a reproduction. NOT removed because `evolveBonusCrit: 0.1` is declared on the KNIFE, a projectile: deleting the roll makes that field dead data and fails `_bonus_crit_is_read`, which measures the evolved Knife's damage rise. **Removing it therefore requires weakening a passing check**, which is a decision for whoever owns that check. Reported rather than done.",
+            "removal": "`_bonus_crit_is_read` is rewritten to state that the Knife's declared field is dead in the original, and the four archetypes stop rolling."
         }
     ],
     "coverageFloors": {
@@ -366,7 +371,7 @@
         "res://verify_scene.gd": 99,
         "res://verify_play.gd": 14,
         "res://verify_xp.gd": 26,
-        "res://verify_weapons.gd": 98,
+        "res://verify_weapons.gd": 118,
         "res://verify_lightning.gd": 21,
         "res://verify_passives.gd": 20,
         "res://verify_invariants.gd": 11,
