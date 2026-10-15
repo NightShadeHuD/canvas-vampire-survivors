@@ -36,7 +36,7 @@
  * `npm run check:sw-cache` refuses a name that does not match its inputs. Do
  * not edit the line below by hand.
  */
-const CACHE = 'survivor-4d5ce50991982321';
+const CACHE = 'survivor-04709937f9f7fcd9';
 const ASSETS = [
     './',
     './index.html',
@@ -62,10 +62,14 @@ const ASSETS = [
 /**
  * HOW THE NAME IS KEPT HONEST
  *
- * `scripts/lib/sw-cache-name.mjs` derives it from the content this worker
- * caches: this file's own source with the line above removed, every precached
- * asset, the `src/` each `./dist/*.js` is compiled from, and the toolchain that
- * compiles them. So it moves whenever any byte a player receives moves.
+ * `scripts/lib/sw-cache-name.mjs` derives it from everything a player can
+ * receive: this file's own source with the line above removed, every precached
+ * asset, the `src/` each `./dist/*.js` is compiled from, the build that compiles
+ * them (`scripts/build.mjs` included — it decides the compiler's flags), and
+ * every path the deploy workflow copies into the artifact. That last one is
+ * READ FROM THE WORKFLOW rather than listed by hand, so `game.js` and the 53
+ * `docs/**` files that were served and unhashed cannot come back silently. So
+ * this line moves whenever any byte a player receives moves.
  *
  * The plan this comment used to carry was re-derived and three parts of it did
  * not survive:

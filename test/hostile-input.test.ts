@@ -32,6 +32,7 @@ import {
     _resetStorageForTests
 } from '../src/storage.ts';
 import { STAGES } from '../src/stages.ts';
+import { CONFIG } from '../src/config.ts';
 import { loadDailyHistory, _resetDailyForTests } from '../src/daily.ts';
 import { loadKeymap, keyLabel, _resetKeymapForTests } from '../src/keymap.ts';
 import {
@@ -707,9 +708,18 @@ test('F12: recordHighScore does not run the inherited __proto__ setter', () => {
 test('F13: the write path is bounded by the same cap the read path applies', () => {
     // 200 distinct stage keys could be written; `loadSave` kept 64; the next
     // save persisted 64 — so 136 boards were gone with no message. Reach is
-    // stated honestly: nothing in `src/` READS `stageHighScores` today
-    // (`getStageHighScores` appears only in tests), so no player can see this
-    // yet. It is still real corruption and it is still silent.
+    // stated honestly, and the sentence that used to be here was WRONG: it read
+    // "nothing in `src/` READS `stageHighScores` today". `src/storage.ts` reads
+    // it in three places — `recordHighScore` merges into an existing bucket,
+    // `getStageHighScores` reads one back, and `saveShape()` declares how the
+    // reader coerces the record — so the READ happens, and the claim as written
+    // was false.
+    //
+    // What is true, and what the reach actually rests on, is about the CALLER:
+    // `grep -rn getStageHighScores src/` returns ONE line, its own definition in
+    // `src/storage.ts` and nothing else. It is exported and nothing in `src/`
+    // calls it, so no player can be shown this yet. It is still real corruption and it is still
+    // silent.
     // The keys are seeded into the STORED save rather than written through
     // `recordHighScore`, deliberately: an earlier version of this test drove 200
     // UNKNOWN stage ids through the writer, and the unknown-id rule added
@@ -856,4 +866,56 @@ test('F14b DRIFT: the totals ceiling is below the range JSON can carry', () => {
         save.totals.kills,
         'a total at the ceiling did not survive the round trip'
     );
+});
+
+test('F15: the seen-builds FIFO keeps the NEWEST, and both paths use one cap', () => {
+    // THE DEFECT THIS REPOSITORY FIXED ONE FIELD OVER SURVIVED HERE.
+    // `stageHighScores` got a named read cap that the write path honours;
+    // `seenBuilds` did not. The write path bounded at `CONFIG.SEEN_BUILDS_CAP`
+    // (1000) and the READ shape at a literal 512, and `coerceShape` keeps the
+    // FIRST `max` elements — so for a FIFO whose head is its OLDEST entry the
+    // truncation INVERTS it. Measured before the fix, through this exact public
+    // API: 600 written -> 512 read, `w0` (OLDEST) kept, `w599` (NEWEST) dropped.
+    // The next save then persisted those 512, so the loss was permanent and it
+    // happened on every load.
+    //
+    // HONEST REACH: no player can see it. `seenBuilds` and `uniqueBuilds` have no
+    // UI reader — the only consumer is the `triple_build` achievement's `>= 3`
+    // threshold, and any surviving list is far past 3. It is silent corruption of
+    // a persisted field, which is why it is fixed, and it is not claimed to be
+    // more than that.
+    const cap = CONFIG.SEEN_BUILDS_CAP;
+    const builds = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`);
+
+    /** Seed a RAW save, load it through the public API, save it back, read the slot. */
+    const roundTrip = (seed: string[]): string[] =>
+        withStored(
+            SAVE_KEY,
+            JSON.stringify({ totals: { seenBuilds: seed, uniqueBuilds: seed.length } }),
+            (_ls, store) => {
+                const save = loadSave();
+                saveSave(save);
+                const raw = JSON.parse(String(store[SAVE_KEY]));
+                return raw.totals.seenBuilds as string[];
+            }
+        ) as string[];
+
+    // THE DEFECT, at the size it was measured at. 600 is under the cap, so
+    // nothing may be dropped at all — 512 was the read shape's own literal.
+    const underCap = roundTrip(builds(600));
+    assert.equal(underCap.length, 600, '600 builds were written and fewer came back');
+    assert.equal(underCap[599], 'w599', 'the newest build was dropped');
+
+    // THE BOUNDARY, exactly on the cap and one past it, because a bound tested
+    // only in the middle is a bound nobody has measured.
+    assert.equal(roundTrip(builds(cap)).length, cap, 'the cap itself did not survive');
+    const over = roundTrip(builds(cap + 1));
+    assert.equal(over.length, cap, 'an over-long list was not bounded by the cap');
+    assert.equal(over[over.length - 1], `w${cap}`, 'the NEWEST build was the one dropped');
+    assert.equal(over[0], 'w1', 'the OLDEST build survived past the cap — the FIFO is inverted');
+
+    // AND THE TWO CAPS ARE THE SAME NUMBER, which is the drift that made the
+    // inversion reachable in the first place. Read through the save the game
+    // actually persists, so this is the number the reader uses, not a literal.
+    assert.equal(roundTrip(builds(cap + 88)).length, cap, 'the read cap is not the write cap');
 });

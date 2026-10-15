@@ -18,10 +18,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { execFileSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import {
+    WORKFLOW_PATH,
     cacheNameFromDigest,
     cacheLines,
     digestOf,
@@ -31,7 +34,8 @@ import {
     precacheInputs,
     readCacheName,
     renderWorker,
-    resolveAsset
+    resolveAsset,
+    servedPaths
 } from '../scripts/lib/sw-cache-name.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -266,4 +270,369 @@ test('sw-cache-name: the cache-name anchor is read from the file, not assumed', 
     const lines = cacheLines("const CACHE = 'survivor-0000000000000000';\n");
     assert.equal(lines.length, 1);
     assert.equal(lines[0].name, 'survivor-0000000000000000');
+});
+
+// ---------------------------------------------------------------------------
+// WHAT IS SERVED (F1/F2)
+//
+// The input set was a hand-written list, and the list was wrong three ways:
+// `scripts/build.mjs` decides every byte in `dist/` and was not on it, and
+// `game.js` and all but two of the `docs/**` files were copied into the artifact
+// by `cp -r docs _site/docs` and were not on it either. So the served set is READ
+// FROM THE WORKFLOW, and these are the tests that hold it there.
+// ---------------------------------------------------------------------------
+
+/** A repository root holding just a workflow, so the parser can be driven. */
+function workflowRoot(assembly: string[]): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'sw-served-'));
+    mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+        path.join(dir, WORKFLOW_PATH),
+        [
+            'name: Deploy to GitHub Pages',
+            'jobs:',
+            '    build:',
+            '        steps:',
+            '            - name: Assemble static site',
+            '              run: |',
+            ...assembly.map((l) => `                  ${l}`),
+            '            - name: Upload Pages artifact',
+            '              uses: actions/upload-pages-artifact@v5'
+        ].join('\n')
+    );
+    return dir;
+}
+
+const TRACKED = new Set([
+    'index.html',
+    'styles.css',
+    'game.js',
+    'service-worker.js',
+    'manifest.json',
+    'docs/hero.svg',
+    'docs/USER_GUIDE.md',
+    'dist/main.js',
+    'src/main.ts'
+]);
+
+test('sw-cache-name: the served set is read from the workflow, not listed by hand', () => {
+    const dir = workflowRoot([
+        'cp index.html styles.css game.js _site/',
+        '[ -f service-worker.js ] && cp service-worker.js _site/ || true',
+        '[ -f manifest.json ] && cp manifest.json _site/ || true',
+        'cp -r dist _site/dist',
+        'if [ -d docs ]; then cp -r docs _site/docs; fi',
+        'cp index.html _site/404.html'
+    ]);
+    try {
+        const served = servedPaths(dir, TRACKED);
+        assert.deepEqual(served.problems, []);
+        assert.deepEqual(served.files, [
+            'docs/USER_GUIDE.md',
+            'docs/hero.svg',
+            'game.js',
+            'index.html',
+            'manifest.json',
+            'service-worker.js',
+            'styles.css'
+        ]);
+        assert.deepEqual(served.compiled, ['dist']);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('sw-cache-name: a copy destination that is not canonical inside _site is REFUSED', () => {
+    // `_site//` and `_site/../other/` both satisfied the regex this replaced.
+    // `_site/../other/` does not write into the artifact at all, so "the worker
+    // is in the artifact" would have been checked against a path that never
+    // receives it.
+    for (const dest of ['_site//', '_site/../other/', '_site/./x', '_site/../']) {
+        const dir = workflowRoot([`cp service-worker.js ${dest}`]);
+        try {
+            const served = servedPaths(dir, TRACKED);
+            assert.equal(served.ok, false, `${dest} was accepted`);
+            assert.match(served.problems.join(' '), /not a canonical path/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+});
+
+test('sw-cache-name: a commented-out copy serves nothing', () => {
+    // The regex this replaced matched `# cp service-worker.js _site/` as a live
+    // copy step, so a disabled deploy line read as an enabled one.
+    const dir = workflowRoot(['# cp service-worker.js _site/']);
+    try {
+        const served = servedPaths(dir, TRACKED);
+        assert.deepEqual(served.copies, []);
+        assert.deepEqual(served.files, []);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('sw-cache-name: a copy that names the FILE is told apart from one that names a DIRECTORY', () => {
+    // `cp service-worker.js _site/dist/` moves the worker to a path the page never
+    // registers, and `/dist/service-worker.js` 404s — so NO worker installs. The
+    // difference is the trailing slash, and the parse has to keep it.
+    const dir = workflowRoot([
+        'cp index.html _site/404.html',
+        'cp service-worker.js _site/dist/',
+        'cp -r docs _site/docs'
+    ]);
+    try {
+        const served = servedPaths(dir, TRACKED);
+        assert.deepEqual(
+            served.copies.map((c) => [c.sources, c.destDir, c.destFile]),
+            [
+                [['index.html'], '', '404.html'],
+                [['service-worker.js'], 'dist', null],
+                [['docs'], 'docs', null]
+            ]
+        );
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('sw-cache-name: a copy of something the tree does not have is refused', () => {
+    const dir = workflowRoot(['cp secret.txt _site/']);
+    try {
+        const served = servedPaths(dir, TRACKED);
+        assert.equal(served.ok, false);
+        assert.match(served.problems.join(' '), /matches nothing in the tracked tree/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('sw-cache-name: every SERVED file is an input to the name', () => {
+    // The guarantee, as an assertion rather than a sentence. Watched failing by
+    // deleting the loop in `precacheInputs` that adds `served.files`: this names
+    // all 53 `docs/**` files that were served and unhashed.
+    const inputs = precacheInputs(repoRoot);
+    assert.equal(inputs.ok, true, String(inputs.reason));
+    const hashed = new Set(inputs.entries.map((e) => e.path));
+    const unhashed = inputs.served.files.filter((f: string) => !hashed.has(f));
+    assert.deepEqual(unhashed, []);
+    assert.ok(
+        inputs.served.files.length >= 55,
+        `only ${inputs.served.files.length} served file(s) were derived`
+    );
+});
+
+test('sw-cache-name: the three bytes that were served and unhashed are inputs now', () => {
+    // One row per defect, so a future narrowing names what it broke.
+    const covered = new Set(precacheInputs(repoRoot).entries.map((e) => e.path));
+    for (const rel of [
+        'scripts/build.mjs', // decides the compiler's flags and dist/package.json
+        'game.js', // HTTP 200, 371 bytes, on the live site
+        'docs/USER_GUIDE.md', // `cp -r docs _site/docs` serves all 55 of them
+        'docs/screenshots/live-gameplay.png'
+    ]) {
+        assert.equal(covered.has(rel), true, `${rel} is served and is not an input`);
+    }
+});
+
+test('sw-cache-name: perturbing anything SERVED moves the name', () => {
+    // THE BEHAVIOURAL CONTROL for the assertion above. A list that contains a
+    // path is not the same claim as a name that moves when the path changes, so
+    // every served file is perturbed one at a time and the digest must move.
+    const inputs = precacheInputs(repoRoot);
+    const before = cacheNameFromDigest(digestOf(inputs.entries));
+    for (const rel of inputs.served.files) {
+        const mutated = inputs.entries.map((e) =>
+            e.path === rel
+                ? { path: e.path, bytes: Buffer.concat([e.bytes, Buffer.from('\n')]) }
+                : e
+        );
+        assert.notEqual(
+            cacheNameFromDigest(digestOf(mutated)),
+            before,
+            `${rel} is served and does not move the name`
+        );
+    }
+});
+
+// ---------------------------------------------------------------------------
+// THE REFUSAL PATHS.
+//
+// A guard is only as good as what it does when it cannot read its input, and
+// every one of these is a "say so and stop" rather than a "carry on with an
+// empty set" — the second shape is how a gate that looked at nothing reports
+// that it looked at everything.
+// ---------------------------------------------------------------------------
+
+/** A workflow file with hand-written steps, so the PARSER's refusals can be driven. */
+function rawWorkflowRoot(stepLines: string[]): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'sw-raw-'));
+    mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+        path.join(dir, WORKFLOW_PATH),
+        ['name: Deploy to GitHub Pages', 'jobs:', '    build:', '        steps:']
+            .concat(stepLines)
+            .join('\n')
+    );
+    return dir;
+}
+
+/** A real git repository in a temp directory, so `trackedFiles` has something to list. */
+function tempRepo(files: Record<string, string>): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'sw-repo-'));
+    for (const [rel, text] of Object.entries(files)) {
+        const full = path.join(dir, rel);
+        mkdirSync(path.dirname(full), { recursive: true });
+        writeFileSync(full, text);
+    }
+    execSync('git init -q && git add -A', { cwd: dir, stdio: 'pipe' });
+    return dir;
+}
+
+const ASSEMBLY_WORKFLOW = [
+    'name: Deploy to GitHub Pages',
+    'jobs:',
+    '    build:',
+    '        steps:',
+    '            - name: Assemble static site',
+    // A key BETWEEN the step name and its `run:` block — ordinary YAML, and the
+    // shape that makes the parser SKIP a line rather than give up on the step.
+    "              if: github.ref == 'refs/heads/main'",
+    '              run: |',
+    '                  cp index.html service-worker.js _site/',
+    '            - name: Upload Pages artifact',
+    '              uses: actions/upload-pages-artifact@v5'
+].join('\n');
+
+test('sw-cache-name: a workflow that cannot be READ is refused, not assumed empty', () => {
+    const bare = mkdtempSync(path.join(tmpdir(), 'sw-bare-'));
+    try {
+        const served = servedPaths(bare, TRACKED);
+        assert.equal(served.ok, false);
+        assert.match(served.problems.join(' '), /cannot be read/);
+        assert.deepEqual(served.files, []);
+    } finally {
+        rmSync(bare, { recursive: true, force: true });
+    }
+});
+
+test('sw-cache-name: a workflow with no assembly step, or one with no run block, is refused', () => {
+    // Three shapes, and each one is a way the served set could have been reported
+    // as empty instead of unknown. An empty served set makes the subset assertion
+    // trivially true — which is the vacuous check this file exists to avoid.
+    const shapes: Array<[string[], RegExp]> = [
+        [
+            ['            - name: Checkout', '              uses: actions/checkout@v7'],
+            /no `name: Assemble static site` step/
+        ],
+        [
+            [
+                '            - name: Assemble static site',
+                '            - name: Upload Pages artifact'
+            ],
+            /no `name: Assemble static site` step/
+        ],
+        [['            - name: Assemble static site'], /no `name: Assemble static site` step/]
+    ];
+    for (const [lines, expected] of shapes) {
+        const dir = rawWorkflowRoot(lines);
+        try {
+            const served = servedPaths(dir, TRACKED);
+            assert.equal(served.ok, false, `accepted: ${JSON.stringify(lines)}`);
+            assert.match(served.problems.join(' '), expected);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+});
+
+test('sw-cache-name: a worker whose own source does not parse is refused WITH its reason', () => {
+    const cases: Array<[string, RegExp]> = [
+        ["const ASSETS = ['./index.html'];\n", /no `const CACHE/],
+        [
+            "const CACHE = 'a';\nconst CACHE = 'b';\nconst ASSETS = ['./index.html'];\n",
+            /2 `const CACHE/
+        ],
+        ["const CACHE = 'survivor-0000000000000000';\n", /no `const ASSETS/],
+        ["const CACHE = 'survivor-0000000000000000';\nconst ASSETS = [];\n", /precaches nothing/]
+    ];
+    for (const [worker, expected] of cases) {
+        const dir = tempRepo({
+            'index.html': '<html></html>\n',
+            'service-worker.js': worker,
+            [WORKFLOW_PATH]: ASSEMBLY_WORKFLOW
+        });
+        try {
+            const inputs = precacheInputs(dir);
+            assert.equal(inputs.ok, false, `accepted: ${JSON.stringify(worker)}`);
+            assert.match(String(inputs.reason), expected);
+            // The served set is still derived, so a caller that wants to report
+            // the layout alongside the failure is not left with nothing.
+            assert.equal(inputs.served.ok, true);
+            assert.equal(
+                expectedForRepo(dir).ok,
+                false,
+                'expectedForRepo disagreed with precacheInputs'
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+});
+
+test('sw-cache-name: a precached asset that does not resolve is COLLECTED, not dropped', () => {
+    // `cache.addAll` rejects as a whole if any request 404s, so a silently
+    // dropped entry is a worker that never installs with nothing to show for it.
+    const dir = tempRepo({
+        'index.html': '<html></html>\n',
+        'service-worker.js':
+            "const CACHE = 'survivor-0000000000000000';\n" +
+            "const ASSETS = ['./index.html', './docs/missing.svg'];\n",
+        [WORKFLOW_PATH]: ASSEMBLY_WORKFLOW
+    });
+    try {
+        const inputs = precacheInputs(dir);
+        assert.equal(inputs.ok, true, String(inputs.reason));
+        assert.equal(inputs.unresolved.length, 1, JSON.stringify(inputs.unresolved));
+        assert.match(inputs.unresolved[0], /not a tracked file/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('sw-cache-name: the ASSETS list is read, and its absence or emptiness is refused', () => {
+    const none = precachedAssets("const CACHE = 'survivor-0000000000000000';\n");
+    assert.equal(none.ok, false);
+    assert.match(String(none.reason), /no `const ASSETS/);
+    const empty = precachedAssets("const CACHE = 'x';\nconst ASSETS = [];\n");
+    assert.equal(empty.ok, false);
+    assert.match(String(empty.reason), /precaches nothing/);
+});
+
+test('sw-cache-name: an asset that is not a ./-relative path is reported, not ignored', () => {
+    const resolved = resolveAsset('/nowhere', new Set(['index.html']), 'index.html');
+    assert.equal(resolved.kind, 'unresolved');
+    assert.match(String(resolved.reason), /not a \.\/-relative path/);
+});
+
+test('sw-cache-name: a served set that cannot be derived fails the whole derivation', () => {
+    // FAIL CLOSED. If the workflow cannot be parsed there is no served set, and an
+    // unknown served set cannot be shown to be a subset of the hashed one — so the
+    // name must not be produced at all. Returning one would mean a gate that
+    // reports a name it cannot justify.
+    const dir = tempRepo({
+        'index.html': '<html></html>\n',
+        'service-worker.js':
+            "const CACHE = 'survivor-0000000000000000';\nconst ASSETS = ['./index.html'];\n"
+    });
+    try {
+        const inputs = precacheInputs(dir);
+        assert.equal(inputs.ok, false, 'a tree with no workflow produced a name');
+        assert.match(String(inputs.reason), /cannot be read/);
+        assert.equal(inputs.served.ok, false);
+        assert.deepEqual(inputs.entries, []);
+        assert.equal(expectedForRepo(dir).ok, false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
