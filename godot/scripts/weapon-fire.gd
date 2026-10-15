@@ -154,14 +154,28 @@ static func crit_chance_for(weapon: Dictionary, hero: Hero, evolved: bool) -> fl
 ##
 ## THE FOUR ARCHETYPES WITH NO CALL SITE -- projectile, orbit, aura and mine -- never roll in
 ## the original at all: `_fireProjectile`, `_fireAura` and `_fireMine` hand `getDamage()`
-## straight to the shot or the mine, and `OrbitShard` reads `this.damage`. This port rolls ONE
-## for each of them per fire, and that roll is deliberately NOT removed here:
-## `evolveBonusCrit` is declared on the evolved KNIFE, which is a projectile, and
-## `verify_weapons.gd` proves the field is read by measuring the evolved Knife's damage rise.
-## Deleting the roll would leave a declared field unread and fail an assertion that passes
-## today -- a check cannot be weakened to make a change look tidy. The over-roll is real; it
-## is reported as an open gap, and it is why this function takes a `chance` rather than
-## reaching for the hero itself.
+## straight to the shot or the mine, and `OrbitShard` reads `this.damage`. This port used to
+## roll ONE for each of them per fire, and that roll is GONE: the four `match` arms below pass
+## `dmg` -- `getDamage(player)` -- straight through, as the original does. MEASURED, rather
+## than read off the grep: one `fire()` at four foes in range takes three draws for a level-1
+## Whip, four for a level-5 Whip, one per Lightning strike (three at level 5) and four for a
+## Frost Nova, and ZERO for a Knife, a Magic Wand, an Orbiter, an Area Mine, a Boomerang, a
+## Retro Blaster or Garlic. That is the whole of the original's crit, and it is now the whole
+## of this port's.
+##
+## AND THE DECLARED FIELD THE OLD ROLL WAS KEPT FOR IS DEAD. `evolveBonusCrit: 0.1` sits on
+## the evolved KNIFE, which is a projectile, and `_rollCrit` is the ONLY reader of that field
+## anywhere in the original -- so a weapon whose archetype never reaches `_rollCrit` never
+## reads it. Deleting the roll does not leave a field unread that the original reads; it
+## leaves a field unread that the ORIGINAL leaves unread, which is the whole point. Lightning's
+## `0.15` is the live one, because `_fireInstant` is one of the four call sites at the top of
+## this block. `verify_weapons.gd`'s `_bonus_crit_is_read` measures both, and asserts a damage
+## ratio of exactly 1.0 for the Knife and 1 + 0.15 for Thunder Call -- so a future port that
+## starts reading the Knife's field again fails there rather than passing quietly.
+##
+## It is why this function takes a `chance` rather than reaching for the hero itself: the
+## chance is read ONCE per fire by the caller, and WHICH archetypes roll at all is the caller's
+## business -- four of the eight now pass this function nothing to roll with.
 static func _roll_crit(base_damage: float, chance: float, rng: RandomNumberGenerator) -> float:
 	if chance > 0.0 and _randf(rng) < chance:
 		return base_damage * 2.0
@@ -291,19 +305,17 @@ static func fire(
 
 	match kind:
 		"projectile":
-			# ONE roll for the VOLLEY, which is this port's and not the original's: see the
-			# note on `_roll_crit` for why the evolved Knife's own `evolveBonusCrit` has to
-			# be read somewhere, and why it is read here rather than per blade.
-			created = _fire_projectiles(
-				weapon, hero, foes, reach, _roll_crit(dmg, crit, rng), count, evolved
-			)
+			# NO ROLL AT ALL. `_fireProjectile` in `src/weapons.ts` hands `getDamage(player)`
+			# into `new Projectile(...)` and calls `_rollCrit` NOWHERE, so neither does this.
+			# The `evolveBonusCrit` the volley roll here was kept for is declared on the
+			# evolved KNIFE and is DEAD in the original -- see the note on `_roll_crit`.
+			created = _fire_projectiles(weapon, hero, foes, reach, dmg, count, evolved)
 		"orbit":
 			# `getOrbitShardCount`, NOT the projectile count above: orbit is the one
 			# archetype the original counts differently, and at level 5 it DOUBLES.
-			# Also a VOLLEY roll: `OrbitShard` reads `this.damage` and never calls `_rollCrit`.
-			created = _fire_orbit(
-				hero, reach, _roll_crit(dmg, crit, rng), orbit_count(weapon, hero, level)
-			)
+			# NO ROLL: `OrbitShard` reads `this.damage`, which is `getDamage(player)`, and
+			# `_rollCrit` is nowhere in its path in the original either.
+			created = _fire_orbit(hero, reach, dmg, orbit_count(weapon, hero, level))
 		"melee":
 			# THE ORIGINAL'S SWEEP IS A BAND, NOT A DISC -- until level 5, where the band
 			# is replaced by `Math.hypot(dx, dy) > range`, a full circle. `_strike_sweep`
@@ -328,10 +340,10 @@ static func fire(
 					fx.emit_particles(hero.x - reach / 2.0, hero.y, Color("ffaa00"), 5)
 					fx.emit_particles(hero.x + reach / 2.0, hero.y, Color("ffaa00"), 5)
 		"aura":
-			# VOLLEY-WIDE, and the original rolls NOTHING here: `_fireAura` damages with
-			# `getDamage(player)` and never calls `_rollCrit`. Kept, for the reason on
-			# `_roll_crit` -- and Garlic declares no `evolveBonusCrit` either way.
-			_strike_disc_rolled_once(hero.x, hero.y, foes, reach, _roll_crit(dmg, crit, rng))
+			# NO ROLL: `_fireAura` damages with `getDamage(player)` and calls `_rollCrit`
+			# NOWHERE in the original. Garlic declares no `evolveBonusCrit` either way, so
+			# the volley roll this used to take had nothing to decide -- and it is gone.
+			_strike_disc_unrolled(hero.x, hero.y, foes, reach, dmg)
 			# `createParticles(player.x + cos(a) * r, player.y + sin(a) * r, '#88ff88', 1)`
 			# on 40% of fires -- a RATE in the original too, so a fire that emits nothing
 			# is correct rather than broken. The ring `main.gd` draws is the constant, and
@@ -463,12 +475,11 @@ static func fire(
 			# A mine this slice treats as a delayed nova: the fuse is real in the data
 			# and the arming behaviour is not ported, so it strikes immediately rather
 			# than pretending to arm. Named here so it is not mistaken for finished.
-			# VOLLEY-WIDE, and the original rolls NOTHING here either: `_fireMine` passes
-			# `getDamage(player)` into `new Mine(...)` and `Mine.update` calls
-			# `enemy.takeDamage(this.damage)` with no crit. Kept for the reason on
-			# `_roll_crit`, and rolled ONCE so the charge and its evolved twin agree.
-			var mine_dmg := _roll_crit(dmg, crit, rng)
-			_strike_disc_rolled_once(hero.x, hero.y, foes, reach, mine_dmg)
+			# NO ROLL: `_fireMine` passes `getDamage(player)` into `new Mine(...)` and
+			# `Mine.update` calls `enemy.takeDamage(this.damage)` with no crit -- so the
+			# charge and its evolved twin both carry the un-rolled base, exactly as the
+			# two `new Mine(...)` calls in the original do.
+			_strike_disc_unrolled(hero.x, hero.y, foes, reach, dmg)
 			if fx != null:
 				# WHAT THE ORIGINAL DRAWS, and what it therefore cannot be reproduced as:
 				# `renderMine` fills the blast radius and paints a 10px body that turns
@@ -496,7 +507,7 @@ static func fire(
 				var cluster_x := hero.x + cos(cluster_angle) * CLUSTER_OFFSET
 				var cluster_y := hero.y + sin(cluster_angle) * CLUSTER_OFFSET
 				var cluster_reach := reach * CLUSTER_RADIUS_MULT
-				_strike_disc_rolled_once(cluster_x, cluster_y, foes, cluster_reach, mine_dmg)
+				_strike_disc_unrolled(cluster_x, cluster_y, foes, cluster_reach, dmg)
 				if fx != null:
 					fx.emit_particles(cluster_x, cluster_y, Color("ff8833"), 20)
 					fx.emit_blast(cluster_x, cluster_y, cluster_reach, Color("ff8833"))
@@ -612,7 +623,7 @@ static func _strike_sweep(
 ## Everything within `reach`, PER FOE -- Frost Nova is the only caller left, and it is the
 ## only one of the three disc weapons whose damage the original rolls for. Garlic and Area
 ## Mine do NOT come through here: `_fireAura` and `_fireMine` call `_rollCrit` nowhere, so
-## their damage was rolled once for the fire and they use `_strike_disc_rolled_once`.
+## they use `_strike_disc_unrolled`, which rolls nothing at all.
 ##
 ## Returns the foes it HIT, because Frost Nova has to do a second thing to exactly those
 ## foes -- and it is handed the same set this predicate damaged rather than a second disc
@@ -624,7 +635,7 @@ static func _strike_all_in_range(
 
 ## The same disc, around an arbitrary point rather than the hero. `_strike_all_in_range`
 ## is this centred on the hero; the aura and the two mine charges reach it through
-## `_strike_disc_rolled_once`, whose centre is the hero for one and the SECOND charge's own
+## `_strike_disc_unrolled`, whose centre is the hero for one and the SECOND charge's own
 ## position for the other.
 ##
 ## `<= reach`, and the hits are returned so a caller that applies a SECOND effect -- the
@@ -642,24 +653,28 @@ static func _strike_disc(
 		var dy: float = foe.y - cy
 		if sqrt(dx * dx + dy * dy) <= reach:
 			# PER FOE, so a nova that catches eight foes rolls eight times and a fire
-			# can double some of them and not others. A caller that rolls ONCE for the
-			# whole fire does not come through here with a chance -- it uses
-			# `_strike_disc_rolled_once`, which is the same predicate with nothing left
+			# can double some of them and not others. A caller whose archetype `_rollCrit`
+			# has no call site in does not come through here with a chance -- it uses
+			# `_strike_disc_unrolled`, which is the same predicate with nothing left
 			# to decide.
 			foe.take_damage(_roll_crit(dmg, chance, rng))
 			hit.append(foe)
 	return hit
 
-## The same disc, struck with damage that was already rolled ONCE for the whole fire.
+## The same disc, struck with damage that was never rolled at all.
 ##
 ## The aura, the mine and the mine's evolved cluster are the three callers. `_fireAura` and
 ## `_fireMine` in `src/weapons.ts` call `_rollCrit` NOWHERE -- they hand `getDamage(player)`
-## to every foe they touch -- so there is no per-foe roll for the original to have and none
-## is invented here. What this port does have, and the original does not, is one volley-wide
-## roll; see the note on `_roll_crit` for why it exists and why it is not removed in this
-## change. Named rather than spelled `0.0, null` at three call sites, so the difference
-## between these three and the nova is a word a reader can follow.
-static func _strike_disc_rolled_once(
+## to every foe they touch -- so there is no roll for the original to have, per foe or per
+## fire, and there is none here. The chance below is a stated ZERO rather than an absent
+## argument: this predicate is `_strike_disc` with nothing left to decide, and naming it is
+## what keeps the difference between these three and the nova a word a reader can follow.
+##
+## AND IT IS MEASURED, not merely asserted by this comment: `verify_weapons.gd`'s
+## `_the_aura_rolls_nothing_and_is_the_control` fires Garlic through a SEEDED generator at a
+## hero who HAS Luck and requires the generator to be exactly where it was -- one roll, per
+## fire or per foe, would move it. A caller that starts rolling again fails there.
+static func _strike_disc_unrolled(
 	cx: float, cy: float, foes: Array, reach: float, dmg: float
 ) -> Array:
 	return _strike_disc(cx, cy, foes, reach, dmg, 0.0, null)

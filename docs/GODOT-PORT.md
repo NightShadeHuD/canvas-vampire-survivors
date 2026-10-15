@@ -11,7 +11,7 @@ drift silently.
 | name              | value |
 | ----------------- | ----- |
 | `godotSuites`     | 13    |
-| `godotAssertions` | 453   |
+| `godotAssertions` | 456   |
 | `weapons`         | 11    |
 | `achievements`    | 21    |
 
@@ -411,8 +411,13 @@ and N = 4 the mixed share has a standard deviation of 0.0135, so the 0.06 tolera
 -- a false-failure probability just under 1e-5, while a per-fire roll sits 50 sigma away.
 
 **Garlic is the control**, and it is the reason the rate is worth reading: the aura is an
-archetype this port rolls once for on purpose, and it goes through the identical instrument over
-the identical 1200 fires. It must read 0 mixed, or the instrument is what is being measured.
+archetype the original rolls nothing for -- `_fireAura` calls `_rollCrit` nowhere -- and it goes
+through the identical instrument over the identical 1200 fires. It must read 0 mixed, and its
+seeded generator must be exactly where it started, or the instrument is what is being measured.
+The control carries its own positive side for the same reason: the same instrument, on the same
+number of foes, is required to read a NON-ZERO mix against the Whip, because a control that can
+only ever read zero cannot tell "nothing rolls here" from "this instrument cannot see a roll at
+all".
 
 Two things this touched that are not the crit itself:
 
@@ -424,15 +429,26 @@ Two things this touched that are not the crit itself:
   `getDamage(player)` before any `_rollCrit`, and the scheduled callback rolls nothing of its
   own. The port had been carrying its per-fire, possibly doubled `dmg` into the pulse.
 
-**NOT closed, and named rather than glossed:** `_fireProjectile`, `_fireAura`, `_fireMine` and
-`OrbitShard` call `_rollCrit` **nowhere** in the original, and this port rolls once per fire for
-all four. Removing that roll is not a tidy follow-up: `evolveBonusCrit` is declared on the
-evolved Knife, which is a projectile, and `_bonus_crit_is_read` proves the field is read by
-measuring the evolved Knife's damage rise -- so deleting the roll leaves a declared field unread
-and fails a check that passes today. **And no damage number is drawn at all.** The original's
-`_rollCrit` also calls `createFloatingText` at `(x, y - 20)` of the foe it is about to damage --
-a per-target POSITION -- and `fx.gd` has no floating-text system, which is a gap no assertion
-here can stand in for.
+**CLOSED, and here is what closing it cost.** `_fireProjectile`, `_fireAura`, `_fireMine` and
+`OrbitShard` call `_rollCrit` **nowhere** in the original, and this port rolled once per fire for
+all four. Those four rolls are **gone**: `WeaponFire.fire`'s `projectile`, `orbit`, `aura` and
+`mine` arms now pass `getDamage(player)` straight through, as the original does.
+
+The roll was kept for one reason and the reason was WRONG, which is worth writing down. It was
+kept because `evolveBonusCrit: 0.1` is declared on the evolved Knife, and `_bonus_crit_is_read`
+proved the field was read -- by measuring the Knife's damage rise **through the volley roll this
+port had invented**. The check was passing on the port's own artifact: `_rollCrit` is the only
+reader of that field anywhere in `src/`, a knife is a projectile, and `_fireProjectile` never
+calls it, so the declaration is **DEAD IN THE ORIGINAL**. Lightning's `0.15` is the live one,
+because `_fireInstant` is one of the four call sites. `_bonus_crit_is_read` now asserts both
+halves -- a ratio of 1.00 for the Knife and 1 + 0.15 for Thunder Call, over 1200 fires with the
+field on the def and erased -- so it fails if a port starts reading the Knife's field again
+(1.10) _and_ if a port stops reading Lightning's (1.00). Measured: re-adding the projectile roll
+reads `1.1083 vs 1.0000 (tol 0.0400)` and the suite goes red.
+
+**And no damage number is drawn at all.** The original's `_rollCrit` also calls
+`createFloatingText` at `(x, y - 20)` of the foe it is about to damage -- a per-target POSITION
+-- and `fx.gd` has no floating-text system, which is a gap no assertion here can stand in for.
 
 #### Two of my tests were wrong and looked like bugs
 
